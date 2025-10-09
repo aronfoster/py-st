@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import httpx
-from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-
-class Agent(BaseModel):
-    symbol: str
+from py_st.models import Agent
 
 
 class SpaceTraders:

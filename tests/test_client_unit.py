@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import httpx
 
-from py_st.client import Agent, SpaceTraders
+from py_st.client import SpaceTraders
+from py_st.models import Agent
 
 
 def test_get_agent_parses_response() -> None:

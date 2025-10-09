@@ -12,9 +12,13 @@ dependencies = [
 
 [tool.black]
 line-length = 79
+extend-exclude = "src/py_st/_generated"
 
 [tool.ruff]
 line-length = 79
+exclude = [
+  "src/py_st/_generated",
+]
 lint.select = ["E","F","I","UP","B","SIM"]
 
 [tool.pytest.ini_options]
@@ -23,3 +27,7 @@ testpaths = ["tests"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
+
+[[tool.mypy.overrides]]
+module = "py_st._generated.*"
+ignore_errors = true
