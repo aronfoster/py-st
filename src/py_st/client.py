@@ -10,13 +10,14 @@ class Agent(BaseModel):
 
 
 class SpaceTraders:
-    def __init__(self, token: str) -> None:
-        self._client = httpx.Client(
+    def __init__(self, token: str, client: httpx.Client | None = None) -> None:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        }
+        self._client = client or httpx.Client(
             base_url="https://api.spacetraders.io/v2",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/json",
-            },
+            headers=headers,
             timeout=30,
         )
 
