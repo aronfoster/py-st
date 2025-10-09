@@ -2,6 +2,18 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "py-st: module (agent)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "py_st",
+      "args": [
+        "agent",
+        "--verbose"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
       "name": "Python: Current File",
       "type": "debugpy",
       "request": "launch",
