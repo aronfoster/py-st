@@ -1,2 +1,2 @@
-def test_import():
+def test_import() -> None:
     import py_st  # noqa: F401
