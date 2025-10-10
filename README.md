@@ -1,6 +1,3 @@
 # py-st
 
-pytest -q
-ruff check .
-black --check .
-mypy .
+Personal project to interact with SpaceTraders.io through Python.
