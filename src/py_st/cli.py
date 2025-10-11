@@ -22,10 +22,11 @@ SHIP_SYMBOL_ARG = typer.Argument(
 )
 CONTRACT_ID_ARG = typer.Argument(..., help="The ID of the contract to accept.")
 
-# Ships-specific (none additional)
+# Ships-specific
 
 # Systems-specific
 SYSTEM_SYMBOL_ARG = typer.Argument(..., help="The system to scan.")
+WAYPOINT_SYMBOL_ARG = typer.Argument(..., help="The waypoint to use.")
 TRAITS_OPTION = typer.Option(
     None, "--trait", help="Filter waypoints by trait."
 )
@@ -142,6 +143,87 @@ def list_ships(
     print(json.dumps(ships_list, indent=2))
 
 
+@ships_app.command("navigate")
+def navigate_ship_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Navigate a ship to a waypoint.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    result = client.navigate_ship(ship_symbol, waypoint_symbol)
+    print(f"🚀 Ship {ship_symbol} is navigating to {waypoint_symbol}.")
+    print(json.dumps(result.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("orbit")
+def orbit_ship_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Move a ship into orbit.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    result = client.orbit_ship(ship_symbol)
+    print(f"🛰️  Ship {ship_symbol} is now in orbit.")
+    print(json.dumps(result.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("dock")
+def dock_ship_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Dock a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    result = client.dock_ship(ship_symbol)
+    print(f"⚓ Ship {ship_symbol} is now docked.")
+    print(json.dumps(result.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("extract")
+def extract_resources_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Extract resources from a waypoint.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    extraction = client.extract_resources(ship_symbol)
+    print("⛏️ Extraction successful!")
+    print(json.dumps(extraction.model_dump(mode="json"), indent=2))
+
+
 @contracts_app.command("accept")
 def accept_contract_cli(
     contract_id: str = CONTRACT_ID_ARG,
@@ -188,6 +270,26 @@ def list_waypoints(
     waypoints = client.get_waypoints_in_system(system_symbol, traits=traits)
     waypoints_list = [w.model_dump(mode="json") for w in waypoints]
     print(json.dumps(waypoints_list, indent=2))
+
+
+@systems_app.command("shipyard")
+def get_shipyard_cli(
+    system_symbol: str = SYSTEM_SYMBOL_ARG,
+    waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Get the shipyard for a waypoint.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    shipyard = client.get_shipyard(system_symbol, waypoint_symbol)
+    print(json.dumps(shipyard.model_dump(mode="json"), indent=2))
 
 
 def main() -> None:

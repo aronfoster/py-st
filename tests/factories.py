@@ -1,9 +1,9 @@
-from __future__ import annotations
+from typing import Any
 
 
 class AgentFactory:
     @staticmethod
-    def build_minimal() -> dict:
+    def build_minimal() -> dict[str, Any]:
         """Build a minimal valid Agent payload dict."""
         return {
             "symbol": "FOO",
@@ -16,7 +16,7 @@ class AgentFactory:
 
 class ContractFactory:
     @staticmethod
-    def build_minimal() -> dict:
+    def build_minimal() -> dict[str, Any]:
         """Build a minimal valid Contract payload dict."""
         return {
             "id": "contract-1",
@@ -35,7 +35,7 @@ class ContractFactory:
 
 class ShipFactory:
     @staticmethod
-    def build_minimal() -> dict:
+    def build_minimal() -> dict[str, Any]:
         """Build a minimal valid Ship payload dict."""
         return {
             "symbol": "SHIP-1",
@@ -137,7 +137,7 @@ class ShipFactory:
 
 class WaypointFactory:
     @staticmethod
-    def build_minimal() -> dict:
+    def build_minimal() -> dict[str, Any]:
         """Build a minimal valid Waypoint payload dict."""
         return {
             "symbol": "X1-ABC-1",

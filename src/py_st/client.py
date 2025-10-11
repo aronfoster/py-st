@@ -3,7 +3,15 @@ from __future__ import annotations
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from py_st.models import Agent, Contract, Ship, Waypoint
+from py_st.models import (
+    Agent,
+    Contract,
+    Extraction,
+    Ship,
+    ShipNav,
+    Shipyard,
+    Waypoint,
+)
 
 
 class SpaceTraders:
@@ -88,3 +96,56 @@ class SpaceTraders:
         r.raise_for_status()
         response_json = r.json()
         return [Waypoint.model_validate(w) for w in response_json["data"]]
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def get_shipyard(
+        self, system_symbol: str, waypoint_symbol: str
+    ) -> Shipyard:
+        """
+        Get the shipyard for a waypoint.
+        """
+        url = f"/systems/{system_symbol}/waypoints/{waypoint_symbol}/shipyard"
+        r = self._client.get(url)
+        r.raise_for_status()
+        return Shipyard.model_validate(r.json()["data"])
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def navigate_ship(self, ship_symbol: str, waypoint_symbol: str) -> ShipNav:
+        """
+        Navigate a ship to a waypoint.
+        """
+        url = f"/my/ships/{ship_symbol}/navigate"
+        payload = {"waypointSymbol": waypoint_symbol}
+        r = self._client.post(url, json=payload)
+        r.raise_for_status()
+        return ShipNav.model_validate(r.json()["data"]["nav"])
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def orbit_ship(self, ship_symbol: str) -> ShipNav:
+        """
+        Move a ship into orbit.
+        """
+        url = f"/my/ships/{ship_symbol}/orbit"
+        r = self._client.post(url)
+        r.raise_for_status()
+        return ShipNav.model_validate(r.json()["data"]["nav"])
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def dock_ship(self, ship_symbol: str) -> ShipNav:
+        """
+        Dock a ship.
+        """
+        url = f"/my/ships/{ship_symbol}/dock"
+        r = self._client.post(url)
+        r.raise_for_status()
+        return ShipNav.model_validate(r.json()["data"]["nav"])
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def extract_resources(self, ship_symbol: str) -> Extraction:
+        """
+        Extract resources from a waypoint.
+        """
+        url = f"/my/ships/{ship_symbol}/extract"
+        r = self._client.post(url)
+        r.raise_for_status()
+        return Extraction.model_validate(r.json()["data"]["extraction"])
