@@ -3,18 +3,18 @@ from __future__ import annotations
 import httpx
 
 from py_st.client import SpaceTraders
-from py_st.models import Agent
+from py_st.models import Agent, Contract, Ship, Waypoint
+from tests.factories import (
+    AgentFactory,
+    ContractFactory,
+    ShipFactory,
+    WaypointFactory,
+)
 
 
 def test_get_agent_parses_response() -> None:
-    # Minimal valid Agent payload per schema (accountId is optional)
-    agent_json = {
-        "symbol": "FOO",
-        "headquarters": "X1-ABC-1",
-        "credits": 42,
-        "startingFaction": "COSMIC",
-        "shipCount": 1,
-    }
+    # Use factory for minimal valid Agent payload
+    agent_json = AgentFactory.build_minimal()
 
     def handler(request: httpx.Request) -> httpx.Response:
         # client base_url is ".../v2", and method calls "/my/agent"
@@ -25,7 +25,6 @@ def test_get_agent_parses_response() -> None:
     fake_client = httpx.Client(
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
-
     st = SpaceTraders(token="T", client=fake_client)
     agent = st.get_agent()
 
@@ -36,3 +35,117 @@ def test_get_agent_parses_response() -> None:
     assert agent.credits == 42
     assert agent.startingFaction == "COSMIC"
     assert agent.shipCount == 1
+
+
+def test_get_contracts_parses_response() -> None:
+    contract_json = ContractFactory.build_minimal()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/my/contracts"
+        return httpx.Response(200, json={"data": [contract_json]})
+
+    transport = httpx.MockTransport(handler)
+    fake_client = httpx.Client(
+        transport=transport, base_url="https://api.spacetraders.io/v2"
+    )
+    st = SpaceTraders(token="T", client=fake_client)
+    contracts = st.get_contracts()
+
+    assert len(contracts) == 1
+    assert isinstance(contracts[0], Contract)
+    assert contracts[0].id == "contract-1"
+    assert contracts[0].factionSymbol == "COSMIC"
+    assert contracts[0].type.value == "PROCUREMENT"
+
+
+def test_get_ships_parses_response() -> None:
+    ship_json = ShipFactory.build_minimal()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/my/ships"
+        return httpx.Response(200, json={"data": [ship_json]})
+
+    transport = httpx.MockTransport(handler)
+    fake_client = httpx.Client(
+        transport=transport, base_url="https://api.spacetraders.io/v2"
+    )
+    st = SpaceTraders(token="T", client=fake_client)
+    ships = st.get_ships()
+
+    assert len(ships) == 1
+    assert isinstance(ships[0], Ship)
+    assert ships[0].symbol == "SHIP-1"
+
+
+def test_negotiate_contract_parses_response() -> None:
+    contract_json = ContractFactory.build_minimal()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/my/ships/SHIP-1/negotiate/contract"
+        assert request.method == "POST"
+        return httpx.Response(200, json={"data": {"contract": contract_json}})
+
+    transport = httpx.MockTransport(handler)
+    fake_client = httpx.Client(
+        transport=transport, base_url="https://api.spacetraders.io/v2"
+    )
+    st = SpaceTraders(token="T", client=fake_client)
+    result = st.negotiate_contract("SHIP-1")
+
+    assert isinstance(result, Contract)
+    assert result.id == "contract-1"
+    assert result.factionSymbol == "COSMIC"
+
+
+def test_accept_contract_parses_response() -> None:
+    agent_json = AgentFactory.build_minimal()
+    agent_json["credits"] = 1042  # Simulate update
+    contract_json = ContractFactory.build_minimal()
+    contract_json["accepted"] = True
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/my/contracts/contract-1/accept"
+        assert request.method == "POST"
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "agent": agent_json,
+                    "contract": contract_json,
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    fake_client = httpx.Client(
+        transport=transport, base_url="https://api.spacetraders.io/v2"
+    )
+    st = SpaceTraders(token="T", client=fake_client)
+    result = st.accept_contract("contract-1")
+
+    assert "agent" in result
+    assert "contract" in result
+    assert isinstance(result["agent"], Agent)
+    assert isinstance(result["contract"], Contract)
+    assert result["agent"].credits == 1042
+    assert result["contract"].accepted is True
+
+
+def test_get_waypoints_in_system_parses_response() -> None:
+    waypoint_json = WaypointFactory.build_minimal()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/systems/X1-ABC/waypoints"
+        return httpx.Response(200, json={"data": [waypoint_json]})
+
+    transport = httpx.MockTransport(handler)
+    fake_client = httpx.Client(
+        transport=transport, base_url="https://api.spacetraders.io/v2"
+    )
+    st = SpaceTraders(token="T", client=fake_client)
+    waypoints = st.get_waypoints_in_system("X1-ABC")
+
+    assert len(waypoints) == 1
+    assert isinstance(waypoints[0], Waypoint)
+    assert waypoints[0].symbol.root == "X1-ABC-1"
+    assert waypoints[0].type.value == "PLANET"

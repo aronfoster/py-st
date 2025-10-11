@@ -8,6 +8,7 @@ dependencies = [
   "tenacity",
   "typer",
   "python-dotenv",
+  "responses>=0.25.0",
 ]
 
 [tool.black]
