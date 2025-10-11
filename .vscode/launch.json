@@ -2,14 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "py-st: module (agent)",
+      "name": "py-st: module (interactive)",
       "type": "debugpy",
       "request": "launch",
       "module": "py_st",
-      "args": [
-        "agent",
-        "--verbose"
-      ],
+      "args": "${input:cliArgs}",
       "console": "integratedTerminal",
       "justMyCode": true
     },
@@ -30,6 +27,14 @@
       ],
       "console": "integratedTerminal",
       "justMyCode": true
+    }
+  ],
+  "inputs": [
+    {
+      "id": "cliArgs",
+      "type": "promptString",
+      "description": "Enter the CLI arguments for py-st",
+      "default": "agent"
     }
   ]
 }
