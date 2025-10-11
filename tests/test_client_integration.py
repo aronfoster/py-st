@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from py_st.client import SpaceTraders
+from py_st.api_client import SpaceTraders
 
 
 @pytest.mark.skipif(not os.getenv("ST_TOKEN"), reason="requires ST_TOKEN")

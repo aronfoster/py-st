@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from py_st.client import SpaceTraders
+from py_st.api_client import SpaceTraders
 from py_st.models import Agent, Contract, Ship, Waypoint
 from tests.factories import (
     AgentFactory,

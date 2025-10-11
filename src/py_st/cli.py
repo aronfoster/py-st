@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from py_st.models import ShipNavFlightMode
 
-from .client import SpaceTraders
+from .api_client import SpaceTraders
 
 # General options
 TOKEN_OPTION = typer.Option(None, help="API token (overrides env).")
