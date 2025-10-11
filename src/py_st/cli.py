@@ -7,6 +7,8 @@ import os
 import typer
 from dotenv import load_dotenv
 
+from py_st.models import ShipNavFlightMode
+
 from .client import SpaceTraders
 
 # General options
@@ -20,9 +22,19 @@ SHOW_OPTION = typer.Option(True, help="Show current agent info.")
 SHIP_SYMBOL_ARG = typer.Argument(
     ..., help="The symbol of the ship to use for negotiation."
 )
+DELIVER_TRADE_SYMBOL_ARG = typer.Argument(
+    ..., help="The symbol of the trade good to deliver."
+)
+DELIVER_UNITS_ARG = typer.Argument(..., help="The number of units to deliver.")
 CONTRACT_ID_ARG = typer.Argument(..., help="The ID of the contract to accept.")
 
 # Ships-specific
+REFUEL_UNITS_OPTION = typer.Option(
+    None, "--units", "-u", help="The number of units of fuel to purchase."
+)
+FLIGHT_MODE_ARG = typer.Argument(
+    ..., help="The flight mode to set for the ship."
+)
 
 # Systems-specific
 SYSTEM_SYMBOL_ARG = typer.Argument(..., help="The system to scan.")
@@ -121,6 +133,59 @@ def negotiate_contract_cli(
     print("🎉 New contract negotiated!")
     # And here
     print(json.dumps(new_contract.model_dump(mode="json"), indent=2))
+
+
+@contracts_app.command("deliver")
+def deliver_contract_cli(
+    contract_id: str = CONTRACT_ID_ARG,
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    trade_symbol: str = DELIVER_TRADE_SYMBOL_ARG,
+    units: int = DELIVER_UNITS_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Deliver cargo to a contract.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    contract, cargo = client.deliver_contract(
+        contract_id, ship_symbol, trade_symbol, units
+    )
+    print("📦 Cargo delivered!")
+    output_data = {
+        "contract": contract.model_dump(mode="json"),
+        "cargo": cargo.model_dump(mode="json"),
+    }
+    print(json.dumps(output_data, indent=2))
+
+
+@contracts_app.command("fulfill")
+def fulfill_contract_cli(
+    contract_id: str = CONTRACT_ID_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Fulfill a contract.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    agent, contract = client.fulfill_contract(contract_id)
+    print("🎉 Contract fulfilled!")
+    output_data = {
+        "agent": agent.model_dump(mode="json"),
+        "contract": contract.model_dump(mode="json"),
+    }
+    print(json.dumps(output_data, indent=2))
 
 
 @ships_app.command("list")
@@ -222,6 +287,74 @@ def extract_resources_cli(
     extraction = client.extract_resources(ship_symbol)
     print("⛏️ Extraction successful!")
     print(json.dumps(extraction.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("survey")
+def create_survey_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Create a survey of the current waypoint.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    surveys = client.create_survey(ship_symbol)
+    print("🔭 Survey complete!")
+    surveys_list = [s.model_dump(mode="json") for s in surveys]
+    print(json.dumps(surveys_list, indent=2))
+
+
+@ships_app.command("refuel")
+def refuel_ship_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    units: int | None = REFUEL_UNITS_OPTION,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Refuel a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    agent, fuel, transaction = client.refuel_ship(ship_symbol, units)
+    print("⛽ Refueling complete!")
+    output_data = {
+        "agent": agent.model_dump(mode="json"),
+        "fuel": fuel.model_dump(mode="json"),
+        "transaction": transaction.model_dump(mode="json"),
+    }
+    print(json.dumps(output_data, indent=2))
+
+
+@ships_app.command("flight-mode")
+def set_flight_mode_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    flight_mode: ShipNavFlightMode = FLIGHT_MODE_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Set the flight mode for a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    client = SpaceTraders(token=t)
+    nav = client.set_flight_mode(ship_symbol, flight_mode)
+    print(f"✈️ Flight mode for {ship_symbol} set to {flight_mode.value}.")
+    print(json.dumps(nav.model_dump(mode="json"), indent=2))
 
 
 @contracts_app.command("accept")

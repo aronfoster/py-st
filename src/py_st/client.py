@@ -7,9 +7,14 @@ from py_st.models import (
     Agent,
     Contract,
     Extraction,
+    MarketTransaction,
     Ship,
+    ShipCargo,
+    ShipFuel,
     ShipNav,
+    ShipNavFlightMode,
     Shipyard,
+    Survey,
     Waypoint,
 )
 
@@ -141,11 +146,103 @@ class SpaceTraders:
         return ShipNav.model_validate(r.json()["data"]["nav"])
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
-    def extract_resources(self, ship_symbol: str) -> Extraction:
+    def extract_resources(
+        self, ship_symbol: str, survey: Survey | None = None
+    ) -> Extraction:
         """
         Extract resources from a waypoint.
+        Optionally, use a survey to target specific yields.
         """
-        url = f"/my/ships/{ship_symbol}/extract"
+        if survey:
+            url = f"/my/ships/{ship_symbol}/extract/survey"
+            r = self._client.post(url, json=survey.model_dump(mode="json"))
+        else:
+            url = f"/my/ships/{ship_symbol}/extract"
+            r = self._client.post(url)
+        r.raise_for_status()
+        # The response structure is slightly different for survey extraction
+        data = r.json()["data"]
+        return Extraction.model_validate(data["extraction"])
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def create_survey(self, ship_symbol: str) -> list[Survey]:
+        """
+        Create a survey of the waypoint at the ship's current location.
+        """
+        url = f"/my/ships/{ship_symbol}/survey"
         r = self._client.post(url)
         r.raise_for_status()
-        return Extraction.model_validate(r.json()["data"]["extraction"])
+        surveys_data = r.json()["data"]["surveys"]
+        return [Survey.model_validate(s) for s in surveys_data]
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def deliver_contract(
+        self,
+        contract_id: str,
+        ship_symbol: str,
+        trade_symbol: str,
+        units: int,
+    ) -> tuple[Contract, ShipCargo]:
+        """
+        Deliver cargo to a contract.
+        """
+        url = f"/my/contracts/{contract_id}/deliver"
+        payload = {
+            "shipSymbol": ship_symbol,
+            "tradeSymbol": trade_symbol,
+            "units": units,
+        }
+        r = self._client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()["data"]
+        return (
+            Contract.model_validate(data["contract"]),
+            ShipCargo.model_validate(data["cargo"]),
+        )
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def fulfill_contract(self, contract_id: str) -> tuple[Agent, Contract]:
+        """
+        Fulfill a contract.
+        """
+        url = f"/my/contracts/{contract_id}/fulfill"
+        r = self._client.post(url)
+        r.raise_for_status()
+        data = r.json()["data"]
+        return (
+            Agent.model_validate(data["agent"]),
+            Contract.model_validate(data["contract"]),
+        )
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def refuel_ship(
+        self, ship_symbol: str, units: int | None = None
+    ) -> tuple[Agent, ShipFuel, MarketTransaction]:
+        """
+        Refuel a ship.
+        """
+        url = f"/my/ships/{ship_symbol}/refuel"
+        payload = {}
+        if units:
+            payload["units"] = units
+        r = self._client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()["data"]
+        return (
+            Agent.model_validate(data["agent"]),
+            ShipFuel.model_validate(data["fuel"]),
+            MarketTransaction.model_validate(data["transaction"]),
+        )
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def set_flight_mode(
+        self, ship_symbol: str, flight_mode: ShipNavFlightMode
+    ) -> ShipNav:
+        """
+        Set the flight mode of a ship.
+        """
+        url = f"/my/ships/{ship_symbol}/nav"
+        payload = {"flightMode": flight_mode.value}
+        r = self._client.patch(url, json=payload)
+        r.raise_for_status()
+        return ShipNav.model_validate(r.json()["data"]["nav"])
