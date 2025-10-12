@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from py_st.models import ShipNavFlightMode
 
-from .api_client import SpaceTraders
+from . import services
 
 # General options
 TOKEN_OPTION = typer.Option(None, help="API token (overrides env).")
@@ -87,11 +87,9 @@ def agent(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
     if show:
-        agent = client.get_agent()
-        # Use model_dump(mode='json') to ensure all types are serializable
-        print(json.dumps(agent.model_dump(mode="json"), indent=2))
+        agent_info = services.get_agent_info(t)
+        print(json.dumps(agent_info.model_dump(mode="json"), indent=2))
 
 
 @contracts_app.command("list")
@@ -107,9 +105,7 @@ def list_contracts(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    contracts = client.get_contracts()
-    # Use model_dump(mode='json') here as well
+    contracts = services.list_contracts(t)
     contracts_list = [c.model_dump(mode="json") for c in contracts]
     print(json.dumps(contracts_list, indent=2))
 
@@ -128,10 +124,8 @@ def negotiate_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    new_contract = client.negotiate_contract(ship_symbol)
+    new_contract = services.negotiate_contract(t, ship_symbol)
     print("🎉 New contract negotiated!")
-    # And here
     print(json.dumps(new_contract.model_dump(mode="json"), indent=2))
 
 
@@ -152,9 +146,8 @@ def deliver_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    contract, cargo = client.deliver_contract(
-        contract_id, ship_symbol, trade_symbol, units
+    contract, cargo = services.deliver_contract(
+        t, contract_id, ship_symbol, trade_symbol, units
     )
     print("📦 Cargo delivered!")
     output_data = {
@@ -178,8 +171,7 @@ def fulfill_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    agent, contract = client.fulfill_contract(contract_id)
+    agent, contract = services.fulfill_contract(t, contract_id)
     print("🎉 Contract fulfilled!")
     output_data = {
         "agent": agent.model_dump(mode="json"),
@@ -201,9 +193,7 @@ def list_ships(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    ships = client.get_ships()
-    # This is the line that caused the error, now fixed
+    ships = services.list_ships(t)
     ships_list = [s.model_dump(mode="json") for s in ships]
     print(json.dumps(ships_list, indent=2))
 
@@ -223,8 +213,7 @@ def navigate_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    result = client.navigate_ship(ship_symbol, waypoint_symbol)
+    result = services.navigate_ship(t, ship_symbol, waypoint_symbol)
     print(f"🚀 Ship {ship_symbol} is navigating to {waypoint_symbol}.")
     print(json.dumps(result.model_dump(mode="json"), indent=2))
 
@@ -243,8 +232,7 @@ def orbit_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    result = client.orbit_ship(ship_symbol)
+    result = services.orbit_ship(t, ship_symbol)
     print(f"🛰️  Ship {ship_symbol} is now in orbit.")
     print(json.dumps(result.model_dump(mode="json"), indent=2))
 
@@ -263,8 +251,7 @@ def dock_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    result = client.dock_ship(ship_symbol)
+    result = services.dock_ship(t, ship_symbol)
     print(f"⚓ Ship {ship_symbol} is now docked.")
     print(json.dumps(result.model_dump(mode="json"), indent=2))
 
@@ -283,8 +270,7 @@ def extract_resources_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    extraction = client.extract_resources(ship_symbol)
+    extraction = services.extract_resources(t, ship_symbol)
     print("⛏️ Extraction successful!")
     print(json.dumps(extraction.model_dump(mode="json"), indent=2))
 
@@ -303,8 +289,7 @@ def create_survey_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    surveys = client.create_survey(ship_symbol)
+    surveys = services.create_survey(t, ship_symbol)
     print("🔭 Survey complete!")
     surveys_list = [s.model_dump(mode="json") for s in surveys]
     print(json.dumps(surveys_list, indent=2))
@@ -325,8 +310,7 @@ def refuel_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    agent, fuel, transaction = client.refuel_ship(ship_symbol, units)
+    agent, fuel, transaction = services.refuel_ship(t, ship_symbol, units)
     print("⛽ Refueling complete!")
     output_data = {
         "agent": agent.model_dump(mode="json"),
@@ -351,8 +335,7 @@ def set_flight_mode_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    nav = client.set_flight_mode(ship_symbol, flight_mode)
+    nav = services.set_flight_mode(t, ship_symbol, flight_mode)
     print(f"✈️ Flight mode for {ship_symbol} set to {flight_mode.value}.")
     print(json.dumps(nav.model_dump(mode="json"), indent=2))
 
@@ -371,16 +354,12 @@ def accept_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    result = client.accept_contract(contract_id)
-
-    # Prepare the data for pretty printing
-    output_data = {
-        "agent": result["agent"].model_dump(mode="json"),
-        "contract": result["contract"].model_dump(mode="json"),
-    }
-
+    agent, contract = services.accept_contract(t, contract_id)
     print(f"✅ Contract {contract_id} accepted!")
+    output_data = {
+        "agent": agent.model_dump(mode="json"),
+        "contract": contract.model_dump(mode="json"),
+    }
     print(json.dumps(output_data, indent=2))
 
 
@@ -399,8 +378,7 @@ def list_waypoints(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    waypoints = client.get_waypoints_in_system(system_symbol, traits=traits)
+    waypoints = services.list_waypoints(t, system_symbol, traits)
     waypoints_list = [w.model_dump(mode="json") for w in waypoints]
     print(json.dumps(waypoints_list, indent=2))
 
@@ -420,8 +398,7 @@ def get_shipyard_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    client = SpaceTraders(token=t)
-    shipyard = client.get_shipyard(system_symbol, waypoint_symbol)
+    shipyard = services.get_shipyard(t, system_symbol, waypoint_symbol)
     print(json.dumps(shipyard.model_dump(mode="json"), indent=2))
 
 
