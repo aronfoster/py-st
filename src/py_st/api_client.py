@@ -160,7 +160,6 @@ class SpaceTraders:
             url = f"/my/ships/{ship_symbol}/extract"
             r = self._client.post(url)
         r.raise_for_status()
-        # The response structure is slightly different for survey extraction
         data = r.json()["data"]
         return Extraction.model_validate(data["extraction"])
 
@@ -246,3 +245,17 @@ class SpaceTraders:
         r = self._client.patch(url, json=payload)
         r.raise_for_status()
         return ShipNav.model_validate(r.json()["data"]["nav"])
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def jettison_cargo(
+        self, ship_symbol: str, trade_symbol: str, units: int
+    ) -> ShipCargo:
+        """
+        Jettison cargo from a ship.
+        """
+        url = f"/my/ships/{ship_symbol}/jettison"
+        payload = {"symbol": trade_symbol, "units": units}
+        r = self._client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()["data"]
+        return ShipCargo.model_validate(data["cargo"])

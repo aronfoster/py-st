@@ -19,3 +19,9 @@ Here is the planned development path for `py-st`.
 - [ ] Research and select a GUI framework (e.g., PySide6, Tkinter).
 - [ ] Design a basic UI to display universe/fleet data and trigger actions.
 - [ ] Implement the GUI, ensuring it runs in a separate thread from the automation logic.
+
+
+## Random thoughts
+- Update retry logic to fail if it's a 400 error
+  - Maybe make it intelligently understand all return codes
+  - Also reduce retry time dramatically to align with rate limits

@@ -148,6 +148,17 @@ def refuel_ship(
     return agent, fuel, transaction
 
 
+def jettison_cargo(
+    token: str, ship_symbol: str, trade_symbol: str, units: int
+) -> ShipCargo:
+    """
+    Jettisons cargo from a ship.
+    """
+    client = SpaceTraders(token=token)
+    cargo = client.jettison_cargo(ship_symbol, trade_symbol, units)
+    return cargo
+
+
 def set_flight_mode(
     token: str, ship_symbol: str, flight_mode: ShipNavFlightMode
 ) -> ShipNav:

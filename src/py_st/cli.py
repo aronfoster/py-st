@@ -340,6 +340,27 @@ def set_flight_mode_cli(
     print(json.dumps(nav.model_dump(mode="json"), indent=2))
 
 
+@ships_app.command("jettison")
+def jettison_cargo_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    trade_symbol: str = DELIVER_TRADE_SYMBOL_ARG,
+    units: int = DELIVER_UNITS_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Jettison cargo from a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    cargo = services.jettison_cargo(t, ship_symbol, trade_symbol, units)
+    print("🗑️ Cargo jettisoned!")
+    print(json.dumps(cargo.model_dump(mode="json"), indent=2))
+
+
 @contracts_app.command("accept")
 def accept_contract_cli(
     contract_id: str = CONTRACT_ID_ARG,
