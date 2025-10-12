@@ -9,6 +9,7 @@ from py_st.models import (
     Agent,
     Contract,
     Extraction,
+    Market,
     MarketTransaction,
     Ship,
     ShipCargo,
@@ -147,6 +148,31 @@ class SpaceTraders:
         r.raise_for_status()
         response_json = r.json()
         return [Waypoint.model_validate(w) for w in response_json["data"]]
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def list_waypoints_all(
+        self, system_symbol: str, limit: int = 20
+    ) -> list[dict]:
+        """
+        Fetch ALL waypoints in a system via pagination.
+        Returns the raw waypoint dicts (useful for traits filtering).
+        """
+        page = 1
+        out: list[dict] = []
+        while True:
+            r = self._client.get(
+                f"/systems/{system_symbol}/waypoints",
+                params={"page": page, "limit": limit},
+            )
+            r.raise_for_status()
+            payload = r.json()
+            out.extend(payload["data"])
+            meta = payload.get("meta", {})
+            total = meta.get("total", len(out))
+            if page * meta.get("limit", limit) >= total:
+                break
+            page += 1
+        return out
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def get_shipyard(
@@ -314,3 +340,32 @@ class SpaceTraders:
         r.raise_for_status()
         data = r.json()["data"]
         return ShipCargo.model_validate(data["cargo"])
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def get_market(self, system_symbol: str, waypoint_symbol: str) -> Market:
+        """
+        Retrieve market info (imports/exports/exchange, plus prices if you have
+        a ship present
+        """
+        url = f"/systems/{system_symbol}/waypoints/{waypoint_symbol}/market"
+        r = self._client.get(url)
+        r.raise_for_status()
+        return Market.model_validate(r.json()["data"])
+
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
+    def sell_cargo(
+        self, ship_symbol: str, trade_symbol: str, units: int
+    ) -> tuple[Agent, ShipCargo, MarketTransaction]:
+        """
+        Sell cargo from a ship at a marketplace.
+        """
+        url = f"/my/ships/{ship_symbol}/sell"
+        payload = {"symbol": trade_symbol, "units": units}
+        r = self._client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()["data"]
+        return (
+            Agent.model_validate(data["agent"]),
+            ShipCargo.model_validate(data["cargo"]),
+            MarketTransaction.model_validate(data["transaction"]),
+        )

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from typing import Any
 
 from .api_client import APIError, SpaceTraders
 from .models import (
     Agent,
     Contract,
     Extraction,
+    Market,
     MarketTransaction,
     Ship,
     ShipCargo,
@@ -15,8 +18,49 @@ from .models import (
     ShipNavFlightMode,
     Shipyard,
     Survey,
+    TradeGood,
     Waypoint,
 )
+
+
+@dataclass
+class MarketGoods:
+    sells: list[TradeGood]
+    buys: list[TradeGood]
+
+
+@dataclass
+class SystemGoods:
+    by_waypoint: dict[str, MarketGoods]
+    # by_good maps TRADE_SYMBOL -> {"sells": [waypoints], "buys": [waypoints]}
+    by_good: dict[str, dict[str, list[str]]]
+
+
+def _sym(obj: Any) -> str:
+    """
+    Return a plain string trade symbol from either:
+    - a TradeGood (g.symbol may be Enum or str)
+    - an Enum value (use .value)
+    - a raw str
+    """
+    s = getattr(obj, "symbol", obj)
+    return s.value if hasattr(s, "value") else str(s)
+
+
+def _has_marketplace(wp: dict) -> bool:
+    return any(t.get("symbol") == "MARKETPLACE" for t in wp.get("traits", []))
+
+
+def _uniq_by_symbol(goods: list[TradeGood] | None) -> list[TradeGood]:
+    if not goods:
+        return []
+    seen: set[str] = set()
+    out: list[TradeGood] = []
+    for g in goods:
+        if g.symbol not in seen:
+            seen.add(g.symbol)
+            out.append(g)
+    return out
 
 
 def get_agent_info(token: str) -> Agent:
@@ -224,3 +268,71 @@ def refine_materials(token: str, ship_symbol: str, produce: str) -> None:
         print(json.dumps(result, indent=2))
     except APIError as e:
         print(f"Refining failed: {e}")
+
+
+def get_market(token: str, system_symbol: str, waypoint_symbol: str) -> Market:
+    """
+    Gets the market for a waypoint.
+    """
+    client = SpaceTraders(token=token)
+    return client.get_market(system_symbol, waypoint_symbol)
+
+
+def sell_cargo(
+    token: str, ship_symbol: str, trade_symbol: str, units: int
+) -> tuple[Agent, ShipCargo, MarketTransaction]:
+    """
+    Sells cargo from a ship at the current marketplace.
+    """
+    client = SpaceTraders(token=token)
+    return client.sell_cargo(ship_symbol, trade_symbol, units)
+
+
+def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
+    """
+    Aggregate goods across all markets in a system (no prices).
+    - sells := exports ∪ exchange
+    - buys  := imports ∪ exchange
+    Returns real TradeGood objects grouped by waypoint, plus a reverse index.
+    """
+    client = SpaceTraders(token=token)
+    waypoints = [
+        wp
+        for wp in client.list_waypoints_all(system_symbol)
+        if _has_marketplace(wp)
+    ]
+
+    by_waypoint: dict[str, MarketGoods] = {}
+    by_good_sells: dict[str, list[str]] = {}
+    by_good_buys: dict[str, list[str]] = {}
+
+    for wp in waypoints:
+        wp_sym = wp["symbol"]
+        mkt: Market = client.get_market(system_symbol, wp_sym)
+
+        imports = list(mkt.imports or [])
+        exports = list(mkt.exports or [])
+        exchange = list(mkt.exchange or [])
+
+        sells = _uniq_by_symbol(exports + exchange)
+        buys = _uniq_by_symbol(imports + exchange)
+
+        by_waypoint[wp_sym] = MarketGoods(
+            sells=sorted(sells, key=_sym),
+            buys=sorted(buys, key=_sym),
+        )
+
+        for g in by_waypoint[wp_sym].sells:
+            by_good_sells.setdefault(_sym(g), []).append(wp_sym)
+        for g in by_waypoint[wp_sym].buys:
+            by_good_buys.setdefault(_sym(g), []).append(wp_sym)
+
+    # determinism
+    by_good: dict[str, dict[str, list[str]]] = {}
+    for sym in sorted(set(by_good_sells) | set(by_good_buys)):
+        by_good[sym] = {
+            "sells": sorted(by_good_sells.get(sym, [])),
+            "buys": sorted(by_good_buys.get(sym, [])),
+        }
+
+    return SystemGoods(by_waypoint=by_waypoint, by_good=by_good)
