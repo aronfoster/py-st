@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any, cast
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -23,7 +24,7 @@ from py_st.models import (
 
 
 class CooldownException(Exception):
-    def __init__(self, cooldown_data: dict) -> None:
+    def __init__(self, cooldown_data: dict[str, Any]) -> None:
         self.cooldown = cooldown_data
         remaining = cooldown_data.get("remainingSeconds", 0)
         super().__init__(
@@ -50,8 +51,8 @@ class SpaceTraders:
         )
 
     def _make_request(
-        self, method: str, url: str, json: dict | None = None
-    ) -> dict | list:
+        self, method: str, url: str, json: dict[str, Any] | None = None
+    ) -> dict[str, Any] | list[Any]:
         """
         Makes a request to the API, handling errors and cooldowns.
         """
@@ -59,8 +60,11 @@ class SpaceTraders:
             r = self._client.request(method, url, json=json)
 
             if r.status_code == 409:
-                error_data = r.json().get("error", {})
-                cooldown = error_data.get("data", {}).get("cooldown", {})
+                error_data = cast(dict[str, Any], r.json().get("error", {}))
+                cooldown = cast(
+                    dict[str, Any],
+                    error_data.get("data", {}).get("cooldown", {}),
+                )
                 wait_time = cooldown.get("remainingSeconds", 0)
 
                 print(f"Ship on cooldown. Waiting for {wait_time} seconds...")
@@ -69,7 +73,7 @@ class SpaceTraders:
                 r = self._client.request(method, url, json=json)
 
             r.raise_for_status()
-            return r.json()["data"]
+            return cast(dict[str, Any] | list[Any], r.json()["data"])
 
         except httpx.HTTPStatusError as e:
             error_details = e.response.json().get("error", {})
@@ -152,24 +156,29 @@ class SpaceTraders:
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def list_waypoints_all(
         self, system_symbol: str, limit: int = 20
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """
         Fetch ALL waypoints in a system via pagination.
-        Returns the raw waypoint dicts (useful for traits filtering).
         """
         page = 1
-        out: list[dict] = []
+        out: list[dict[str, Any]] = []
         while True:
             r = self._client.get(
                 f"/systems/{system_symbol}/waypoints",
                 params={"page": page, "limit": limit},
             )
             r.raise_for_status()
-            payload = r.json()
-            out.extend(payload["data"])
-            meta = payload.get("meta", {})
-            total = meta.get("total", len(out))
-            if page * meta.get("limit", limit) >= total:
+            payload: dict[str, Any] = cast(dict[str, Any], r.json())
+            data: list[dict[str, Any]] = cast(
+                list[dict[str, Any]], payload["data"]
+            )
+            out.extend(data)
+            meta: dict[str, Any] = cast(
+                dict[str, Any], payload.get("meta", {})
+            )
+            total = int(meta.get("total", len(out)))
+            page_limit = int(meta.get("limit", limit))
+            if page * page_limit >= total:
                 break
             page += 1
         return out
@@ -226,23 +235,25 @@ class SpaceTraders:
         if survey:
             url = f"/my/ships/{ship_symbol}/extract/survey"
             payload = survey.model_dump(mode="json")
-            data = self._make_request("POST", url, json=payload)
+            data = cast(
+                dict[str, Any], self._make_request("POST", url, json=payload)
+            )
         else:
             url = f"/my/ships/{ship_symbol}/extract"
-            data = self._make_request("POST", url)
+            data = cast(dict[str, Any], self._make_request("POST", url))
 
         return Extraction.model_validate(data["extraction"])
 
     def refine_materials(
         self, ship_symbol: str, produce: str
-    ) -> dict[str, any]:
+    ) -> dict[str, Any]:
         """
         Refine raw materials on a ship.
         """
         url = f"/my/ships/{ship_symbol}/refine"
         payload = {"produce": produce}
         data = self._make_request("POST", url, json=payload)
-        return data
+        return cast(dict[str, Any], data)
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def create_survey(self, ship_symbol: str) -> list[Survey]:

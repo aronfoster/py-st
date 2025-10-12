@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 import typer
 from dotenv import load_dotenv
@@ -272,6 +273,9 @@ def extract_resources_cli(
     )
     t = _get_token(token)
     extraction = services.extract_resources(t, ship_symbol)
+    if extraction is None:
+        print("Extraction failed or aborted.")
+        return
     print("⛏️ Extraction successful!")
     print(json.dumps(extraction.model_dump(mode="json"), indent=2))
 
@@ -486,7 +490,10 @@ def get_market_cli(
     )
     t = _get_token(token)
     market = services.get_market(t, system_symbol, waypoint_symbol)
-    print(json.dumps(market.model_dump(mode="json"), indent=2))
+    if market is None:
+        print(json.dumps({"market": None}, indent=2))
+    else:
+        print(json.dumps(market.model_dump(mode="json"), indent=2))
 
 
 @systems_app.command("list-goods")
@@ -508,7 +515,7 @@ def systems_list_goods_cli(
     t = _get_token(token)
     data = services.list_system_goods(t, system_symbol)
 
-    def _sym(obj):
+    def _sym(obj: Any) -> str:
         s = getattr(obj, "symbol", obj)
         return s.value if hasattr(s, "value") else str(s)
 

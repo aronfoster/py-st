@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from .api_client import APIError, SpaceTraders
 from .models import (
@@ -25,15 +25,15 @@ from .models import (
 
 @dataclass
 class MarketGoods:
-    sells: list[TradeGood]
-    buys: list[TradeGood]
+    sells: list[TradeGood] = []
+    buys: list[TradeGood] = []
 
 
 @dataclass
 class SystemGoods:
-    by_waypoint: dict[str, MarketGoods]
+    by_waypoint: dict[str, MarketGoods] = {}
     # by_good maps TRADE_SYMBOL -> {"sells": [waypoints], "buys": [waypoints]}
-    by_good: dict[str, dict[str, list[str]]]
+    by_good: dict[str, dict[str, list[str]]] = {}
 
 
 def _sym(obj: Any) -> str:
@@ -43,11 +43,16 @@ def _sym(obj: Any) -> str:
     - an Enum value (use .value)
     - a raw str
     """
-    s = getattr(obj, "symbol", obj)
+    if hasattr(obj, "symbol"):
+        s = obj.symbol
+    elif hasattr(obj, "tradeSymbol"):
+        s = obj.tradeSymbol
+    else:
+        s = obj
     return s.value if hasattr(s, "value") else str(s)
 
 
-def _has_marketplace(wp: dict) -> bool:
+def _has_marketplace(wp: dict[str, Any]) -> bool:
     return any(t.get("symbol") == "MARKETPLACE" for t in wp.get("traits", []))
 
 
@@ -57,8 +62,9 @@ def _uniq_by_symbol(goods: list[TradeGood] | None) -> list[TradeGood]:
     seen: set[str] = set()
     out: list[TradeGood] = []
     for g in goods:
-        if g.symbol not in seen:
-            seen.add(g.symbol)
+        k = _sym(g)
+        if k not in seen:
+            seen.add(k)
             out.append(g)
     return out
 
@@ -122,8 +128,8 @@ def accept_contract(token: str, contract_id: str) -> tuple[Agent, Contract]:
     """
     client = SpaceTraders(token=token)
     result = client.accept_contract(contract_id)
-    agent: Agent = result["agent"]
-    contract: Contract = result["contract"]
+    agent: Agent = cast(Agent, result["agent"])
+    contract: Contract = cast(Contract, result["contract"])
     return agent, contract
 
 
