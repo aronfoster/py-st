@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -19,6 +21,21 @@ from py_st.models import (
 )
 
 
+class CooldownException(Exception):
+    def __init__(self, cooldown_data: dict) -> None:
+        self.cooldown = cooldown_data
+        remaining = cooldown_data.get("remainingSeconds", 0)
+        super().__init__(
+            f"Ship is on cooldown. Try again in {remaining} seconds."
+        )
+
+
+class APIError(Exception):
+    """Custom exception for API errors."""
+
+    pass
+
+
 class SpaceTraders:
     def __init__(self, token: str, client: httpx.Client | None = None) -> None:
         headers = {
@@ -30,6 +47,35 @@ class SpaceTraders:
             headers=headers,
             timeout=30,
         )
+
+    def _make_request(
+        self, method: str, url: str, json: dict | None = None
+    ) -> dict | list:
+        """
+        Makes a request to the API, handling errors and cooldowns.
+        """
+        try:
+            r = self._client.request(method, url, json=json)
+
+            if r.status_code == 409:
+                error_data = r.json().get("error", {})
+                cooldown = error_data.get("data", {}).get("cooldown", {})
+                wait_time = cooldown.get("remainingSeconds", 0)
+
+                print(f"Ship on cooldown. Waiting for {wait_time} seconds...")
+                time.sleep(wait_time + 1)
+
+                r = self._client.request(method, url, json=json)
+
+            r.raise_for_status()
+            return r.json()["data"]
+
+        except httpx.HTTPStatusError as e:
+            error_details = e.response.json().get("error", {})
+            message = error_details.get("message", e.response.text)
+            raise APIError(f"API Error: {message}") from e
+        except httpx.RequestError as e:
+            raise APIError(f"Request failed: {e}") from e
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def get_agent(self) -> Agent:
@@ -145,23 +191,32 @@ class SpaceTraders:
         r.raise_for_status()
         return ShipNav.model_validate(r.json()["data"]["nav"])
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def extract_resources(
         self, ship_symbol: str, survey: Survey | None = None
     ) -> Extraction:
         """
         Extract resources from a waypoint.
-        Optionally, use a survey to target specific yields.
         """
         if survey:
             url = f"/my/ships/{ship_symbol}/extract/survey"
-            r = self._client.post(url, json=survey.model_dump(mode="json"))
+            payload = survey.model_dump(mode="json")
+            data = self._make_request("POST", url, json=payload)
         else:
             url = f"/my/ships/{ship_symbol}/extract"
-            r = self._client.post(url)
-        r.raise_for_status()
-        data = r.json()["data"]
+            data = self._make_request("POST", url)
+
         return Extraction.model_validate(data["extraction"])
+
+    def refine_materials(
+        self, ship_symbol: str, produce: str
+    ) -> dict[str, any]:
+        """
+        Refine raw materials on a ship.
+        """
+        url = f"/my/ships/{ship_symbol}/refine"
+        payload = {"produce": produce}
+        data = self._make_request("POST", url, json=payload)
+        return data
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def create_survey(self, ship_symbol: str) -> list[Survey]:

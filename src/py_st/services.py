@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from .api_client import SpaceTraders
+import json
+
+from .api_client import APIError, SpaceTraders
 from .models import (
     Agent,
     Contract,
@@ -119,13 +121,30 @@ def dock_ship(token: str, ship_symbol: str) -> ShipNav:
     return result
 
 
-def extract_resources(token: str, ship_symbol: str) -> Extraction:
+def extract_resources(
+    token: str, ship_symbol: str, survey_json: str | None = None
+) -> Extraction | None:
     """
-    Extracts resources from a waypoint.
+    Extracts resources from a waypoint, optionally using a survey.
     """
-    client = SpaceTraders(token=token)
-    extraction = client.extract_resources(ship_symbol)
-    return extraction
+    try:
+        client = SpaceTraders(token=token)
+        survey_to_use = None
+        if survey_json:
+            try:
+                survey_data = json.loads(survey_json)
+                survey_to_use = Survey.model_validate(survey_data)
+            except (json.JSONDecodeError, TypeError):
+                print("Error: Invalid survey JSON provided. Aborting.")
+                return None
+
+        extraction = client.extract_resources(
+            ship_symbol, survey=survey_to_use
+        )
+        return extraction
+    except APIError as e:
+        print(f"Extraction failed: {e}")
+        return None
 
 
 def create_survey(token: str, ship_symbol: str) -> list[Survey]:
@@ -190,3 +209,18 @@ def get_shipyard(
     client = SpaceTraders(token=token)
     shipyard = client.get_shipyard(system_symbol, waypoint_symbol)
     return shipyard
+
+
+def refine_materials(token: str, ship_symbol: str, produce: str) -> None:
+    """
+    Refines materials on a ship and prints the result.
+    """
+    try:
+        client = SpaceTraders(token=token)
+        result = client.refine_materials(ship_symbol, produce)
+        print("🔬 Refining complete!")
+        # The response contains multiple nested models.
+        # For simplicity, we'll print the raw dictionary.
+        print(json.dumps(result, indent=2))
+    except APIError as e:
+        print(f"Refining failed: {e}")

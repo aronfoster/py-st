@@ -35,6 +35,7 @@ REFUEL_UNITS_OPTION = typer.Option(
 FLIGHT_MODE_ARG = typer.Argument(
     ..., help="The flight mode to set for the ship."
 )
+PRODUCE_ARG = typer.Argument(..., help="The good to produce from refining.")
 
 # Systems-specific
 SYSTEM_SYMBOL_ARG = typer.Argument(..., help="The system to scan.")
@@ -359,6 +360,24 @@ def jettison_cargo_cli(
     cargo = services.jettison_cargo(t, ship_symbol, trade_symbol, units)
     print("🗑️ Cargo jettisoned!")
     print(json.dumps(cargo.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("refine")
+def refine_materials_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    produce: str = PRODUCE_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Refine raw materials on a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    services.refine_materials(t, ship_symbol, produce)
 
 
 @contracts_app.command("accept")
