@@ -2,6 +2,6 @@ def test_import() -> None:
     import py_st  # noqa: F401
 
 
-def test_import_services():
+def test_import_services() -> None:
     # Fails if dataclass has mutable defaults
     from py_st.services import MarketGoods  # noqa: F401

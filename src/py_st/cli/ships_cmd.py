@@ -1,0 +1,254 @@
+from __future__ import annotations
+
+import json
+import logging
+
+import typer
+
+from py_st.models import ShipNavFlightMode
+
+from .. import services
+from .options import (
+    DELIVER_TRADE_SYMBOL_ARG,
+    DELIVER_UNITS_ARG,
+    FLIGHT_MODE_ARG,
+    PRODUCE_ARG,
+    REFUEL_UNITS_OPTION,
+    SHIP_SYMBOL_ARG,
+    TOKEN_OPTION,
+    VERBOSE_OPTION,
+    WAYPOINT_SYMBOL_ARG,
+    _get_token,
+)
+
+ships_app: typer.Typer = typer.Typer(help="Manage your ships.")
+
+
+@ships_app.command("list")
+def list_ships(
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    List all of your ships.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    ships = services.list_ships(t)
+    ships_list = [s.model_dump(mode="json") for s in ships]
+    print(json.dumps(ships_list, indent=2))
+
+
+@ships_app.command("navigate")
+def navigate_ship_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Navigate a ship to a waypoint.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    result = services.navigate_ship(t, ship_symbol, waypoint_symbol)
+    print(f"🚀 Ship {ship_symbol} is navigating to {waypoint_symbol}.")
+    print(json.dumps(result.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("orbit")
+def orbit_ship_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Move a ship into orbit.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    result = services.orbit_ship(t, ship_symbol)
+    print(f"🛰️  Ship {ship_symbol} is now in orbit.")
+    print(json.dumps(result.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("dock")
+def dock_ship_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Dock a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    result = services.dock_ship(t, ship_symbol)
+    print(f"⚓ Ship {ship_symbol} is now docked.")
+    print(json.dumps(result.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("extract")
+def extract_resources_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Extract resources from a waypoint.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    extraction = services.extract_resources(t, ship_symbol)
+    if extraction is None:
+        print("Extraction failed or aborted.")
+        return
+    print("⛏️ Extraction successful!")
+    print(json.dumps(extraction.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("survey")
+def create_survey_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Create a survey of the current waypoint.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    surveys = services.create_survey(t, ship_symbol)
+    print("🔭 Survey complete!")
+    surveys_list = [s.model_dump(mode="json") for s in surveys]
+    print(json.dumps(surveys_list, indent=2))
+
+
+@ships_app.command("refuel")
+def refuel_ship_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    units: int | None = REFUEL_UNITS_OPTION,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Refuel a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    agent, fuel, transaction = services.refuel_ship(t, ship_symbol, units)
+    print("⛽ Refueling complete!")
+    output_data = {
+        "agent": agent.model_dump(mode="json"),
+        "fuel": fuel.model_dump(mode="json"),
+        "transaction": transaction.model_dump(mode="json"),
+    }
+    print(json.dumps(output_data, indent=2))
+
+
+@ships_app.command("flight-mode")
+def set_flight_mode_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    flight_mode: ShipNavFlightMode = FLIGHT_MODE_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Set the flight mode for a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    nav = services.set_flight_mode(t, ship_symbol, flight_mode)
+    print(f"✈️ Flight mode for {ship_symbol} set to {flight_mode.value}.")
+    print(json.dumps(nav.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("jettison")
+def jettison_cargo_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    trade_symbol: str = DELIVER_TRADE_SYMBOL_ARG,
+    units: int = DELIVER_UNITS_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Jettison cargo from a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    cargo = services.jettison_cargo(t, ship_symbol, trade_symbol, units)
+    print("🗑️ Cargo jettisoned!")
+    print(json.dumps(cargo.model_dump(mode="json"), indent=2))
+
+
+@ships_app.command("refine")
+def refine_materials_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    produce: str = PRODUCE_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Refine raw materials on a ship.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    services.refine_materials(t, ship_symbol, produce)
+
+
+@ships_app.command("sell")
+def sell_cargo_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    trade_symbol: str = DELIVER_TRADE_SYMBOL_ARG,
+    units: int = DELIVER_UNITS_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Sell cargo from a ship at the current marketplace (must be DOCKED there).
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    agent, cargo, transaction = services.sell_cargo(
+        t, ship_symbol, trade_symbol, units
+    )
+    print("💱 Sale complete!")
+    output = {
+        "agent": agent.model_dump(mode="json"),
+        "cargo": cargo.model_dump(mode="json"),
+        "transaction": transaction.model_dump(mode="json"),
+    }
+    print(json.dumps(output, indent=2))
