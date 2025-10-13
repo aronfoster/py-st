@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from .api_client import APIError, SpaceTraders
@@ -25,15 +25,14 @@ from .models import (
 
 @dataclass
 class MarketGoods:
-    sells: list[TradeGood] = []
-    buys: list[TradeGood] = []
+    sells: list[TradeGood] = field(default_factory=list)
+    buys: list[TradeGood] = field(default_factory=list)
 
 
 @dataclass
 class SystemGoods:
-    by_waypoint: dict[str, MarketGoods] = {}
-    # by_good maps TRADE_SYMBOL -> {"sells": [waypoints], "buys": [waypoints]}
-    by_good: dict[str, dict[str, list[str]]] = {}
+    by_waypoint: dict[str, MarketGoods] = field(default_factory=dict)
+    by_good: dict[str, dict[str, list[str]]] = field(default_factory=dict)
 
 
 def _sym(obj: Any) -> str:

@@ -9,5 +9,5 @@ This is a python 3 application.
 
 ## Coding Standards
 
-- You must stick to 79 characters or less per line
+- You must limit all changes to 79 characters or less per line
 - Use industry standards for python

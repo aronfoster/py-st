@@ -16,17 +16,6 @@
       "request": "launch",
       "program": "${file}",
       "console": "integratedTerminal"
-    },
-    {
-      "name": "Pytest: All Tests",
-      "type": "debugpy",
-      "request": "launch",
-      "module": "pytest",
-      "args": [
-        "-q"
-      ],
-      "console": "integratedTerminal",
-      "justMyCode": true
     }
   ],
   "inputs": [
