@@ -25,4 +25,4 @@ Here is the planned development path for `py-st`.
 - Update retry logic to fail if it's a 400 error
   - Maybe make it intelligently understand all return codes
   - Also reduce retry time dramatically to align with rate limits
-  - Delete get_json-style helpers; rewrite API methods to return models/TypedDicts. At the API client, not later in services/cli, deserialize the json.
+- Delete get_json-style helpers; rewrite API methods to return models/TypedDicts. At the API client, not later in services/cli, deserialize the json.
