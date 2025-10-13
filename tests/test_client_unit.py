@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 import httpx
 
-from py_st.api_client import SpaceTraders
+from py_st.client import SpaceTraders
 from py_st.models import Agent, Contract, Ship, Waypoint
 from tests.factories import (
     AgentFactory,
@@ -26,7 +24,7 @@ def test_get_agent_parses_response() -> None:
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
     st = SpaceTraders(token="T", client=fake_client)
-    agent = st.get_agent()
+    agent = st.agent.get_agent()
 
     # Type & field assertions
     assert isinstance(agent, Agent)
@@ -49,7 +47,7 @@ def test_get_contracts_parses_response() -> None:
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
     st = SpaceTraders(token="T", client=fake_client)
-    contracts = st.get_contracts()
+    contracts = st.contracts.get_contracts()
 
     assert len(contracts) == 1
     assert isinstance(contracts[0], Contract)
@@ -70,7 +68,7 @@ def test_get_ships_parses_response() -> None:
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
     st = SpaceTraders(token="T", client=fake_client)
-    ships = st.get_ships()
+    ships = st.ships.get_ships()
 
     assert len(ships) == 1
     assert isinstance(ships[0], Ship)
@@ -90,7 +88,7 @@ def test_negotiate_contract_parses_response() -> None:
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
     st = SpaceTraders(token="T", client=fake_client)
-    result = st.negotiate_contract("SHIP-1")
+    result = st.contracts.negotiate_contract("SHIP-1")
 
     assert isinstance(result, Contract)
     assert result.id == "contract-1"
@@ -121,7 +119,7 @@ def test_accept_contract_parses_response() -> None:
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
     st = SpaceTraders(token="T", client=fake_client)
-    result = st.accept_contract("contract-1")
+    result = st.contracts.accept_contract("contract-1")
 
     assert "agent" in result
     assert "contract" in result
@@ -143,7 +141,7 @@ def test_get_waypoints_in_system_parses_response() -> None:
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
     st = SpaceTraders(token="T", client=fake_client)
-    waypoints = st.get_waypoints_in_system("X1-ABC")
+    waypoints = st.systems.get_waypoints_in_system("X1-ABC")
 
     assert len(waypoints) == 1
     assert isinstance(waypoints[0], Waypoint)

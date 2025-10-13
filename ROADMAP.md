@@ -14,6 +14,7 @@ Here are the outstanding tasks for `py-st`.
   - While waiting for something to cool down, can do other work. Might eventually implement a queue and threading
 - Cache game data.
   - Might have a dirty flag and last-updated-time so I can know what needs to be re-fetched
+  - Minor implementation could have in-mem cache referenced with cli flags like --ship 1 or --wp 3
 - Connect game data cache into commands so I don't have to type ship and system names each time
 - Develop a script to run a basic ship automation loop.
 - Delete get_json-style helpers; rewrite API methods to return models/TypedDicts. At the API client, not later in services/cli, deserialize the json.
