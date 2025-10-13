@@ -4,14 +4,13 @@ from typing import Any, cast
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from py_st.client.transport import HttpTransport
 from py_st.models import Market, Shipyard, Waypoint
-
-from ..client import SpaceTradersClient
 
 
 class SystemsEndpoint:
-    def __init__(self, client: SpaceTradersClient) -> None:
-        self._client = client
+    def __init__(self, transport: HttpTransport) -> None:
+        self._transport = transport
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def get_waypoints_in_system(
@@ -24,7 +23,7 @@ class SystemsEndpoint:
         if traits:
             params["traits"] = traits
         url = f"/systems/{system_symbol}/waypoints"
-        data = self._client._make_request("GET", url)
+        data = self._transport.request_json("GET", url)
         return [Waypoint.model_validate(w) for w in data]
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -38,7 +37,7 @@ class SystemsEndpoint:
         out: list[dict[str, Any]] = []
         while True:
             url = f"/systems/{system_symbol}/waypoints"
-            data = self._client._make_request("GET", url)
+            data = self._transport.request_json("GET", url)
             out.extend(data)
             page = 1
             out: list[dict[str, Any]] = []
@@ -71,7 +70,7 @@ class SystemsEndpoint:
         Get the shipyard for a waypoint.
         """
         url = f"/systems/{system_symbol}/waypoints/{waypoint_symbol}/shipyard"
-        data = self._client._make_request("GET", url)
+        data = self._transport.request_json("GET", url)
         return Shipyard.model_validate(data)
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -80,5 +79,5 @@ class SystemsEndpoint:
         Retrieve market info plus prices if you have a ship present
         """
         url = f"/systems/{system_symbol}/waypoints/{waypoint_symbol}/market"
-        data = self._client._make_request("GET", url)
+        data = self._transport.request_json("GET", url)
         return Market.model_validate(data)

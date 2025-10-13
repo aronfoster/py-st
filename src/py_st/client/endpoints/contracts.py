@@ -2,21 +2,20 @@ from __future__ import annotations
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from py_st.client.transport import HttpTransport
 from py_st.models import Agent, Contract, ShipCargo
-
-from ..client import SpaceTradersClient
 
 
 class ContractsEndpoint:
-    def __init__(self, client: SpaceTradersClient) -> None:
-        self._client = client
+    def __init__(self, transport: HttpTransport) -> None:
+        self._transport = transport
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def get_contracts(self) -> list[Contract]:
         """
         Fetches a paginated list of all your contracts.
         """
-        data = self._client._make_request("GET", "/my/contracts")
+        data = self._transport.request_json("GET", "/my/contracts")
         return [Contract.model_validate(c) for c in data]
 
     def negotiate_contract(self, ship_symbol: str) -> Contract:
@@ -24,7 +23,7 @@ class ContractsEndpoint:
         Negotiates a new contract using the specified ship.
         """
         url = f"/my/ships/{ship_symbol}/negotiate/contract"
-        data = self._client._make_request("POST", url)
+        data = self._transport.request_json("POST", url)
         return Contract.model_validate(data["contract"])
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -33,7 +32,7 @@ class ContractsEndpoint:
         Accepts the contract with the given ID.
         """
         url = f"/my/contracts/{contract_id}/accept"
-        data = self._client._make_request("POST", url)
+        data = self._transport.request_json("POST", url)
         return {
             "agent": Agent.model_validate(data["agent"]),
             "contract": Contract.model_validate(data["contract"]),
@@ -56,7 +55,7 @@ class ContractsEndpoint:
             "tradeSymbol": trade_symbol,
             "units": units,
         }
-        data = self._client._make_request("POST", url, json=payload)
+        data = self._transport.request_json("POST", url, json=payload)
         return (
             Contract.model_validate(data["contract"]),
             ShipCargo.model_validate(data["cargo"]),
@@ -68,7 +67,7 @@ class ContractsEndpoint:
         Fulfill a contract.
         """
         url = f"/my/contracts/{contract_id}/fulfill"
-        data = self._client._make_request("POST", url)
+        data = self._transport.request_json("POST", url)
         return (
             Agent.model_validate(data["agent"]),
             Contract.model_validate(data["contract"]),

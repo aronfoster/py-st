@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-from tenacity import retry, stop_after_attempt, wait_exponential
-
+from py_st.client.transport import HttpTransport
 from py_st.models import Agent
-
-from ..client import SpaceTradersClient
 
 
 class AgentEndpoint:
-    def __init__(self, client: SpaceTradersClient) -> None:
-        self._client = client
+    def __init__(self, transport: HttpTransport) -> None:
+        self._transport = transport
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def get_agent(self) -> Agent:
-        data = self._client._make_request("GET", "/my/agent")
+        """GET /my/agent — current authenticated agent."""
+        data = self._transport.request_json("GET", "/my/agent")
         return Agent.model_validate(data)

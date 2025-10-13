@@ -4,6 +4,7 @@ from typing import Any
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from py_st.client.transport import HttpTransport
 from py_st.models import (
     Agent,
     Extraction,
@@ -16,19 +17,17 @@ from py_st.models import (
     Survey,
 )
 
-from ..client import SpaceTradersClient
-
 
 class ShipsEndpoint:
-    def __init__(self, client: SpaceTradersClient) -> None:
-        self._client = client
+    def __init__(self, transport: HttpTransport) -> None:
+        self._transport = transport
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def get_ships(self) -> list[Ship]:
         """
         Fetches a paginated list of all your ships.
         """
-        data = self._client._make_request("GET", "/my/ships")
+        data = self._transport.request_json("GET", "/my/ships")
         return [Ship.model_validate(s) for s in data]
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -38,7 +37,7 @@ class ShipsEndpoint:
         """
         url = f"/my/ships/{ship_symbol}/navigate"
         payload = {"waypointSymbol": waypoint_symbol}
-        data = self._client._make_request("POST", url, json=payload)
+        data = self._transport.request_json("POST", url, json=payload)
         return ShipNav.model_validate(data["nav"])
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -47,7 +46,7 @@ class ShipsEndpoint:
         Move a ship into orbit.
         """
         url = f"/my/ships/{ship_symbol}/orbit"
-        data = self._client._make_request("POST", url)
+        data = self._transport.request_json("POST", url)
         return ShipNav.model_validate(data["nav"])
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -56,7 +55,7 @@ class ShipsEndpoint:
         Dock a ship.
         """
         url = f"/my/ships/{ship_symbol}/dock"
-        data = self._client._make_request("POST", url)
+        data = self._transport.request_json("POST", url)
         return ShipNav.model_validate(data["nav"])
 
     def extract_resources(
@@ -68,10 +67,10 @@ class ShipsEndpoint:
         if survey:
             url = f"/my/ships/{ship_symbol}/extract/survey"
             payload = survey.model_dump(mode="json")
-            data = self._client._make_request("POST", url, json=payload)
+            data = self._transport.request_json("POST", url, json=payload)
         else:
             url = f"/my/ships/{ship_symbol}/extract"
-            data = self._client._make_request("POST", url)
+            data = self._transport.request_json("POST", url)
         return Extraction.model_validate(data["extraction"])
 
     def refine_materials(
@@ -82,7 +81,7 @@ class ShipsEndpoint:
         """
         url = f"/my/ships/{ship_symbol}/refine"
         payload = {"produce": produce}
-        data = self._client._make_request("POST", url, json=payload)
+        data = self._transport.request_json("POST", url, json=payload)
         return data
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -91,7 +90,7 @@ class ShipsEndpoint:
         Create a survey of the waypoint at the ship's current location.
         """
         url = f"/my/ships/{ship_symbol}/survey"
-        data = self._client._make_request("POST", url)
+        data = self._transport.request_json("POST", url)
         return [Survey.model_validate(s) for s in data["surveys"]]
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -105,7 +104,7 @@ class ShipsEndpoint:
         payload = {}
         if units:
             payload["units"] = units
-        data = self._client._make_request("POST", url, json=payload)
+        data = self._transport.request_json("POST", url, json=payload)
         return (
             Agent.model_validate(data["agent"]),
             ShipFuel.model_validate(data["fuel"]),
@@ -121,7 +120,7 @@ class ShipsEndpoint:
         """
         url = f"/my/ships/{ship_symbol}/nav"
         payload = {"flightMode": flight_mode.value}
-        data = self._client._make_request("PATCH", url, json=payload)
+        data = self._transport.request_json("PATCH", url, json=payload)
         return ShipNav.model_validate(data["nav"])
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -133,7 +132,7 @@ class ShipsEndpoint:
         """
         url = f"/my/ships/{ship_symbol}/jettison"
         payload = {"symbol": trade_symbol, "units": units}
-        data = self._client._make_request("POST", url, json=payload)
+        data = self._transport.request_json("POST", url, json=payload)
         return ShipCargo.model_validate(data["cargo"])
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
@@ -145,7 +144,7 @@ class ShipsEndpoint:
         """
         url = f"/my/ships/{ship_symbol}/sell"
         payload = {"symbol": trade_symbol, "units": units}
-        data = self._client._make_request("POST", url, json=payload)
+        data = self._transport.request_json("POST", url, json=payload)
         return (
             Agent.model_validate(data["agent"]),
             ShipCargo.model_validate(data["cargo"]),
