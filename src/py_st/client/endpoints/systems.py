@@ -6,11 +6,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from py_st.models import Market, Shipyard, Waypoint
 
-from ..client import SpaceTraders
+from ..client import SpaceTradersClient
 
 
 class SystemsEndpoint:
-    def __init__(self, client: SpaceTraders) -> None:
+    def __init__(self, client: SpaceTradersClient) -> None:
         self._client = client
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))

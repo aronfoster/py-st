@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from .client import APIError, SpaceTraders
+from .client import APIError, SpaceTradersClient
 from .models import (
     Agent,
     Contract,
@@ -72,7 +72,7 @@ def get_agent_info(token: str) -> Agent:
     """
     Fetches agent data from the API.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     agent = client.agent.get_agent()
     return agent
 
@@ -81,7 +81,7 @@ def list_contracts(token: str) -> list[Contract]:
     """
     Fetches all contracts from the API.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     contracts = client.contracts.get_contracts()
     return contracts
 
@@ -90,7 +90,7 @@ def negotiate_contract(token: str, ship_symbol: str) -> Contract:
     """
     Negotiates a new contract using the specified ship.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     new_contract = client.contracts.negotiate_contract(ship_symbol)
     return new_contract
 
@@ -105,7 +105,7 @@ def deliver_contract(
     """
     Delivers cargo to fulfill part of a contract.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     contract, cargo = client.contracts.deliver_contract(
         contract_id, ship_symbol, trade_symbol, units
     )
@@ -116,7 +116,7 @@ def fulfill_contract(token: str, contract_id: str) -> tuple[Agent, Contract]:
     """
     Fulfills a contract.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     agent, contract = client.contracts.fulfill_contract(contract_id)
     return agent, contract
 
@@ -125,7 +125,7 @@ def accept_contract(token: str, contract_id: str) -> tuple[Agent, Contract]:
     """
     Accepts a contract.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     result = client.contracts.accept_contract(contract_id)
     agent: Agent = cast(Agent, result["agent"])
     contract: Contract = cast(Contract, result["contract"])
@@ -136,7 +136,7 @@ def list_ships(token: str) -> list[Ship]:
     """
     Fetches all ships from the API.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     ships = client.ships.get_ships()
     return ships
 
@@ -147,7 +147,7 @@ def navigate_ship(
     """
     Navigates a ship to a waypoint.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     result = client.ships.navigate_ship(ship_symbol, waypoint_symbol)
     return result
 
@@ -156,7 +156,7 @@ def orbit_ship(token: str, ship_symbol: str) -> ShipNav:
     """
     Moves a ship into orbit.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     result = client.ships.orbit_ship(ship_symbol)
     return result
 
@@ -165,7 +165,7 @@ def dock_ship(token: str, ship_symbol: str) -> ShipNav:
     """
     Docks a ship.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     result = client.ships.dock_ship(ship_symbol)
     return result
 
@@ -177,7 +177,7 @@ def extract_resources(
     Extracts resources from a waypoint, optionally using a survey.
     """
     try:
-        client = SpaceTraders(token=token)
+        client = SpaceTradersClient(token=token)
         survey_to_use = None
         if survey_json:
             try:
@@ -200,7 +200,7 @@ def create_survey(token: str, ship_symbol: str) -> list[Survey]:
     """
     Creates a survey of the current waypoint.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     surveys = client.ships.create_survey(ship_symbol)
     return surveys
 
@@ -211,7 +211,7 @@ def refuel_ship(
     """
     Refuels a ship.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     agent, fuel, transaction = client.ships.refuel_ship(ship_symbol, units)
     return agent, fuel, transaction
 
@@ -222,7 +222,7 @@ def jettison_cargo(
     """
     Jettisons cargo from a ship.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     cargo = client.ships.jettison_cargo(ship_symbol, trade_symbol, units)
     return cargo
 
@@ -233,7 +233,7 @@ def set_flight_mode(
     """
     Sets the flight mode for a ship.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     nav = client.ships.set_flight_mode(ship_symbol, flight_mode)
     return nav
 
@@ -244,7 +244,7 @@ def list_waypoints(
     """
     Lists waypoints in a system, optionally filtered by traits.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     waypoints = client.systems.get_waypoints_in_system(
         system_symbol, traits=traits
     )
@@ -257,7 +257,7 @@ def get_shipyard(
     """
     Gets the shipyard for a waypoint.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     shipyard = client.systems.get_shipyard(system_symbol, waypoint_symbol)
     return shipyard
 
@@ -267,7 +267,7 @@ def refine_materials(token: str, ship_symbol: str, produce: str) -> None:
     Refines materials on a ship and prints the result.
     """
     try:
-        client = SpaceTraders(token=token)
+        client = SpaceTradersClient(token=token)
         result = client.ships.refine_materials(ship_symbol, produce)
         print("🔬 Refining complete!")
         # The response contains multiple nested models.
@@ -281,7 +281,7 @@ def get_market(token: str, system_symbol: str, waypoint_symbol: str) -> Market:
     """
     Gets the market for a waypoint.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     return client.systems.get_market(system_symbol, waypoint_symbol)
 
 
@@ -291,7 +291,7 @@ def sell_cargo(
     """
     Sells cargo from a ship at the current marketplace.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     return client.ships.sell_cargo(ship_symbol, trade_symbol, units)
 
 
@@ -302,7 +302,7 @@ def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
     - buys  := imports ∪ exchange
     Returns real TradeGood objects grouped by waypoint, plus a reverse index.
     """
-    client = SpaceTraders(token=token)
+    client = SpaceTradersClient(token=token)
     waypoints = [
         wp
         for wp in client.systems.list_waypoints_all(system_symbol)

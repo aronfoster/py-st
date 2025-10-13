@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from .endpoints.systems import SystemsEndpoint
 
 
-class SpaceTraders:
+class SpaceTradersClient:
     def __init__(self, token: str, client: httpx.Client | None = None) -> None:
         headers = {
             "Authorization": f"Bearer {token}",

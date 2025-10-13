@@ -1,6 +1,6 @@
 import httpx
 
-from py_st.client import SpaceTraders
+from py_st.client import SpaceTradersClient
 from py_st.models import Agent, Contract, Ship, Waypoint
 from tests.factories import (
     AgentFactory,
@@ -23,7 +23,7 @@ def test_get_agent_parses_response() -> None:
     fake_client = httpx.Client(
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
-    st = SpaceTraders(token="T", client=fake_client)
+    st = SpaceTradersClient(token="T", client=fake_client)
     agent = st.agent.get_agent()
 
     # Type & field assertions
@@ -46,7 +46,7 @@ def test_get_contracts_parses_response() -> None:
     fake_client = httpx.Client(
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
-    st = SpaceTraders(token="T", client=fake_client)
+    st = SpaceTradersClient(token="T", client=fake_client)
     contracts = st.contracts.get_contracts()
 
     assert len(contracts) == 1
@@ -67,7 +67,7 @@ def test_get_ships_parses_response() -> None:
     fake_client = httpx.Client(
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
-    st = SpaceTraders(token="T", client=fake_client)
+    st = SpaceTradersClient(token="T", client=fake_client)
     ships = st.ships.get_ships()
 
     assert len(ships) == 1
@@ -87,7 +87,7 @@ def test_negotiate_contract_parses_response() -> None:
     fake_client = httpx.Client(
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
-    st = SpaceTraders(token="T", client=fake_client)
+    st = SpaceTradersClient(token="T", client=fake_client)
     result = st.contracts.negotiate_contract("SHIP-1")
 
     assert isinstance(result, Contract)
@@ -118,7 +118,7 @@ def test_accept_contract_parses_response() -> None:
     fake_client = httpx.Client(
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
-    st = SpaceTraders(token="T", client=fake_client)
+    st = SpaceTradersClient(token="T", client=fake_client)
     result = st.contracts.accept_contract("contract-1")
 
     assert "agent" in result
@@ -140,7 +140,7 @@ def test_get_waypoints_in_system_parses_response() -> None:
     fake_client = httpx.Client(
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
-    st = SpaceTraders(token="T", client=fake_client)
+    st = SpaceTradersClient(token="T", client=fake_client)
     waypoints = st.systems.get_waypoints_in_system("X1-ABC")
 
     assert len(waypoints) == 1

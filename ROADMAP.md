@@ -2,6 +2,10 @@
 
 Here are the outstanding tasks for `py-st`.
 
+## Mid refactor:
+- Should the client/* (e.g. agent.py) go straight to transport.py instead of up to client.py? Would that be a better way to resolve the circular dependency? Could get rid of _make_request.
+  - Maybe this should be part of removing the json parts and having everything returning models right away.
+
 - Improve web requests.
   - We have _make_request, which handles 409s.
   - This could be expanded to handle 400s when we request something impossible (e.g. not enough fuel)
