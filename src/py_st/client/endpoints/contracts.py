@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from tenacity import retry, stop_after_attempt, wait_exponential
-
 from py_st.client.transport import HttpTransport
 from py_st.models import Agent, Contract, ShipCargo
 
@@ -10,7 +8,6 @@ class ContractsEndpoint:
     def __init__(self, transport: HttpTransport) -> None:
         self._transport = transport
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def get_contracts(self) -> list[Contract]:
         """
         Fetches a paginated list of all your contracts.
@@ -26,7 +23,6 @@ class ContractsEndpoint:
         data = self._transport.request_json("POST", url)
         return Contract.model_validate(data["contract"])
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def accept_contract(self, contract_id: str) -> dict[str, Agent | Contract]:
         """
         Accepts the contract with the given ID.
@@ -38,7 +34,6 @@ class ContractsEndpoint:
             "contract": Contract.model_validate(data["contract"]),
         }
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def deliver_contract(
         self,
         contract_id: str,
@@ -61,7 +56,6 @@ class ContractsEndpoint:
             ShipCargo.model_validate(data["cargo"]),
         )
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def fulfill_contract(self, contract_id: str) -> tuple[Agent, Contract]:
         """
         Fulfill a contract.

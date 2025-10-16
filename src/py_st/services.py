@@ -51,8 +51,9 @@ def _sym(obj: Any) -> str:
     return s.value if hasattr(s, "value") else str(s)
 
 
-def _has_marketplace(wp: dict[str, Any]) -> bool:
-    return any(t.get("symbol") == "MARKETPLACE" for t in wp.get("traits", []))
+def _has_marketplace(wp: Waypoint) -> bool:
+    """Checks if a Waypoint model has the MARKETPLACE trait."""
+    return any(trait.symbol.value == "MARKETPLACE" for trait in wp.traits)
 
 
 def _uniq_by_symbol(goods: list[TradeGood] | None) -> list[TradeGood]:
@@ -303,18 +304,17 @@ def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
     Returns real TradeGood objects grouped by waypoint, plus a reverse index.
     """
     client = SpaceTradersClient(token=token)
-    waypoints = [
-        wp
-        for wp in client.systems.list_waypoints_all(system_symbol)
-        if _has_marketplace(wp)
-    ]
+    waypoints: list[Waypoint] = client.systems.list_waypoints_all(
+        system_symbol
+    )
+    waypoints = [wp for wp in waypoints if _has_marketplace(wp)]
 
     by_waypoint: dict[str, MarketGoods] = {}
     by_good_sells: dict[str, list[str]] = {}
     by_good_buys: dict[str, list[str]] = {}
 
     for wp in waypoints:
-        wp_sym = wp["symbol"]
+        wp_sym = wp.symbol.root
         mkt: Market = client.systems.get_market(system_symbol, wp_sym)
 
         imports = list(mkt.imports or [])

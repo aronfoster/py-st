@@ -2,9 +2,8 @@
 
 Here are the outstanding tasks for `py-st`.
 
-## Mid refactor:
-- Should the client/* (e.g. agent.py) go straight to transport.py instead of up to client.py? Would that be a better way to resolve the circular dependency? Could get rid of _make_request.
-  - Maybe this should be part of removing the json parts and having everything returning models right away.
+- Delete get_json-style helpers; rewrite API methods to return models/TypedDicts. At the API client, not later in services/cli, deserialize the json.
+- Generated classes like WaypointTraitSymbol are all calling themselves Model so I can't import them and say, e.g. WaypointTraitSymbol.MARKETPLACE. Fix the generation somehow.
 
 - Improve web requests.
   - We have _make_request, which handles 409s.
@@ -21,7 +20,7 @@ Here are the outstanding tasks for `py-st`.
   - Minor implementation could have in-mem cache referenced with cli flags like --ship 1 or --wp 3
 - Connect game data cache into commands so I don't have to type ship and system names each time
 - Develop a script to run a basic ship automation loop.
-- Delete get_json-style helpers; rewrite API methods to return models/TypedDicts. At the API client, not later in services/cli, deserialize the json.
+
 - I'm unhappy with the hardcoded test factories. Can we find a way to create objects from the models to use in testing? Perhaps more info comes from the json. Maybe we just need to fetch and keep the json instead of discarding it after we create the model classes (done in the Makefile)
 - I'm unhappy with the unit testing level of detail. Don't think it will actually catch problems in refactoring.
 - Need to update the get_waypoints method to handle pagination. Maybe all methods need to handle pagination.

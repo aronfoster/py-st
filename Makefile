@@ -7,8 +7,18 @@
 # Development Tasks
 # ==============================================================================
 
-lint: ## Check code for style and errors
-	ruff check . && black --check .
+# Apply fixes locally so you can review diffs before committing
+fmt:
+	@ruff check --fix .
+	@black .
+
+# Run both checks and fail if either fails (no writes)
+check:
+	@{ \
+	  black --check .; rc1=$$?; \
+	  ruff check .;   rc2=$$?; \
+	  exit $$((rc1||rc2)); \
+	}
 
 type: ## Run static type checking
 	mypy .
@@ -16,7 +26,7 @@ type: ## Run static type checking
 test: ## Run tests
 	pytest -q
 
-ci: lint type test ## Run all checks for continuous integration
+ci: fmt check type test ## Run all checks for continuous integration
 
 # ==============================================================================
 # API Spec & Model Generation

@@ -17,10 +17,12 @@ extend-exclude = "src/py_st/_generated"
 
 [tool.ruff]
 line-length = 79
+fix = true
 exclude = [
   "src/py_st/_generated",
 ]
 lint.select = ["E","F","I","UP","B","SIM"]
+lint.extend-select = ["W505"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

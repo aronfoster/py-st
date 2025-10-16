@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from tenacity import retry, stop_after_attempt, wait_exponential
-
 from py_st.client.transport import HttpTransport
 from py_st.models import (
     Agent,
@@ -22,7 +20,6 @@ class ShipsEndpoint:
     def __init__(self, transport: HttpTransport) -> None:
         self._transport = transport
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def get_ships(self) -> list[Ship]:
         """
         Fetches a paginated list of all your ships.
@@ -30,7 +27,6 @@ class ShipsEndpoint:
         data = self._transport.request_json("GET", "/my/ships")
         return [Ship.model_validate(s) for s in data]
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def navigate_ship(self, ship_symbol: str, waypoint_symbol: str) -> ShipNav:
         """
         Navigate a ship to a waypoint.
@@ -40,7 +36,6 @@ class ShipsEndpoint:
         data = self._transport.request_json("POST", url, json=payload)
         return ShipNav.model_validate(data["nav"])
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def orbit_ship(self, ship_symbol: str) -> ShipNav:
         """
         Move a ship into orbit.
@@ -49,7 +44,6 @@ class ShipsEndpoint:
         data = self._transport.request_json("POST", url)
         return ShipNav.model_validate(data["nav"])
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def dock_ship(self, ship_symbol: str) -> ShipNav:
         """
         Dock a ship.
@@ -84,7 +78,6 @@ class ShipsEndpoint:
         data = self._transport.request_json("POST", url, json=payload)
         return data
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def create_survey(self, ship_symbol: str) -> list[Survey]:
         """
         Create a survey of the waypoint at the ship's current location.
@@ -93,7 +86,6 @@ class ShipsEndpoint:
         data = self._transport.request_json("POST", url)
         return [Survey.model_validate(s) for s in data["surveys"]]
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def refuel_ship(
         self, ship_symbol: str, units: int | None = None
     ) -> tuple[Agent, ShipFuel, MarketTransaction]:
@@ -111,7 +103,6 @@ class ShipsEndpoint:
             MarketTransaction.model_validate(data["transaction"]),
         )
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def set_flight_mode(
         self, ship_symbol: str, flight_mode: ShipNavFlightMode
     ) -> ShipNav:
@@ -123,7 +114,6 @@ class ShipsEndpoint:
         data = self._transport.request_json("PATCH", url, json=payload)
         return ShipNav.model_validate(data["nav"])
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def jettison_cargo(
         self, ship_symbol: str, trade_symbol: str, units: int
     ) -> ShipCargo:
@@ -135,7 +125,6 @@ class ShipsEndpoint:
         data = self._transport.request_json("POST", url, json=payload)
         return ShipCargo.model_validate(data["cargo"])
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=0.5))
     def sell_cargo(
         self, ship_symbol: str, trade_symbol: str, units: int
     ) -> tuple[Agent, ShipCargo, MarketTransaction]:

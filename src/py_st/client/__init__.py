@@ -1,4 +1,4 @@
 from .client import SpaceTradersClient
-from .transport import APIError, CooldownException
+from .transport import APIError
 
-__all__ = ["SpaceTradersClient", "APIError", "CooldownException"]
+__all__ = ["SpaceTradersClient", "APIError"]
