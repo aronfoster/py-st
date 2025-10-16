@@ -6,6 +6,8 @@ from typing import Any
 
 import typer
 
+from py_st.cli._errors import handle_errors
+
 from .. import services
 from .options import (
     SYSTEM_SYMBOL_ARG,
@@ -20,6 +22,7 @@ systems_app: typer.Typer = typer.Typer(help="View system information.")
 
 
 @systems_app.command("waypoints")
+@handle_errors
 def list_waypoints(
     system_symbol: str = SYSTEM_SYMBOL_ARG,
     traits: list[str] = TRAITS_OPTION,
@@ -40,6 +43,7 @@ def list_waypoints(
 
 
 @systems_app.command("shipyard")
+@handle_errors
 def get_shipyard_cli(
     system_symbol: str = SYSTEM_SYMBOL_ARG,
     waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
@@ -59,6 +63,7 @@ def get_shipyard_cli(
 
 
 @systems_app.command("market")
+@handle_errors
 def get_market_cli(
     system_symbol: str = SYSTEM_SYMBOL_ARG,
     waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
@@ -81,6 +86,7 @@ def get_market_cli(
 
 
 @systems_app.command("list-goods")
+@handle_errors
 def systems_list_goods_cli(
     system_symbol: str = SYSTEM_SYMBOL_ARG,
     by_good: bool = typer.Option(

@@ -5,6 +5,7 @@ import logging
 
 import typer
 
+from py_st.cli._errors import handle_errors
 from py_st.models import ShipNavFlightMode
 
 from .. import services
@@ -25,6 +26,7 @@ ships_app: typer.Typer = typer.Typer(help="Manage your ships.")
 
 
 @ships_app.command("list")
+@handle_errors
 def list_ships(
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
@@ -43,6 +45,7 @@ def list_ships(
 
 
 @ships_app.command("navigate")
+@handle_errors
 def navigate_ship_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
@@ -63,6 +66,7 @@ def navigate_ship_cli(
 
 
 @ships_app.command("orbit")
+@handle_errors
 def orbit_ship_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     token: str | None = TOKEN_OPTION,
@@ -82,6 +86,7 @@ def orbit_ship_cli(
 
 
 @ships_app.command("dock")
+@handle_errors
 def dock_ship_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     token: str | None = TOKEN_OPTION,
@@ -101,6 +106,7 @@ def dock_ship_cli(
 
 
 @ships_app.command("extract")
+@handle_errors
 def extract_resources_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     token: str | None = TOKEN_OPTION,
@@ -123,6 +129,7 @@ def extract_resources_cli(
 
 
 @ships_app.command("survey")
+@handle_errors
 def create_survey_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     token: str | None = TOKEN_OPTION,
@@ -143,6 +150,7 @@ def create_survey_cli(
 
 
 @ships_app.command("refuel")
+@handle_errors
 def refuel_ship_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     units: int | None = REFUEL_UNITS_OPTION,
@@ -168,6 +176,7 @@ def refuel_ship_cli(
 
 
 @ships_app.command("flight-mode")
+@handle_errors
 def set_flight_mode_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     flight_mode: ShipNavFlightMode = FLIGHT_MODE_ARG,
@@ -188,6 +197,7 @@ def set_flight_mode_cli(
 
 
 @ships_app.command("jettison")
+@handle_errors
 def jettison_cargo_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     trade_symbol: str = DELIVER_TRADE_SYMBOL_ARG,
@@ -209,6 +219,7 @@ def jettison_cargo_cli(
 
 
 @ships_app.command("refine")
+@handle_errors
 def refine_materials_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     produce: str = PRODUCE_ARG,
@@ -227,6 +238,7 @@ def refine_materials_cli(
 
 
 @ships_app.command("sell")
+@handle_errors
 def sell_cargo_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     trade_symbol: str = DELIVER_TRADE_SYMBOL_ARG,

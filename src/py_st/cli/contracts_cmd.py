@@ -5,6 +5,8 @@ import logging
 
 import typer
 
+from py_st.cli._errors import handle_errors
+
 from .. import services
 from .options import (
     CONTRACT_ID_ARG,
@@ -20,6 +22,7 @@ contracts_app: typer.Typer = typer.Typer(help="Manage contracts.")
 
 
 @contracts_app.command("list")
+@handle_errors
 def list_contracts(
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
@@ -38,6 +41,7 @@ def list_contracts(
 
 
 @contracts_app.command("negotiate")
+@handle_errors
 def negotiate_contract_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     token: str | None = TOKEN_OPTION,
@@ -57,6 +61,7 @@ def negotiate_contract_cli(
 
 
 @contracts_app.command("deliver")
+@handle_errors
 def deliver_contract_cli(
     contract_id: str = CONTRACT_ID_ARG,
     ship_symbol: str = SHIP_SYMBOL_ARG,
@@ -85,6 +90,7 @@ def deliver_contract_cli(
 
 
 @contracts_app.command("fulfill")
+@handle_errors
 def fulfill_contract_cli(
     contract_id: str = CONTRACT_ID_ARG,
     token: str | None = TOKEN_OPTION,
@@ -108,6 +114,7 @@ def fulfill_contract_cli(
 
 
 @contracts_app.command("accept")
+@handle_errors
 def accept_contract_cli(
     contract_id: str = CONTRACT_ID_ARG,
     token: str | None = TOKEN_OPTION,
