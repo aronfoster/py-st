@@ -12,6 +12,7 @@ from py_st.models import (
     ShipFuel,
     ShipNav,
     ShipNavFlightMode,
+    ShipyardTransaction,
     Survey,
 )
 
@@ -138,4 +139,19 @@ class ShipsEndpoint:
             Agent.model_validate(data["agent"]),
             ShipCargo.model_validate(data["cargo"]),
             MarketTransaction.model_validate(data["transaction"]),
+        )
+
+    def purchase_ship(
+        self, ship_type: str, waypoint_symbol: str
+    ) -> tuple[Agent, Ship, MarketTransaction]:
+        """
+        Purchase a ship of the specified type at a waypoint.
+        """
+        url = "/my/ships"
+        payload = {"shipType": ship_type, "waypointSymbol": waypoint_symbol}
+        data = self._transport.request_json("POST", url, json=payload)
+        return (
+            Agent.model_validate(data["agent"]),
+            Ship.model_validate(data["ship"]),
+            ShipyardTransaction.model_validate(data["transaction"]),
         )

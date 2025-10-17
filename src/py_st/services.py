@@ -252,6 +252,17 @@ def list_waypoints(
     return waypoints
 
 
+def list_waypoints_all(
+    token: str, system_symbol: str, traits: list[str] | None
+) -> list[Waypoint]:
+    """
+    Lists waypoints in a system, optionally filtered by traits.
+    """
+    client = SpaceTradersClient(token=token)
+    waypoints = client.systems.list_waypoints_all(system_symbol)
+    return waypoints
+
+
 def get_shipyard(
     token: str, system_symbol: str, waypoint_symbol: str
 ) -> Shipyard:
@@ -294,6 +305,15 @@ def sell_cargo(
     """
     client = SpaceTradersClient(token=token)
     return client.ships.sell_cargo(ship_symbol, trade_symbol, units)
+
+
+def purchase_ship(token: str, ship_type: str, waypoint_symbol: str) -> Ship:
+    """
+    Purchases a ship of the specified type at a waypoint.
+    """
+    client = SpaceTradersClient(token=token)
+    ship = client.ships.purchase_ship(ship_type, waypoint_symbol)
+    return ship
 
 
 def list_system_goods(token: str, system_symbol: str) -> SystemGoods:

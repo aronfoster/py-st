@@ -42,6 +42,26 @@ def list_waypoints(
     print(json.dumps(waypoints_list, indent=2))
 
 
+@systems_app.command("waypoints-all")
+@handle_errors
+def list_waypoints_all(
+    system_symbol: str = SYSTEM_SYMBOL_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    List waypoints in a system, with an option to filter by traits.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    waypoints = services.list_waypoints_all(t, system_symbol)
+    waypoints_list = [w.model_dump(mode="json") for w in waypoints]
+    print(json.dumps(waypoints_list, indent=2))
+
+
 @systems_app.command("shipyard")
 @handle_errors
 def get_shipyard_cli(

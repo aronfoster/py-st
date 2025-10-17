@@ -18,9 +18,9 @@ class SystemsEndpoint:
         """
         params = {}
         if traits:
-            params["traits"] = traits
+            params["traits"] = ",".join(traits)
         url = f"/systems/{system_symbol}/waypoints"
-        data = self._transport.request_json("GET", url)
+        data = self._transport.request_json("GET", url, params=params)
         return [Waypoint.model_validate(w) for w in data]
 
     def list_waypoints_all(self, system_symbol: str) -> list[dict[str, Any]]:

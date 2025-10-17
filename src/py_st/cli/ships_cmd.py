@@ -16,6 +16,7 @@ from .options import (
     PRODUCE_ARG,
     REFUEL_UNITS_OPTION,
     SHIP_SYMBOL_ARG,
+    SHIP_TYPE_ARG,
     TOKEN_OPTION,
     VERBOSE_OPTION,
     WAYPOINT_SYMBOL_ARG,
@@ -261,6 +262,34 @@ def sell_cargo_cli(
     output = {
         "agent": agent.model_dump(mode="json"),
         "cargo": cargo.model_dump(mode="json"),
+        "transaction": transaction.model_dump(mode="json"),
+    }
+    print(json.dumps(output, indent=2))
+
+
+@ships_app.command("purchase")
+@handle_errors
+def purchase_ship_cli(
+    waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
+    ship_type: str = SHIP_TYPE_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Purchase a ship of the specified type at a waypoint.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    agent, ship, transaction = services.purchase_ship(
+        t, ship_type, waypoint_symbol
+    )
+    print(f"🛒 Purchased ship {ship.symbol} of type {ship_type}.")
+    output = {
+        "agent": agent.model_dump(mode="json"),
+        "ship": ship.model_dump(mode="json"),
         "transaction": transaction.model_dump(mode="json"),
     }
     print(json.dumps(output, indent=2))
