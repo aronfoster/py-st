@@ -277,19 +277,12 @@ def get_shipyard(
     return shipyard
 
 
-def refine_materials(token: str, ship_symbol: str, produce: str) -> RefineResult | None:
+def refine_materials(token: str, ship_symbol: str, produce: str) -> RefineResult:
     """
     Refines materials on a ship and prints the result.
     """
-    try:
-        client = SpaceTradersClient(token=token)
-        result = client.ships.refine_materials(ship_symbol, produce)
-        print("🔬 Refining complete!")
-        print(json.dumps(result.model_dump(mode="json"), indent=2))
-        return result
-    except APIError as e:
-        print(f"Refining failed: {e}")
-        return None
+    client = SpaceTradersClient(token=token)
+    return client.ships.refine_materials(ship_symbol, produce)
 
 
 def get_market(token: str, system_symbol: str, waypoint_symbol: str) -> Market:
