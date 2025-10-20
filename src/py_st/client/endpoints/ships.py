@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 from py_st.client.transport import HttpTransport, JSONDict
 from py_st.models import (
@@ -70,14 +70,14 @@ class ShipsEndpoint:
 
     def refine_materials(
         self, ship_symbol: str, produce: str
-    ) -> dict[str, Any]:
+    ) -> JSONDict:
         """
         Refine raw materials on a ship.
         """
         url = f"/my/ships/{ship_symbol}/refine"
         payload = {"produce": produce}
         data = self._transport.request_json("POST", url, json=payload)
-        return data
+        return cast(JSONDict, data)
 
     def create_survey(self, ship_symbol: str) -> list[Survey]:
         """
@@ -143,7 +143,7 @@ class ShipsEndpoint:
 
     def purchase_ship(
         self, ship_type: str, waypoint_symbol: str
-    ) -> tuple[Agent, Ship, MarketTransaction]:
+    ) -> tuple[Agent, Ship, ShipyardTransaction]:
         """
         Purchase a ship of the specified type at a waypoint.
         """
