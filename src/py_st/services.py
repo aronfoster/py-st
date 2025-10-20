@@ -253,7 +253,7 @@ def list_waypoints(
 
 
 def list_waypoints_all(
-    token: str, system_symbol: str, traits: list[str] | None
+    token: str, system_symbol: str
 ) -> list[Waypoint]:
     """
     Lists waypoints in a system, optionally filtered by traits.
@@ -307,13 +307,17 @@ def sell_cargo(
     return client.ships.sell_cargo(ship_symbol, trade_symbol, units)
 
 
-def purchase_ship(token: str, ship_type: str, waypoint_symbol: str) -> Ship:
+def purchase_ship(
+    token: str, ship_type: str, waypoint_symbol: str
+) -> tuple[Agent, Ship, MarketTransaction]:
     """
     Purchases a ship of the specified type at a waypoint.
     """
     client = SpaceTradersClient(token=token)
-    ship = client.ships.purchase_ship(ship_type, waypoint_symbol)
-    return ship
+    agent, ship, transaction = client.ships.purchase_ship(
+        ship_type, waypoint_symbol
+    )
+    return agent, ship, transaction
 
 
 def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
