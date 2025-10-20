@@ -17,8 +17,10 @@ from .models import (
     ShipNav,
     ShipNavFlightMode,
     Shipyard,
+    ShipyardTransaction,
     Survey,
     TradeGood,
+    TradeSymbol,
     Waypoint,
 )
 
@@ -35,7 +37,7 @@ class SystemGoods:
     by_good: dict[str, dict[str, list[str]]] = field(default_factory=dict)
 
 
-def _sym(obj: Any) -> str:
+def _sym(obj: TradeGood | TradeSymbol | str) -> str:
     """
     Return a plain string trade symbol from either:
     - a TradeGood (g.symbol may be Enum or str)
@@ -309,7 +311,7 @@ def sell_cargo(
 
 def purchase_ship(
     token: str, ship_type: str, waypoint_symbol: str
-) -> tuple[Agent, Ship, MarketTransaction]:
+) -> tuple[Agent, Ship, ShipyardTransaction]:
     """
     Purchases a ship of the specified type at a waypoint.
     """
