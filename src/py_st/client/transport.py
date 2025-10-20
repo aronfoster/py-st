@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -24,7 +24,7 @@ class APIError(Exception):
         message: str,
         *,
         status: int | None = None,
-        payload: dict | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.status = status
@@ -81,13 +81,13 @@ class HttpTransport:
                 collected_items.extend(data)
             else:
                 if not paginate:
-                    return data
+                    return cast(JSONDict, data)
                 collected_items.append(
-                    data if isinstance(data, dict) else {"value": data}
+                    cast(JSONDict, data) if isinstance(data, dict) else {"value": data}
                 )
 
             if not paginate:
-                return collected_items if isinstance(data, list) else data
+                return collected_items if isinstance(data, list) else cast(JSONDict, data)
 
             total_items = int(meta.get("total", len(collected_items)))
             limit_used = int(
