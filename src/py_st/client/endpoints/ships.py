@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import cast
 
 from pydantic import BaseModel, Field
+
 from py_st.client.transport import HttpTransport, JSONDict
 from py_st.models import (
     Agent,
@@ -52,7 +53,9 @@ class ShipsEndpoint:
         """
         url = f"/my/ships/{ship_symbol}/navigate"
         payload = {"waypointSymbol": waypoint_symbol}
-        data = cast(JSONDict, self._transport.request_json("POST", url, json=payload))
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
         return ShipNav.model_validate(data["nav"])
 
     def orbit_ship(self, ship_symbol: str) -> ShipNav:
@@ -80,21 +83,24 @@ class ShipsEndpoint:
         if survey:
             url = f"/my/ships/{ship_symbol}/extract/survey"
             payload = survey.model_dump(mode="json")
-            data = cast(JSONDict, self._transport.request_json("POST", url, json=payload))
+            data = cast(
+                JSONDict,
+                self._transport.request_json("POST", url, json=payload),
+            )
         else:
             url = f"/my/ships/{ship_symbol}/extract"
             data = cast(JSONDict, self._transport.request_json("POST", url))
         return Extraction.model_validate(data["extraction"])
 
-    def refine_materials(
-        self, ship_symbol: str, produce: str
-    ) -> RefineResult:
+    def refine_materials(self, ship_symbol: str, produce: str) -> RefineResult:
         """
         Refine raw materials on a ship.
         """
         url = f"/my/ships/{ship_symbol}/refine"
         payload = {"produce": produce}
-        data = cast(JSONDict, self._transport.request_json("POST", url, json=payload))
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
         return RefineResult.model_validate(data)
 
     def create_survey(self, ship_symbol: str) -> list[Survey]:
@@ -115,7 +121,9 @@ class ShipsEndpoint:
         payload = {}
         if units:
             payload["units"] = units
-        data = cast(JSONDict, self._transport.request_json("POST", url, json=payload))
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
         return (
             Agent.model_validate(data["agent"]),
             ShipFuel.model_validate(data["fuel"]),
@@ -130,7 +138,9 @@ class ShipsEndpoint:
         """
         url = f"/my/ships/{ship_symbol}/nav"
         payload = {"flightMode": flight_mode.value}
-        data = cast(JSONDict, self._transport.request_json("PATCH", url, json=payload))
+        data = cast(
+            JSONDict, self._transport.request_json("PATCH", url, json=payload)
+        )
         return ShipNav.model_validate(data["nav"])
 
     def jettison_cargo(
@@ -141,7 +151,9 @@ class ShipsEndpoint:
         """
         url = f"/my/ships/{ship_symbol}/jettison"
         payload = {"symbol": trade_symbol, "units": units}
-        data = cast(JSONDict, self._transport.request_json("POST", url, json=payload))
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
         return ShipCargo.model_validate(data["cargo"])
 
     def sell_cargo(
@@ -152,7 +164,9 @@ class ShipsEndpoint:
         """
         url = f"/my/ships/{ship_symbol}/sell"
         payload = {"symbol": trade_symbol, "units": units}
-        data = cast(JSONDict, self._transport.request_json("POST", url, json=payload))
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
         return (
             Agent.model_validate(data["agent"]),
             ShipCargo.model_validate(data["cargo"]),
@@ -167,7 +181,9 @@ class ShipsEndpoint:
         """
         url = "/my/ships"
         payload = {"shipType": ship_type, "waypointSymbol": waypoint_symbol}
-        data = cast(JSONDict, self._transport.request_json("POST", url, json=payload))
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
         return (
             Agent.model_validate(data["agent"]),
             Ship.model_validate(data["ship"]),

@@ -83,11 +83,17 @@ class HttpTransport:
                 if not paginate:
                     return cast(JSONDict, data)
                 collected_items.append(
-                    cast(JSONDict, data) if isinstance(data, dict) else {"value": data}
+                    cast(JSONDict, data)
+                    if isinstance(data, dict)
+                    else {"value": data}
                 )
 
             if not paginate:
-                return collected_items if isinstance(data, list) else cast(JSONDict, data)
+                return (
+                    collected_items
+                    if isinstance(data, list)
+                    else cast(JSONDict, data)
+                )
 
             total_items = int(meta.get("total", len(collected_items)))
             limit_used = int(
@@ -154,4 +160,4 @@ class HttpTransport:
                     message, status=response.status_code, payload=payload
                 )
 
-            return response.json()
+            cast(JSONDict, response.json())

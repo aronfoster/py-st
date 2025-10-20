@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import cast
+
 from py_st.client.transport import HttpTransport, JSONDict
 from py_st.models import Agent, Contract, ShipCargo
 
@@ -51,7 +52,9 @@ class ContractsEndpoint:
             "tradeSymbol": trade_symbol,
             "units": units,
         }
-        data = cast(JSONDict, self._transport.request_json("POST", url, json=payload))
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
         return (
             Contract.model_validate(data["contract"]),
             ShipCargo.model_validate(data["cargo"]),

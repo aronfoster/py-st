@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import cast
 
 from .client import APIError, SpaceTradersClient
 from .client.endpoints.ships import RefineResult
@@ -256,13 +256,13 @@ def list_waypoints(
 
 
 def list_waypoints_all(
-    token: str, system_symbol: str, traits: list[str] | None
+    token: str, system_symbol: str, traits: list[str] | None = None
 ) -> list[Waypoint]:
     """
     Lists waypoints in a system, optionally filtered by traits.
     """
     client = SpaceTradersClient(token=token)
-    waypoints = client.systems.list_waypoints_all(system_symbol)
+    waypoints = client.systems.list_waypoints_all(system_symbol, traits=traits)
     return waypoints
 
 
@@ -277,7 +277,9 @@ def get_shipyard(
     return shipyard
 
 
-def refine_materials(token: str, ship_symbol: str, produce: str) -> RefineResult:
+def refine_materials(
+    token: str, ship_symbol: str, produce: str
+) -> RefineResult:
     """
     Refines materials on a ship and prints the result.
     """

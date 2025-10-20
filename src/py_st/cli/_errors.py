@@ -4,7 +4,7 @@ from __future__ import annotations
 import functools
 import json
 from collections.abc import Callable
-from typing import ParamSpec, TypeVar
+from typing import ParamSpec, TypeVar, cast
 
 import typer
 
@@ -36,4 +36,4 @@ def handle_errors(original_function: Callable[P, R]) -> Callable[P, R]:
                     typer.echo(str(payload))
             raise typer.Exit(code=1) from None
 
-    return wrapper
+    return cast(Callable[P, R], wrapper)
