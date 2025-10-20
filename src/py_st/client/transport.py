@@ -160,4 +160,4 @@ class HttpTransport:
                     message, status=response.status_code, payload=payload
                 )
 
-            cast(JSONDict, response.json())
+            return cast(JSONDict, response.json())

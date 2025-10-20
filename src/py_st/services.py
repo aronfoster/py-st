@@ -4,8 +4,9 @@ import json
 from dataclasses import dataclass, field
 from typing import cast
 
+from py_st._manual_models import RefineResult
+
 from .client import APIError, SpaceTradersClient
-from .client.endpoints.ships import RefineResult
 from .models import (
     Agent,
     Contract,

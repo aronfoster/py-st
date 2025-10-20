@@ -4,6 +4,10 @@ from pathlib import Path
 GENERATED_DIR = Path("src/py_st/_generated/models")
 OUT = Path("src/py_st/models.py")
 
+HEADER = """# Auto-generated re-exports from _generated.models/*.py
+# Order is deterministic; each symbol tries NamedClass then falls back to Model
+"""
+
 
 def main() -> None:
     modules = []
@@ -15,15 +19,19 @@ def main() -> None:
             continue
         modules.append(name)
 
-    lines = []
-    lines.append("# Auto-generated re-exports from _generated.models/*.py\n")
-    lines.append("__all__ = [\n")
+    lines = [HEADER, "__all__ = [\n"]
     for m in modules:
         lines.append(f'    "{m}",\n')
     lines.append("]\n\n")
+
     for m in modules:
-        # Import the class directly, now that it has the correct name
-        lines.append(f"from py_st._generated.models.{m} import {m}\n")
+        lines.append(
+            f"try:\n"
+            f"    from py_st._generated.models.{m} import {m} as {m}\n"
+            f"except ImportError:\n"
+            f"    from py_st._generated.models.{m} import Model as {m}\n"
+        )
+
     OUT.write_text("".join(lines), encoding="utf-8")
 
 

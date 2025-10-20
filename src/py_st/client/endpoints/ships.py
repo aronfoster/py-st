@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from typing import cast
 
-from pydantic import BaseModel, Field
-
+from py_st._manual_models import RefineResult
 from py_st.client.transport import HttpTransport, JSONDict
 from py_st.models import (
     Agent,
-    Cooldown,
     Extraction,
     MarketTransaction,
     Ship,
@@ -18,22 +16,6 @@ from py_st.models import (
     ShipyardTransaction,
     Survey,
 )
-
-
-class RefineItem(BaseModel):
-    """A good that was produced or consumed in a refining process."""
-
-    tradeSymbol: str = Field(..., description="Symbol of the good.")
-    units: int = Field(..., description="Amount of units of the good.")
-
-
-class RefineResult(BaseModel):
-    """The result of a successful refining process."""
-
-    cargo: ShipCargo
-    cooldown: Cooldown
-    produced: list[RefineItem]
-    consumed: list[RefineItem]
 
 
 class ShipsEndpoint:

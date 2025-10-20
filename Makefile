@@ -46,7 +46,6 @@ regen-spec: fetch-spec ## Regenerate Pydantic models from the spec
 	 --input src/py_st/_generated/reference/models \
 	 --input-file-type jsonschema \
 	 --target-python-version 3.12 \
-	 --use-title-as-name \
 	 --output-model-type pydantic_v2.BaseModel \
 	 --output src/py_st/_generated/models
 	$(MAKE) build-model-aliases
