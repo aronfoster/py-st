@@ -40,5 +40,14 @@
       "$ref": "./Chart.json"
     }
   },
-  "required": ["symbol", "type", "systemSymbol", "x", "y", "orbitals", "traits"]
+  "required": [
+    "symbol",
+    "type",
+    "systemSymbol",
+    "x",
+    "y",
+    "orbitals",
+    "traits"
+  ],
+  "title": "ScannedWaypoint"
 }

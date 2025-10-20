@@ -14,5 +14,6 @@
       "format": "date-time",
       "description": "The time the chart for this waypoint was submitted."
     }
-  }
+  },
+  "title": "Chart"
 }

@@ -14,5 +14,10 @@
       "description": "The description of the good."
     }
   },
-  "required": ["symbol", "name", "description"]
+  "required": [
+    "symbol",
+    "name",
+    "description"
+  ],
+  "title": "TradeGood"
 }

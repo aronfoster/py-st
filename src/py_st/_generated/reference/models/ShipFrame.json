@@ -71,5 +71,6 @@
     "fuelCapacity",
     "requirements",
     "quality"
-  ]
+  ],
+  "title": "ShipFrame"
 }

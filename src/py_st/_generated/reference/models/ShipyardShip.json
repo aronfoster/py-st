@@ -51,7 +51,10 @@
           "type": "integer"
         }
       },
-      "required": ["required", "capacity"]
+      "required": [
+        "required",
+        "capacity"
+      ]
     }
   },
   "required": [
@@ -67,5 +70,6 @@
     "modules",
     "mounts",
     "crew"
-  ]
+  ],
+  "title": "ShipyardShip"
 }

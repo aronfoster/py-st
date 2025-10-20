@@ -36,7 +36,11 @@
     },
     "component": {
       "type": "string",
-      "enum": ["FRAME", "REACTOR", "ENGINE"]
+      "enum": [
+        "FRAME",
+        "REACTOR",
+        "ENGINE"
+      ]
     },
     "name": {
       "type": "string",
@@ -47,5 +51,11 @@
       "description": "A description of the event."
     }
   },
-  "required": ["symbol", "component", "name", "description"]
+  "required": [
+    "symbol",
+    "component",
+    "name",
+    "description"
+  ],
+  "title": "ShipConditionEvent"
 }

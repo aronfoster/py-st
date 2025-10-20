@@ -15,7 +15,10 @@
     "type": {
       "type": "string",
       "description": "The type of transaction.",
-      "enum": ["PURCHASE", "SELL"]
+      "enum": [
+        "PURCHASE",
+        "SELL"
+      ]
     },
     "units": {
       "type": "integer",
@@ -48,5 +51,6 @@
     "totalPrice",
     "timestamp"
   ],
-  "description": "Result of a transaction with a market."
+  "description": "Result of a transaction with a market.",
+  "title": "MarketTransaction"
 }

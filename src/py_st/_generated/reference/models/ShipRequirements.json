@@ -14,5 +14,6 @@
       "type": "integer",
       "description": "The number of module slots required for installation."
     }
-  }
+  },
+  "title": "ShipRequirements"
 }

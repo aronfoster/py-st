@@ -16,5 +16,6 @@
     "GRAVITY_WELL",
     "ARTIFICIAL_GRAVITY_WELL",
     "FUEL_STATION"
-  ]
+  ],
+  "title": "WaypointType"
 }

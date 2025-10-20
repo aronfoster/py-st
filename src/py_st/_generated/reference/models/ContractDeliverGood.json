@@ -21,5 +21,11 @@
       "description": "The number of units fulfilled on this contract."
     }
   },
-  "required": ["tradeSymbol", "destinationSymbol", "unitsRequired", "unitsFulfilled"]
+  "required": [
+    "tradeSymbol",
+    "destinationSymbol",
+    "unitsRequired",
+    "unitsFulfilled"
+  ],
+  "title": "ContractDeliverGood"
 }

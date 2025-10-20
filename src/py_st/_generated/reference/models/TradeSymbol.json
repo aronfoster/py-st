@@ -147,5 +147,6 @@
     "SHIP_SURVEYOR",
     "SHIP_BULK_FREIGHTER"
   ],
-  "description": "The good's symbol."
+  "description": "The good's symbol.",
+  "title": "TradeSymbol"
 }

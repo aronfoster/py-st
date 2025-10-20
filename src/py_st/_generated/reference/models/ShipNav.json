@@ -18,5 +18,12 @@
       "$ref": "./ShipNavFlightMode.json"
     }
   },
-  "required": ["systemSymbol", "waypointSymbol", "route", "status", "flightMode"]
+  "required": [
+    "systemSymbol",
+    "waypointSymbol",
+    "route",
+    "status",
+    "flightMode"
+  ],
+  "title": "ShipNav"
 }

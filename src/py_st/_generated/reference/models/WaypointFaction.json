@@ -6,5 +6,8 @@
       "$ref": "./FactionSymbol.json"
     }
   },
-  "required": ["symbol"]
+  "required": [
+    "symbol"
+  ],
+  "title": "WaypointFaction"
 }

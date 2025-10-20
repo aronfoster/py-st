@@ -24,6 +24,13 @@
       "description": "The timestamp of the transaction."
     }
   },
-  "required": ["waypointSymbol", "shipSymbol", "tradeSymbol", "totalPrice", "timestamp"],
-  "description": "Result of a transaction for a ship modification, such as installing a mount or a module."
+  "required": [
+    "waypointSymbol",
+    "shipSymbol",
+    "tradeSymbol",
+    "totalPrice",
+    "timestamp"
+  ],
+  "description": "Result of a transaction for a ship modification, such as installing a mount or a module.",
+  "title": "ShipModificationTransaction"
 }

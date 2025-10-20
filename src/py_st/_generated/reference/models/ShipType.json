@@ -15,5 +15,6 @@
     "SHIP_REFINING_FREIGHTER",
     "SHIP_SURVEYOR",
     "SHIP_BULK_FREIGHTER"
-  ]
+  ],
+  "title": "ShipType"
 }

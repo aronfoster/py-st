@@ -27,8 +27,15 @@
           "description": "The time at which the fuel was consumed."
         }
       },
-      "required": ["amount", "timestamp"]
+      "required": [
+        "amount",
+        "timestamp"
+      ]
     }
   },
-  "required": ["current", "capacity"]
+  "required": [
+    "current",
+    "capacity"
+  ],
+  "title": "ShipFuel"
 }

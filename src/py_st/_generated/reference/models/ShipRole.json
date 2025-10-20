@@ -16,5 +16,6 @@
     "SATELLITE",
     "EXPLORER",
     "REFINERY"
-  ]
+  ],
+  "title": "ShipRole"
 }

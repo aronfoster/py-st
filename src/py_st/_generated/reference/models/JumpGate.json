@@ -14,5 +14,9 @@
       }
     }
   },
-  "required": ["symbol", "connections"]
+  "required": [
+    "symbol",
+    "connections"
+  ],
+  "title": "JumpGate"
 }

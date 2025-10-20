@@ -18,5 +18,9 @@
       }
     }
   },
-  "required": ["deadline", "payment"]
+  "required": [
+    "deadline",
+    "payment"
+  ],
+  "title": "ContractTerms"
 }

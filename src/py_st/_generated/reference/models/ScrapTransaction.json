@@ -19,6 +19,12 @@
       "description": "The timestamp of the transaction."
     }
   },
-  "required": ["waypointSymbol", "shipSymbol", "totalPrice", "timestamp"],
-  "description": "Result of a scrap transaction."
+  "required": [
+    "waypointSymbol",
+    "shipSymbol",
+    "totalPrice",
+    "timestamp"
+  ],
+  "description": "Result of a scrap transaction.",
+  "title": "ScrapTransaction"
 }
