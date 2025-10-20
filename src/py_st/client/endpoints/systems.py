@@ -23,7 +23,7 @@ class SystemsEndpoint:
         data = self._transport.request_json("GET", url, params=params)
         return [Waypoint.model_validate(w) for w in data]
 
-    def list_waypoints_all(self, system_symbol: str) -> list[dict[str, Any]]:
+    def list_waypoints_all(self, system_symbol: str) -> list[Waypoint]:
         """
         Fetch ALL waypoints in a system via pagination.
         """
