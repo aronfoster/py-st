@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from py_st.client.transport import HttpTransport
 from py_st.models import Market, Shipyard, Waypoint
 
