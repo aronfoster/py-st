@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import cast
 
+from pydantic import BaseModel, Field
 from py_st.client.transport import HttpTransport, JSONDict
 from py_st.models import (
     Agent,
+    Cooldown,
     Extraction,
     MarketTransaction,
     Ship,
@@ -15,6 +17,22 @@ from py_st.models import (
     ShipyardTransaction,
     Survey,
 )
+
+
+class RefineItem(BaseModel):
+    """A good that was produced or consumed in a refining process."""
+
+    tradeSymbol: str = Field(..., description="Symbol of the good.")
+    units: int = Field(..., description="Amount of units of the good.")
+
+
+class RefineResult(BaseModel):
+    """The result of a successful refining process."""
+
+    cargo: ShipCargo
+    cooldown: Cooldown
+    produced: list[RefineItem]
+    consumed: list[RefineItem]
 
 
 class ShipsEndpoint:
@@ -70,14 +88,14 @@ class ShipsEndpoint:
 
     def refine_materials(
         self, ship_symbol: str, produce: str
-    ) -> JSONDict:
+    ) -> RefineResult:
         """
         Refine raw materials on a ship.
         """
         url = f"/my/ships/{ship_symbol}/refine"
         payload = {"produce": produce}
-        data = self._transport.request_json("POST", url, json=payload)
-        return cast(JSONDict, data)
+        data = cast(JSONDict, self._transport.request_json("POST", url, json=payload))
+        return RefineResult.model_validate(data)
 
     def create_survey(self, ship_symbol: str) -> list[Survey]:
         """
