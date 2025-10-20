@@ -2,8 +2,10 @@
 
 Here are the outstanding tasks for `py-st`.
 
-- Delete get_json-style helpers; rewrite API methods to return models/TypedDicts. At the API client, not later in services/cli, deserialize the json.
-- Generated classes like WaypointTraitSymbol are all calling themselves Model so I can't import them and say, e.g. WaypointTraitSymbol.MARKETPLACE. Fix the generation somehow.
+- Investigate openapi-python-client or rolling my own method to turn SpaceTraders.json spec automatically into client prototypes.
+- Implement a simple file-based cache for ships and waypoints to speed up gameplay and reduce manual data entry.
+  - Connect the game data cache into commands so I don't have to type ship and system names each time (e.g., allow --ship 1 or --wp 3).
+  - Might have a dirty flag and last-updated-time so I can know what needs to be re-fetched
 
 - Improve web requests.
   - We have _make_request, which handles 409s.
@@ -15,15 +17,12 @@ Here are the outstanding tasks for `py-st`.
     - Whole page of response error codes at https://spacetraders.io/api-guide/response-errors
     - I really just want to see the whole response when it fails
   - While waiting for something to cool down, can do other work. Might eventually implement a queue and threading
-- Cache game data.
-  - Might have a dirty flag and last-updated-time so I can know what needs to be re-fetched
-  - Minor implementation could have in-mem cache referenced with cli flags like --ship 1 or --wp 3
+
 - Connect game data cache into commands so I don't have to type ship and system names each time
 - Develop a script to run a basic ship automation loop.
 
 - I'm unhappy with the hardcoded test factories. Can we find a way to create objects from the models to use in testing? Perhaps more info comes from the json. Maybe we just need to fetch and keep the json instead of discarding it after we create the model classes (done in the Makefile)
 - I'm unhappy with the unit testing level of detail. Don't think it will actually catch problems in refactoring.
-- Need to update the get_waypoints method to handle pagination. Maybe all methods need to handle pagination.
 
 ## GUI
 - Research and select a GUI framework (e.g., PySide6, Tkinter).
