@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from .client import APIError, SpaceTradersClient
+from .client.endpoints.ships import RefineResult
 from .models import (
     Agent,
     Contract,
@@ -255,7 +256,7 @@ def list_waypoints(
 
 
 def list_waypoints_all(
-    token: str, system_symbol: str
+    token: str, system_symbol: str, traits: list[str] | None
 ) -> list[Waypoint]:
     """
     Lists waypoints in a system, optionally filtered by traits.
@@ -276,7 +277,7 @@ def get_shipyard(
     return shipyard
 
 
-def refine_materials(token: str, ship_symbol: str, produce: str) -> None:
+def refine_materials(token: str, ship_symbol: str, produce: str) -> RefineResult | None:
     """
     Refines materials on a ship and prints the result.
     """
@@ -284,11 +285,11 @@ def refine_materials(token: str, ship_symbol: str, produce: str) -> None:
         client = SpaceTradersClient(token=token)
         result = client.ships.refine_materials(ship_symbol, produce)
         print("🔬 Refining complete!")
-        # The response contains multiple nested models.
-        # For simplicity, we'll print the raw dictionary.
-        print(json.dumps(result, indent=2))
+        print(json.dumps(result.model_dump(mode="json"), indent=2))
+        return result
     except APIError as e:
         print(f"Refining failed: {e}")
+        return None
 
 
 def get_market(token: str, system_symbol: str, waypoint_symbol: str) -> Market:
