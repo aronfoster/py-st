@@ -10,8 +10,7 @@ def main() -> None:
     for p in sorted(GENERATED_DIR.glob("*.py")):
         if p.name == "__init__.py":
             continue
-        name = p.stem  # e.g., Agent, ContractTerms
-        # defensive: skip weird names
+        name = p.stem
         if not name.isidentifier():
             continue
         modules.append(name)
@@ -23,8 +22,8 @@ def main() -> None:
         lines.append(f'    "{m}",\n')
     lines.append("]\n\n")
     for m in modules:
-        # Each generated file defines `Model`; re-export it as the class name
-        lines.append(f"from py_st._generated.models.{m} import Model as {m}\n")
+        # Import the class directly, now that it has the correct name
+        lines.append(f"from py_st._generated.models.{m} import {m}\n")
     OUT.write_text("".join(lines), encoding="utf-8")
 
 
