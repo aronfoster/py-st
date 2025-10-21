@@ -46,6 +46,7 @@ def list_waypoints(
 @handle_errors
 def list_waypoints_all(
     system_symbol: str = SYSTEM_SYMBOL_ARG,
+    traits: list[str] = TRAITS_OPTION,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
@@ -57,7 +58,7 @@ def list_waypoints_all(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    waypoints = services.list_waypoints_all(t, system_symbol)
+    waypoints = services.list_waypoints_all(t, system_symbol, traits=traits)
     waypoints_list = [w.model_dump(mode="json") for w in waypoints]
     print(json.dumps(waypoints_list, indent=2))
 

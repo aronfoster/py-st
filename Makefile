@@ -1,6 +1,6 @@
 ## Makefile for py-st project
 
-.PHONY: all lint type test ci fetch-spec regen-spec clean-spec build-model-aliases help
+.PHONY: all lint type test ci fetch-spec regen-spec clean-spec build-model-aliases help prepare-tools
 .DEFAULT_GOAL := help
 
 # ==============================================================================
@@ -32,24 +32,35 @@ ci: fmt check type test ## Run all checks for continuous integration
 # API Spec & Model Generation
 # ==============================================================================
 
-fetch-spec: ## Fetch the latest SpaceTraders API spec
+# Ensure our helper scripts are executable (fresh clone safety)
+prepare-tools:
+	@for f in tools/inject_titles.py tools/gen_model_init.py; do \
+		if [ -f "$$f" ] && [ ! -x "$$f" ]; then chmod +x "$$f"; fi; \
+	done
+
+fetch-spec: ## Fetch and store the latest SpaceTraders API spec
 	rm -rf tmp/api-docs
 	git clone https://github.com/SpaceTradersAPI/api-docs.git tmp/api-docs
-	mkdir -p src/py_st/_generated/reference
-	cp tmp/api-docs/reference/SpaceTraders.json src/py_st/_generated/reference/SpaceTraders.json
+	mkdir -p src/py_st/_generated/reference/models
+	cp tmp/api-docs/reference/SpaceTraders.json src/py_st/_generated/reference/
+	cp tmp/api-docs/models/*.json src/py_st/_generated/reference/models/
 
-regen-spec: fetch-spec ## Regenerate Pydantic models from the spec
+regen-spec: prepare-tools fetch-spec
 	rm -rf src/py_st/_generated/models
 	mkdir -p src/py_st/_generated/models
+	./tools/inject_titles.py src/py_st/_generated/reference/models
 	datamodel-codegen \
-	 --input tmp/api-docs/models \
-	 --input-file-type jsonschema \
-	 --target-python-version 3.12 \
-	 --output-model-type pydantic_v2.BaseModel \
-	 --output src/py_st/_generated/models
-	$(MAKE) build-model-aliases
+	  --input src/py_st/_generated/reference/models \
+	  --input-file-type jsonschema \
+	  --target-python-version 3.12 \
+	  --output-model-type pydantic_v2.BaseModel \
+	  --use-title-as-name \
+	  --reuse-model \
+		--use-exact-imports \
+	  --output src/py_st/_generated/models
+	./tools/gen_model_init.py
 
-clean-spec: ## Clean up the fetched spec files
+clean-spec: ## Clean up the temporary spec files
 	rm -rf tmp/api-docs
 
 build-model-aliases: tools/gen_model_aliases.py ## Generate model aliases

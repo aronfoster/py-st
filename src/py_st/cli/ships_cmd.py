@@ -5,8 +5,8 @@ import logging
 
 import typer
 
+from py_st._generated.models import ShipNavFlightMode
 from py_st.cli._errors import handle_errors
-from py_st.models import ShipNavFlightMode
 
 from .. import services
 from .options import (

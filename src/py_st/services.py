@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import cast
 
-from .client import APIError, SpaceTradersClient
-from .models import (
+from py_st._generated.models import (
     Agent,
     Contract,
     Extraction,
@@ -17,10 +16,15 @@ from .models import (
     ShipNav,
     ShipNavFlightMode,
     Shipyard,
+    ShipyardTransaction,
     Survey,
     TradeGood,
+    TradeSymbol,
     Waypoint,
 )
+from py_st._manual_models import RefineResult
+
+from .client import APIError, SpaceTradersClient
 
 
 @dataclass
@@ -35,7 +39,7 @@ class SystemGoods:
     by_good: dict[str, dict[str, list[str]]] = field(default_factory=dict)
 
 
-def _sym(obj: Any) -> str:
+def _sym(obj: TradeGood | TradeSymbol | str) -> str:
     """
     Return a plain string trade symbol from either:
     - a TradeGood (g.symbol may be Enum or str)
@@ -253,13 +257,13 @@ def list_waypoints(
 
 
 def list_waypoints_all(
-    token: str, system_symbol: str, traits: list[str] | None
+    token: str, system_symbol: str, traits: list[str] | None = None
 ) -> list[Waypoint]:
     """
     Lists waypoints in a system, optionally filtered by traits.
     """
     client = SpaceTradersClient(token=token)
-    waypoints = client.systems.list_waypoints_all(system_symbol)
+    waypoints = client.systems.list_waypoints_all(system_symbol, traits=traits)
     return waypoints
 
 
@@ -274,19 +278,14 @@ def get_shipyard(
     return shipyard
 
 
-def refine_materials(token: str, ship_symbol: str, produce: str) -> None:
+def refine_materials(
+    token: str, ship_symbol: str, produce: str
+) -> RefineResult:
     """
     Refines materials on a ship and prints the result.
     """
-    try:
-        client = SpaceTradersClient(token=token)
-        result = client.ships.refine_materials(ship_symbol, produce)
-        print("🔬 Refining complete!")
-        # The response contains multiple nested models.
-        # For simplicity, we'll print the raw dictionary.
-        print(json.dumps(result, indent=2))
-    except APIError as e:
-        print(f"Refining failed: {e}")
+    client = SpaceTradersClient(token=token)
+    return client.ships.refine_materials(ship_symbol, produce)
 
 
 def get_market(token: str, system_symbol: str, waypoint_symbol: str) -> Market:
@@ -307,13 +306,17 @@ def sell_cargo(
     return client.ships.sell_cargo(ship_symbol, trade_symbol, units)
 
 
-def purchase_ship(token: str, ship_type: str, waypoint_symbol: str) -> Ship:
+def purchase_ship(
+    token: str, ship_type: str, waypoint_symbol: str
+) -> tuple[Agent, Ship, ShipyardTransaction]:
     """
     Purchases a ship of the specified type at a waypoint.
     """
     client = SpaceTradersClient(token=token)
-    ship = client.ships.purchase_ship(ship_type, waypoint_symbol)
-    return ship
+    agent, ship, transaction = client.ships.purchase_ship(
+        ship_type, waypoint_symbol
+    )
+    return agent, ship, transaction
 
 
 def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
@@ -354,7 +357,6 @@ def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
         for g in by_waypoint[wp_sym].buys:
             by_good_buys.setdefault(_sym(g), []).append(wp_sym)
 
-    # determinism
     by_good: dict[str, dict[str, list[str]]] = {}
     for sym in sorted(set(by_good_sells) | set(by_good_buys)):
         by_good[sym] = {

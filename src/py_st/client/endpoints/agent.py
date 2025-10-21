@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from py_st._generated.models import Agent
 from py_st.client.transport import HttpTransport
-from py_st.models import Agent
 
 
 class AgentEndpoint:

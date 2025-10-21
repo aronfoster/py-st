@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
-
+from py_st._generated.models import Market, Shipyard, Waypoint
 from py_st.client.transport import HttpTransport
-from py_st.models import Market, Shipyard, Waypoint
 
 
 class SystemsEndpoint:
@@ -23,7 +21,9 @@ class SystemsEndpoint:
         data = self._transport.request_json("GET", url, params=params)
         return [Waypoint.model_validate(w) for w in data]
 
-    def list_waypoints_all(self, system_symbol: str) -> list[dict[str, Any]]:
+    def list_waypoints_all(
+        self, system_symbol: str, traits: list[str] | None = None
+    ) -> list[Waypoint]:
         """
         Fetch ALL waypoints in a system via pagination.
         """

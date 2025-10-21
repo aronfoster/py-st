@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from py_st.client.transport import HttpTransport
-from py_st.models import Agent, Contract, ShipCargo
+from typing import cast
+
+from py_st._generated.models import Agent, Contract, ShipCargo
+from py_st.client.transport import HttpTransport, JSONDict
 
 
 class ContractsEndpoint:
@@ -20,7 +22,7 @@ class ContractsEndpoint:
         Negotiates a new contract using the specified ship.
         """
         url = f"/my/ships/{ship_symbol}/negotiate/contract"
-        data = self._transport.request_json("POST", url)
+        data = cast(JSONDict, self._transport.request_json("POST", url))
         return Contract.model_validate(data["contract"])
 
     def accept_contract(self, contract_id: str) -> dict[str, Agent | Contract]:
@@ -28,7 +30,7 @@ class ContractsEndpoint:
         Accepts the contract with the given ID.
         """
         url = f"/my/contracts/{contract_id}/accept"
-        data = self._transport.request_json("POST", url)
+        data = cast(JSONDict, self._transport.request_json("POST", url))
         return {
             "agent": Agent.model_validate(data["agent"]),
             "contract": Contract.model_validate(data["contract"]),
@@ -50,7 +52,9 @@ class ContractsEndpoint:
             "tradeSymbol": trade_symbol,
             "units": units,
         }
-        data = self._transport.request_json("POST", url, json=payload)
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
         return (
             Contract.model_validate(data["contract"]),
             ShipCargo.model_validate(data["cargo"]),
@@ -61,7 +65,7 @@ class ContractsEndpoint:
         Fulfill a contract.
         """
         url = f"/my/contracts/{contract_id}/fulfill"
-        data = self._transport.request_json("POST", url)
+        data = cast(JSONDict, self._transport.request_json("POST", url))
         return (
             Agent.model_validate(data["agent"]),
             Contract.model_validate(data["contract"]),
