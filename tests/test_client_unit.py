@@ -1,7 +1,7 @@
 import httpx
 
+from py_st._generated.models import Agent, Contract, Ship, Waypoint
 from py_st.client import SpaceTradersClient
-from py_st.models import Agent, Contract, Ship, Waypoint
 from tests.factories import (
     AgentFactory,
     ContractFactory,

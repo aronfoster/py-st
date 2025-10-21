@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import cast
 
+from py_st._generated.models import Agent, Contract, ShipCargo
 from py_st.client.transport import HttpTransport, JSONDict
-from py_st.models import Agent, Contract, ShipCargo
 
 
 class ContractsEndpoint:

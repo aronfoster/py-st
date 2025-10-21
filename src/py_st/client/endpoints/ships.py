@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from py_st._manual_models import RefineResult
-from py_st.client.transport import HttpTransport, JSONDict
-from py_st.models import (
+from py_st._generated.models import (
     Agent,
     Extraction,
     MarketTransaction,
@@ -16,6 +14,8 @@ from py_st.models import (
     ShipyardTransaction,
     Survey,
 )
+from py_st._manual_models import RefineResult
+from py_st.client.transport import HttpTransport, JSONDict
 
 
 class ShipsEndpoint:

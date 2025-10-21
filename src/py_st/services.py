@@ -4,10 +4,7 @@ import json
 from dataclasses import dataclass, field
 from typing import cast
 
-from py_st._manual_models import RefineResult
-
-from .client import APIError, SpaceTradersClient
-from .models import (
+from py_st._generated.models import (
     Agent,
     Contract,
     Extraction,
@@ -25,6 +22,9 @@ from .models import (
     TradeSymbol,
     Waypoint,
 )
+from py_st._manual_models import RefineResult
+
+from .client import APIError, SpaceTradersClient
 
 
 @dataclass
@@ -357,7 +357,6 @@ def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
         for g in by_waypoint[wp_sym].buys:
             by_good_buys.setdefault(_sym(g), []).append(wp_sym)
 
-    # determinism
     by_good: dict[str, dict[str, list[str]]] = {}
     for sym in sorted(set(by_good_sells) | set(by_good_buys)):
         by_good[sym] = {

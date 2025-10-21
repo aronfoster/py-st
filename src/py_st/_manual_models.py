@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from py_st.models import Cooldown, ShipCargo
+from py_st._generated.models import Cooldown, ShipCargo
 
 
 class RefineItem(BaseModel):

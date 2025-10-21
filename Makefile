@@ -34,7 +34,7 @@ ci: fmt check type test ## Run all checks for continuous integration
 
 # Ensure our helper scripts are executable (fresh clone safety)
 prepare-tools:
-	@for f in tools/inject_titles.py tools/gen_model_aliases.py; do \
+	@for f in tools/inject_titles.py tools/gen_model_init.py; do \
 		if [ -f "$$f" ] && [ ! -x "$$f" ]; then chmod +x "$$f"; fi; \
 	done
 
@@ -56,7 +56,9 @@ regen-spec: prepare-tools fetch-spec
 	  --output-model-type pydantic_v2.BaseModel \
 	  --use-title-as-name \
 	  --reuse-model \
+		--use-exact-imports \
 	  --output src/py_st/_generated/models
+	./tools/gen_model_init.py
 
 clean-spec: ## Clean up the temporary spec files
 	rm -rf tmp/api-docs
