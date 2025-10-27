@@ -1,10 +1,11 @@
-"""Utility functions for loading and saving data to a simple JSON-based file cache."""
+"""
+Utility functions for loading and saving data to a simple
+JSON-based file cache.
+"""
 
 import json
 import logging
-import os
 from pathlib import Path
-from typing import Dict
 
 # Define cache location inside the src directory
 CACHE_DIR = Path(__file__).parent.parent / ".cache"
@@ -15,7 +16,8 @@ def load_cache() -> dict:
     """Load cache data from the JSON file.
 
     Returns:
-        dict: The cached data, or an empty dictionary if the cache doesn't exist or fails to load.
+        dict: The cached data, or an empty dictionary if the
+            cache doesn't exist or fails to load.
     """
     if not CACHE_FILE.exists():
         return {}
