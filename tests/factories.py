@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -148,4 +149,37 @@ class WaypointFactory:
             "orbitals": [],
             "traits": [],
             "isUnderConstruction": False,
+        }
+
+
+class CacheFactory:
+    @staticmethod
+    def build_valid_cache_data() -> dict[str, Any]:
+        """Build valid cache data with ISO 8601 timestamp strings."""
+        return {
+            "agent": {
+                "last_updated": "2025-10-26T18:00:00Z",
+                "data": {"symbol": "AGENT-1", "credits": 1000},
+            },
+            "ships": {
+                "SHIP-A": {
+                    "last_updated": "2025-10-26T17:55:00Z",
+                    "data": {"symbol": "SHIP-A", "fuel": 100},
+                }
+            },
+        }
+
+    @staticmethod
+    def build_invalid_json_string() -> str:
+        """Return a string that is not valid JSON."""
+        return '{"key": "value", missing_quote}'
+
+    @staticmethod
+    def build_data_with_datetime() -> dict[str, Any]:
+        """Return a dictionary containing a datetime object."""
+        return {
+            "timestamp": datetime(
+                2025, 10, 26, 18, 10, 0, tzinfo=timezone.utc
+            ),
+            "value": "some data",
         }
