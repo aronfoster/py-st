@@ -1,5 +1,8 @@
 tmp/
 
+# Cache directory
+src/.cache/
+
 # Below this is default gitignore
 # Byte-compiled / optimized / DLL files
 __pycache__/
