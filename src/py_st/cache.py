@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # Define cache location inside the src directory
 CACHE_DIR = Path(__file__).parent.parent / ".cache"
@@ -27,7 +27,7 @@ def load_cache() -> dict[str, Any]:
 
     try:
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return cast(dict[str, Any], json.load(f))
     except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
         logging.warning("Failed to load cache: %s", e)
         return {}
