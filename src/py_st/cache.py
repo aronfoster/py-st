@@ -3,21 +3,24 @@ Utility functions for loading and saving data to a simple
 JSON-based file cache.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 # Define cache location inside the src directory
 CACHE_DIR = Path(__file__).parent.parent / ".cache"
 CACHE_FILE = CACHE_DIR / "data.json"
 
 
-def load_cache() -> dict:
+def load_cache() -> dict[str, Any]:
     """Load cache data from the JSON file.
 
     Returns:
-        dict: The cached data, or an empty dictionary if the
-            cache doesn't exist or fails to load.
+        dict[str, Any]: The cached data, or an empty dictionary
+            if the cache doesn't exist or fails to load.
     """
     if not CACHE_FILE.exists():
         return {}
@@ -30,7 +33,7 @@ def load_cache() -> dict:
         return {}
 
 
-def save_cache(data: dict) -> None:
+def save_cache(data: dict[str, Any]) -> None:
     """Save data to the JSON cache file.
 
     Args:
