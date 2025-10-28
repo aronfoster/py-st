@@ -49,7 +49,7 @@ class AgentFactory:
             startingFaction="COSMIC",
             shipCount=1,
         )
-        return agent.model_dump(mode="json")  # type: ignore[return-value]
+        return agent.model_dump(mode="json")
 
 
 class ContractFactory:
@@ -75,7 +75,7 @@ class ContractFactory:
             expiration=datetime.now(UTC) + timedelta(days=30),
             deadlineToAccept=None,
         )
-        return contract.model_dump(mode="json")  # type: ignore[return-value]
+        return contract.model_dump(mode="json")
 
 
 class ShipFactory:
@@ -212,7 +212,7 @@ class ShipFactory:
             cargo=cargo,
             fuel=fuel,
         )
-        return ship.model_dump(mode="json")  # type: ignore[return-value]
+        return ship.model_dump(mode="json")
 
 
 class WaypointFactory:
@@ -231,7 +231,7 @@ class WaypointFactory:
             modifiers=None,
             isUnderConstruction=False,
         )
-        return waypoint.model_dump(mode="json")  # type: ignore[return-value]
+        return waypoint.model_dump(mode="json")
 
 
 class CacheFactory:

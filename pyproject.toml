@@ -1,7 +1,7 @@
 [project]
 name = "py-st"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
   "httpx",
   "pydantic",
@@ -18,19 +18,18 @@ extend-exclude = "src/py_st/_generated"
 [tool.ruff]
 line-length = 79
 fix = true
-target-version = "py312"
+target-version = "py311"
 exclude = [
   "src/py_st/_generated",
 ]
 lint.select = ["E","F","I","UP","B","SIM"]
 lint.extend-select = ["W505"]
-lint.ignore = ["UP047"]  # Allow ParamSpec/TypeVar for mypy compatibility
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 strict = true
 
 [[tool.mypy.overrides]]
