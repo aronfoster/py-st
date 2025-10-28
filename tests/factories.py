@@ -30,6 +30,11 @@ from py_st._generated.models import (
     WaypointSymbol,
     WaypointType,
 )
+from py_st._generated.models.Contract import Type as ContractType
+from py_st._generated.models.ShipCrew import Rotation
+from py_st._generated.models.ShipEngine import Symbol as EngineSymbol
+from py_st._generated.models.ShipFrame import Symbol as FrameSymbol
+from py_st._generated.models.ShipReactor import Symbol as ReactorSymbol
 
 
 class AgentFactory:
@@ -62,13 +67,15 @@ class ContractFactory:
         contract = Contract(
             id="contract-1",
             factionSymbol="COSMIC",
-            type="PROCUREMENT",
+            type=ContractType.PROCUREMENT,
             terms=terms,
             accepted=False,
             fulfilled=False,
             expiration=datetime.now(timezone.utc) + timedelta(days=30),
         )
-        return cast(dict[str, Any], contract.model_dump(mode="json"))
+        return cast(
+            dict[str, Any], contract.model_dump(mode="json")
+        )
 
 
 class ShipFactory:
@@ -107,7 +114,6 @@ class ShipFactory:
 
         # Build route
         route = ShipNavRoute(
-            departure=departure_waypoint,
             destination=destination_waypoint,
             origin=origin_waypoint,
             departureTime=datetime.now(timezone.utc),
@@ -128,19 +134,25 @@ class ShipFactory:
             current=1,
             required=1,
             capacity=5,
-            rotation="STRICT",
+            rotation=Rotation.STRICT,
             morale=100,
             wages=0,
         )
 
         # Build requirements
-        frame_requirements = ShipRequirements(power=1, crew=1)
-        reactor_requirements = ShipRequirements(crew=1)
-        engine_requirements = ShipRequirements(power=2, crew=1)
+        frame_requirements = ShipRequirements(
+            power=1, crew=1, slots=None
+        )
+        reactor_requirements = ShipRequirements(
+            power=None, crew=1, slots=None
+        )
+        engine_requirements = ShipRequirements(
+            power=2, crew=1, slots=None
+        )
 
         # Build frame
         frame = ShipFrame(
-            symbol="FRAME_FRIGATE",
+            symbol=FrameSymbol.FRAME_FRIGATE,
             name="Frigate",
             description="A sturdy frigate.",
             condition=ShipComponentCondition(1.0),
@@ -154,7 +166,7 @@ class ShipFactory:
 
         # Build reactor
         reactor = ShipReactor(
-            symbol="REACTOR_FISSION_I",
+            symbol=ReactorSymbol.REACTOR_FISSION_I,
             name="Fission Reactor I",
             description="A basic fission reactor.",
             condition=ShipComponentCondition(1.0),
@@ -166,7 +178,7 @@ class ShipFactory:
 
         # Build engine
         engine = ShipEngine(
-            symbol="ENGINE_ION_DRIVE_I",
+            symbol=EngineSymbol.ENGINE_ION_DRIVE_I,
             name="Ion Drive I",
             description="A basic ion drive.",
             condition=ShipComponentCondition(1.0),
@@ -226,10 +238,14 @@ class WaypointFactory:
             x=0,
             y=0,
             orbitals=[],
+            orbits=None,
             traits=[],
+            modifiers=None,
             isUnderConstruction=False,
         )
-        return cast(dict[str, Any], waypoint.model_dump(mode="json"))
+        return cast(
+            dict[str, Any], waypoint.model_dump(mode="json")
+        )
 
 
 class CacheFactory:
