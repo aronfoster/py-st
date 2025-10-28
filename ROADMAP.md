@@ -21,7 +21,6 @@ Here are the outstanding tasks for `py-st`.
 - Connect game data cache into commands so I don't have to type ship and system names each time
 - Develop a script to run a basic ship automation loop.
 
-- I'm unhappy with the hardcoded test factories. Can we find a way to create objects from the models to use in testing? Perhaps more info comes from the json. Maybe we just need to fetch and keep the json instead of discarding it after we create the model classes (done in the Makefile)
 - I'm unhappy with the unit testing level of detail. Don't think it will actually catch problems in refactoring.
 
 - Update to latest version of Python
