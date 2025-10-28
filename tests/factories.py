@@ -73,9 +73,7 @@ class ContractFactory:
             fulfilled=False,
             expiration=datetime.now(timezone.utc) + timedelta(days=30),
         )
-        return cast(
-            dict[str, Any], contract.model_dump(mode="json")
-        )
+        return cast(dict[str, Any], contract.model_dump(mode="json"))
 
 
 class ShipFactory:
@@ -90,13 +88,6 @@ class ShipFactory:
         )
 
         # Build route waypoints
-        departure_waypoint = ShipNavRouteWaypoint(
-            symbol="X1-ABC-1",
-            type=WaypointType.PLANET,
-            systemSymbol=SystemSymbol("X1-ABC"),
-            x=0,
-            y=0,
-        )
         destination_waypoint = ShipNavRouteWaypoint(
             symbol="X1-ABC-2",
             type=WaypointType.PLANET,
@@ -140,15 +131,9 @@ class ShipFactory:
         )
 
         # Build requirements
-        frame_requirements = ShipRequirements(
-            power=1, crew=1, slots=None
-        )
-        reactor_requirements = ShipRequirements(
-            power=None, crew=1, slots=None
-        )
-        engine_requirements = ShipRequirements(
-            power=2, crew=1, slots=None
-        )
+        frame_requirements = ShipRequirements(power=1, crew=1, slots=None)
+        reactor_requirements = ShipRequirements(power=None, crew=1, slots=None)
+        engine_requirements = ShipRequirements(power=2, crew=1, slots=None)
 
         # Build frame
         frame = ShipFrame(
@@ -243,9 +228,7 @@ class WaypointFactory:
             modifiers=None,
             isUnderConstruction=False,
         )
-        return cast(
-            dict[str, Any], waypoint.model_dump(mode="json")
-        )
+        return cast(dict[str, Any], waypoint.model_dump(mode="json"))
 
 
 class CacheFactory:
