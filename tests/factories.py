@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 from py_st._generated.models import (
     Agent,
@@ -49,7 +49,7 @@ class AgentFactory:
             startingFaction="COSMIC",
             shipCount=1,
         )
-        return cast(dict[str, Any], agent.model_dump(mode="json"))
+        return agent.model_dump(mode="json")  # type: ignore[return-value]
 
 
 class ContractFactory:
@@ -75,7 +75,7 @@ class ContractFactory:
             expiration=datetime.now(UTC) + timedelta(days=30),
             deadlineToAccept=None,
         )
-        return cast(dict[str, Any], contract.model_dump(mode="json"))
+        return contract.model_dump(mode="json")  # type: ignore[return-value]
 
 
 class ShipFactory:
@@ -212,7 +212,7 @@ class ShipFactory:
             cargo=cargo,
             fuel=fuel,
         )
-        return cast(dict[str, Any], ship.model_dump(mode="json"))
+        return ship.model_dump(mode="json")  # type: ignore[return-value]
 
 
 class WaypointFactory:
@@ -231,7 +231,7 @@ class WaypointFactory:
             modifiers=None,
             isUnderConstruction=False,
         )
-        return cast(dict[str, Any], waypoint.model_dump(mode="json"))
+        return waypoint.model_dump(mode="json")  # type: ignore[return-value]
 
 
 class CacheFactory:
