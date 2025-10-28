@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from pydantic import ValidationError
@@ -110,12 +110,10 @@ def get_agent_info(token: str) -> Agent:
 
             # Ensure timezone-aware (assume UTC if naive)
             if last_updated.tzinfo is None:
-                last_updated = last_updated.replace(tzinfo=timezone.utc)
+                last_updated = last_updated.replace(tzinfo=UTC)
 
             # Check if cache is fresh
-            if datetime.now(timezone.utc) - last_updated < (
-                CACHE_STALENESS_THRESHOLD
-            ):
+            if datetime.now(UTC) - last_updated < (CACHE_STALENESS_THRESHOLD):
                 # Try to parse agent data
                 agent = Agent.model_validate(cached_entry["data"])
                 return agent
@@ -128,7 +126,7 @@ def get_agent_info(token: str) -> Agent:
     agent = client.agent.get_agent()
 
     # Update cache
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     now_iso = now_utc.isoformat()
     new_entry = {
         "last_updated": now_iso,

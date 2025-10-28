@@ -1,7 +1,7 @@
 [project]
 name = "py-st"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "httpx",
   "pydantic",
@@ -18,6 +18,7 @@ extend-exclude = "src/py_st/_generated"
 [tool.ruff]
 line-length = 79
 fix = true
+target-version = "py311"
 exclude = [
   "src/py_st/_generated",
 ]
@@ -28,7 +29,7 @@ lint.extend-select = ["W505"]
 testpaths = ["tests"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 strict = true
 
 [[tool.mypy.overrides]]

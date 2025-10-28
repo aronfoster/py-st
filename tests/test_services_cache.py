@@ -1,6 +1,6 @@
 """Unit tests for the caching behavior of services.get_agent_info."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
@@ -20,7 +20,7 @@ def test_get_agent_info_cache_hit(
     mock_agent_data = AgentFactory.build_minimal()
 
     # Calculate a recent timestamp (30 minutes ago)
-    recent_timestamp = datetime.now(timezone.utc) - timedelta(minutes=30)
+    recent_timestamp = datetime.now(UTC) - timedelta(minutes=30)
     recent_iso_timestamp = recent_timestamp.isoformat()
 
     # Prepare cached entry with recent data
@@ -65,7 +65,7 @@ def test_get_agent_info_cache_miss_stale(
     mock_old_agent_data["credits"] = 100
 
     # Calculate a stale timestamp (2 hours ago)
-    stale_timestamp = datetime.now(timezone.utc) - timedelta(hours=2)
+    stale_timestamp = datetime.now(UTC) - timedelta(hours=2)
     stale_iso_timestamp = stale_timestamp.isoformat()
 
     # Prepare stale cached entry
@@ -111,7 +111,7 @@ def test_get_agent_info_cache_miss_stale(
     saved_timestamp = datetime.fromisoformat(
         saved_cache["agent_info"]["last_updated"]
     )
-    time_diff = datetime.now(timezone.utc) - saved_timestamp
+    time_diff = datetime.now(UTC) - saved_timestamp
     assert time_diff < timedelta(seconds=5), "Saved timestamp should be recent"
 
     # Verify saved data matches new agent
@@ -162,7 +162,7 @@ def test_get_agent_info_cache_miss_not_found(
     saved_timestamp = datetime.fromisoformat(
         saved_cache["agent_info"]["last_updated"]
     )
-    time_diff = datetime.now(timezone.utc) - saved_timestamp
+    time_diff = datetime.now(UTC) - saved_timestamp
     assert time_diff < timedelta(seconds=5), "Saved timestamp should be recent"
 
 
@@ -217,7 +217,7 @@ def test_get_agent_info_cache_invalid_data(
 ) -> None:
     """Test get_agent_info handles invalid agent data in cache."""
     # Calculate a recent timestamp
-    recent_timestamp = datetime.now(timezone.utc) - timedelta(minutes=30)
+    recent_timestamp = datetime.now(UTC) - timedelta(minutes=30)
     recent_iso_timestamp = recent_timestamp.isoformat()
 
     # Prepare cached entry with invalid data (missing required field)

@@ -1,6 +1,6 @@
 # Project Architecture
 
-This is a python 3 application.
+This is a Python 3.12+ application.
 
 - Code is in `src/py_st`
 - Data structures (Pydantic models) are auto-generated in `src/py_st/_generated/models`
