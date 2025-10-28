@@ -1,6 +1,6 @@
 # Project Architecture
 
-This is a Python 3.12+ application.
+This is a Python 3.11+ application.
 
 - Code is in `src/py_st`
 - Data structures (Pydantic models) are auto-generated in `src/py_st/_generated/models`
@@ -19,3 +19,4 @@ This is a Python 3.12+ application.
 - You must limit all changes to 79 characters or less per line
 - Use industry standards for python (e.g., follow PEP 8, use type hints).
 - Ensure code passes checks defined in `.pre-commit-config.yaml` (ruff, black) and `mypy`.
+- Build "clean code", using small descriptively named functions

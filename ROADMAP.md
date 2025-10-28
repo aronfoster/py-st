@@ -2,28 +2,26 @@
 
 Here are the outstanding tasks for `py-st`.
 
-- Investigate openapi-python-client or rolling my own method to turn SpaceTraders.json spec automatically into client prototypes.
-- Implement a simple file-based cache for ships and waypoints to speed up gameplay and reduce manual data entry.
+- Progress the file-based cache for ships and waypoints to speed up gameplay and reduce manual data entry.
   - Connect the game data cache into commands so I don't have to type ship and system names each time (e.g., allow --ship 1 or --wp 3).
-  - Might have a dirty flag and last-updated-time so I can know what needs to be re-fetched
+- Refactor services.py to split services into sensible parts.
+  - Unit test of services.py before or after the refactor?
 
-- Improve web requests.
-  - We have _make_request, which handles 409s.
-  - This could be expanded to handle 400s when we request something impossible (e.g. not enough fuel)
-  - Rate limiting and backoff logic needs to be much improved.
-    - Rate limits are per account, not per command.
-    - 2 requests/second max, burst up to 30 requests per 60 seconds.
-    - Returns 429
-    - Whole page of response error codes at https://spacetraders.io/api-guide/response-errors
-    - I really just want to see the whole response when it fails
-  - While waiting for something to cool down, can do other work. Might eventually implement a queue and threading
-
-- Connect game data cache into commands so I don't have to type ship and system names each time
 - Develop a script to run a basic ship automation loop.
 
-- I'm unhappy with the unit testing level of detail. Don't think it will actually catch problems in refactoring.
+- Investigate openapi-python-client or rolling my own method to turn SpaceTraders.json spec automatically into client prototypes.
+- Currently using agent tokens, which expire every week. Explore Register by API (https://spacetraders.io/quickstart/new-game) with an account token, then automatically create a new agent if none exist.
 
-- Update to latest version of Python
+- Improve web requests.
+  - We have transport.py request_json, which handles 409s and 429s.
+  - Rate limiting and backoff logic has room for improvement but is okay for now
+    - Rate limits are per account, not per command.
+    - 2 requests/second max, burst up to 30 requests per 60 seconds.
+    - Whole page of response error codes at https://spacetraders.io/api-guide/response-errors
+    - Do I see the whole response when it fails?
+  - While waiting for something to cool down (e.g. ship travel), can do other work. Might eventually implement a queue and threading
+
+- I'm unhappy with the unit testing level of detail. Don't think it will actually catch problems in refactoring.
 
 ## GUI
 - Research and select a GUI framework (e.g., PySide6, Tkinter).
