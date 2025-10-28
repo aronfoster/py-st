@@ -26,7 +26,7 @@ def load_cache() -> dict[str, Any]:
         return {}
 
     try:
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+        with open(CACHE_FILE, encoding="utf-8") as f:
             return cast(dict[str, Any], json.load(f))
     except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
         logging.warning("Failed to load cache: %s", e)
