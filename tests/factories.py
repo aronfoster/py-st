@@ -42,6 +42,7 @@ class AgentFactory:
     def build_minimal() -> dict[str, Any]:
         """Build a minimal valid Agent payload dict."""
         agent = Agent(
+            accountId=None,
             symbol="FOO",
             headquarters="X1-ABC-1",
             credits=42,
@@ -72,6 +73,7 @@ class ContractFactory:
             accepted=False,
             fulfilled=False,
             expiration=datetime.now(timezone.utc) + timedelta(days=30),
+            deadlineToAccept=None,
         )
         return cast(dict[str, Any], contract.model_dump(mode="json"))
 
@@ -192,6 +194,7 @@ class ShipFactory:
         fuel = ShipFuel(
             current=100,
             capacity=100,
+            consumed=None,
         )
 
         # Build main ship
