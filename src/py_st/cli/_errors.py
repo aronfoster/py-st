@@ -14,7 +14,9 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def handle_errors(original_function: Callable[P, R]) -> Callable[P, R]:
+def handle_errors(  # noqa: UP047
+    original_function: Callable[P, R],
+) -> Callable[P, R]:
     """
     Decorator for Typer commands:
     - Catches APIError and prints a friendly message.

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from py_st._generated.models import (
@@ -61,7 +61,7 @@ class ContractFactory:
             onFulfilled=5000,
         )
         terms = ContractTerms(
-            deadline=datetime.now(timezone.utc) + timedelta(days=30),
+            deadline=datetime.now(UTC) + timedelta(days=30),
             payment=payment,
             deliver=[],
         )
@@ -72,7 +72,7 @@ class ContractFactory:
             terms=terms,
             accepted=False,
             fulfilled=False,
-            expiration=datetime.now(timezone.utc) + timedelta(days=30),
+            expiration=datetime.now(UTC) + timedelta(days=30),
             deadlineToAccept=None,
         )
         return cast(dict[str, Any], contract.model_dump(mode="json"))
@@ -109,8 +109,8 @@ class ShipFactory:
         route = ShipNavRoute(
             destination=destination_waypoint,
             origin=origin_waypoint,
-            departureTime=datetime.now(timezone.utc),
-            arrival=datetime.now(timezone.utc) + timedelta(hours=1),
+            departureTime=datetime.now(UTC),
+            arrival=datetime.now(UTC) + timedelta(hours=1),
         )
 
         # Build nav
@@ -180,7 +180,7 @@ class ShipFactory:
             shipSymbol="SHIP-1",
             totalSeconds=0,
             remainingSeconds=0,
-            expiration=datetime.now(timezone.utc),
+            expiration=datetime.now(UTC),
         )
 
         # Build cargo
@@ -269,8 +269,6 @@ class CacheFactory:
     def build_data_with_datetime() -> dict[str, Any]:
         """Return a dictionary containing a datetime object."""
         return {
-            "timestamp": datetime(
-                2025, 10, 26, 18, 10, 0, tzinfo=timezone.utc
-            ),
+            "timestamp": datetime(2025, 10, 26, 18, 10, 0, tzinfo=UTC),
             "value": "some data",
         }
