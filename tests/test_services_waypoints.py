@@ -59,38 +59,322 @@ def test_list_waypoints_basic(
 @patch("py_st.services.systems.save_cache")
 @patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_list_waypoints_with_traits(
+def test_list_waypoints_filter_single_trait(
     mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
 ) -> None:
-    """Test list_waypoints retrieves all waypoints (traits not yet used)."""
+    """Test list_waypoints filters by a single trait."""
     # Setup: empty cache (cache miss)
     mock_load_cache.return_value = {}
 
-    # Create waypoints (traits param accepted but not used yet)
-    waypoint_data = WaypointFactory.build_minimal(
-        traits=[WaypointTraitSymbol.MARKETPLACE]
+    # Create waypoints with different traits
+    waypoint1_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
     )
-    waypoint = Waypoint.model_validate(waypoint_data)
+    waypoint2_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-2", traits=[WaypointTraitSymbol.SHIPYARD]
+    )
+    waypoint3_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-3", traits=[WaypointTraitSymbol.MARKETPLACE]
+    )
+
+    waypoint1 = Waypoint.model_validate(waypoint1_data)
+    waypoint2 = Waypoint.model_validate(waypoint2_data)
+    waypoint3 = Waypoint.model_validate(waypoint3_data)
 
     # Configure mock client
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
-    mock_client.systems.list_waypoints_all.return_value = [waypoint]
+    mock_client.systems.list_waypoints_all.return_value = [
+        waypoint1,
+        waypoint2,
+        waypoint3,
+    ]
 
-    # Call the function with traits filter
-    # (traits accepted but not used yet - filtering comes later)
-    traits_filter = ["MARKETPLACE", "SHIPYARD"]
+    # Call the function with single trait filter
+    traits_filter = ["MARKETPLACE"]
     result = systems.list_waypoints("fake_token", "X1-ABC", traits_filter)
 
-    # Assertions
+    # Assertions: only waypoints with MARKETPLACE trait are returned
     assert isinstance(result, list)
-    assert len(result) == 1
+    assert len(result) == 2
     assert result[0].symbol.root == "X1-ABC-1"
+    assert result[1].symbol.root == "X1-ABC-3"
 
     # Verify that list_waypoints_all is called without traits
     mock_client.systems.list_waypoints_all.assert_called_once_with(
         "X1-ABC", traits=None
     )
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_filter_multiple_traits_and_logic(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test list_waypoints filters using AND logic with multiple traits."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create waypoints with different trait combinations
+    waypoint1_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-1",
+        traits=[WaypointTraitSymbol.MARKETPLACE, WaypointTraitSymbol.SHIPYARD],
+    )
+    waypoint2_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-2", traits=[WaypointTraitSymbol.MARKETPLACE]
+    )
+    waypoint3_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-3", traits=[WaypointTraitSymbol.SHIPYARD]
+    )
+    waypoint4_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-4",
+        traits=[
+            WaypointTraitSymbol.MARKETPLACE,
+            WaypointTraitSymbol.SHIPYARD,
+            WaypointTraitSymbol.OUTPOST,
+        ],
+    )
+
+    waypoint1 = Waypoint.model_validate(waypoint1_data)
+    waypoint2 = Waypoint.model_validate(waypoint2_data)
+    waypoint3 = Waypoint.model_validate(waypoint3_data)
+    waypoint4 = Waypoint.model_validate(waypoint4_data)
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.list_waypoints_all.return_value = [
+        waypoint1,
+        waypoint2,
+        waypoint3,
+        waypoint4,
+    ]
+
+    # Call the function with multiple trait filters (AND logic)
+    traits_filter = ["MARKETPLACE", "SHIPYARD"]
+    result = systems.list_waypoints("fake_token", "X1-ABC", traits_filter)
+
+    # Assertions: only waypoints with BOTH traits are returned
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert result[0].symbol.root == "X1-ABC-1"
+    assert result[1].symbol.root == "X1-ABC-4"
+
+    # Verify that list_waypoints_all is called without traits
+    mock_client.systems.list_waypoints_all.assert_called_once_with(
+        "X1-ABC", traits=None
+    )
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_filter_excludes_partial_matches(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test that waypoints with only some requested traits are excluded."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create waypoints where none have all three traits
+    waypoint1_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-1",
+        traits=[WaypointTraitSymbol.MARKETPLACE, WaypointTraitSymbol.SHIPYARD],
+    )
+    waypoint2_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-2",
+        traits=[WaypointTraitSymbol.MARKETPLACE, WaypointTraitSymbol.OUTPOST],
+    )
+    waypoint3_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-3",
+        traits=[WaypointTraitSymbol.SHIPYARD, WaypointTraitSymbol.OUTPOST],
+    )
+
+    waypoint1 = Waypoint.model_validate(waypoint1_data)
+    waypoint2 = Waypoint.model_validate(waypoint2_data)
+    waypoint3 = Waypoint.model_validate(waypoint3_data)
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.list_waypoints_all.return_value = [
+        waypoint1,
+        waypoint2,
+        waypoint3,
+    ]
+
+    # Request three traits - no waypoint has all three
+    traits_filter = ["MARKETPLACE", "SHIPYARD", "OUTPOST"]
+    result = systems.list_waypoints("fake_token", "X1-ABC", traits_filter)
+
+    # Assertions: no waypoints returned (none have all three traits)
+    assert isinstance(result, list)
+    assert len(result) == 0
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_filter_includes_extra_traits(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test that waypoints with requested traits plus extras are included."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create waypoints where some have extra traits beyond requested
+    waypoint1_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-1",
+        traits=[WaypointTraitSymbol.MARKETPLACE, WaypointTraitSymbol.SHIPYARD],
+    )
+    waypoint2_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-2",
+        traits=[
+            WaypointTraitSymbol.MARKETPLACE,
+            WaypointTraitSymbol.SHIPYARD,
+            WaypointTraitSymbol.OUTPOST,
+            WaypointTraitSymbol.TRADING_HUB,
+        ],
+    )
+    waypoint3_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-3", traits=[WaypointTraitSymbol.MARKETPLACE]
+    )
+
+    waypoint1 = Waypoint.model_validate(waypoint1_data)
+    waypoint2 = Waypoint.model_validate(waypoint2_data)
+    waypoint3 = Waypoint.model_validate(waypoint3_data)
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.list_waypoints_all.return_value = [
+        waypoint1,
+        waypoint2,
+        waypoint3,
+    ]
+
+    # Request two traits
+    traits_filter = ["MARKETPLACE", "SHIPYARD"]
+    result = systems.list_waypoints("fake_token", "X1-ABC", traits_filter)
+
+    # Assertions: waypoints with both traits (including extras) are returned
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert result[0].symbol.root == "X1-ABC-1"
+    assert result[1].symbol.root == "X1-ABC-2"
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_no_traits_returns_all(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test list_waypoints returns all waypoints when no traits provided."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create waypoints
+    waypoint1_data = WaypointFactory.build_minimal(symbol="X1-ABC-1")
+    waypoint2_data = WaypointFactory.build_minimal(symbol="X1-ABC-2")
+
+    waypoint1 = Waypoint.model_validate(waypoint1_data)
+    waypoint2 = Waypoint.model_validate(waypoint2_data)
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.list_waypoints_all.return_value = [
+        waypoint1,
+        waypoint2,
+    ]
+
+    # Call the function with None traits
+    result = systems.list_waypoints("fake_token", "X1-ABC", None)
+
+    # Assertions: all waypoints returned
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert result[0].symbol.root == "X1-ABC-1"
+    assert result[1].symbol.root == "X1-ABC-2"
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_empty_traits_returns_all(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test list_waypoints returns all waypoints with empty traits list."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create waypoints
+    waypoint1_data = WaypointFactory.build_minimal(symbol="X1-ABC-1")
+    waypoint2_data = WaypointFactory.build_minimal(symbol="X1-ABC-2")
+
+    waypoint1 = Waypoint.model_validate(waypoint1_data)
+    waypoint2 = Waypoint.model_validate(waypoint2_data)
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.list_waypoints_all.return_value = [
+        waypoint1,
+        waypoint2,
+    ]
+
+    # Call the function with empty traits list
+    result = systems.list_waypoints("fake_token", "X1-ABC", [])
+
+    # Assertions: all waypoints returned
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert result[0].symbol.root == "X1-ABC-1"
+    assert result[1].symbol.root == "X1-ABC-2"
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_filter_works_with_cached_data(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test filtering works correctly when data comes from cache."""
+    # Setup: populate cache with waypoint data
+    waypoint1_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-1",
+        traits=[WaypointTraitSymbol.MARKETPLACE, WaypointTraitSymbol.SHIPYARD],
+    )
+    waypoint2_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-2", traits=[WaypointTraitSymbol.MARKETPLACE]
+    )
+
+    cached_data = {
+        "waypoints_X1-ABC": {
+            "last_updated": "2025-10-29T12:00:00+00:00",
+            "data": [waypoint1_data, waypoint2_data],
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Configure mock client (should NOT be called due to cache hit)
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+
+    # Call the function with trait filter
+    traits_filter = ["MARKETPLACE", "SHIPYARD"]
+    result = systems.list_waypoints("fake_token", "X1-ABC", traits_filter)
+
+    # Assertions: filtering works correctly with cached data
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].symbol.root == "X1-ABC-1"
+
+    # Verify API was NOT called (cache hit)
+    mock_client.systems.list_waypoints_all.assert_not_called()
+    mock_save_cache.assert_not_called()
 
 
 @patch("py_st.services.systems.SpaceTradersClient")
