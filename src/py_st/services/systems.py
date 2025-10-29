@@ -201,12 +201,112 @@ def get_shipyard(
     return shipyard
 
 
-def get_market(token: str, system_symbol: str, waypoint_symbol: str) -> Market:
+def get_market(
+    token: str,
+    system_symbol: str,
+    waypoint_symbol: str,
+    force_refresh: bool = False,
+) -> Market:
     """
-    Gets the market for a waypoint.
+    Gets the market for a waypoint with smart caching.
+
+    The cache preserves price data (tradeGoods) even when API calls made from
+    a distance return tradeGoods=null. The cache always stores the "best"
+    version of the Market object (one with tradeGoods is better).
+
+    Args:
+        token: API authentication token
+        system_symbol: The system symbol (e.g., "X1-ABC")
+        waypoint_symbol: The waypoint symbol (e.g., "X1-ABC-1")
+        force_refresh: If True, fetch fresh data from API regardless of cache
+
+    Returns:
+        Market object with the most complete data available
     """
+    # Define cache key for this market
+    cache_key = f"market_{waypoint_symbol}"
+
+    # Load the full cache
+    full_cache = load_cache()
+
+    # Try to get cached entry
+    cached_entry = full_cache.get(cache_key)
+    cached_market: Market | None = None
+    prices_timestamp: datetime | None = None
+
+    if cached_entry:
+        try:
+            # Parse cached market data
+            cached_market = Market.model_validate(cached_entry["data"])
+
+            # Parse prices timestamp (may be None)
+            prices_updated_str = cached_entry.get("prices_updated")
+            if prices_updated_str:
+                prices_timestamp = datetime.fromisoformat(prices_updated_str)
+        except Exception as e:
+            # Log validation error and proceed as cache miss
+            logging.warning(
+                "Failed to validate cached market for %s: %s",
+                waypoint_symbol,
+                e,
+            )
+            cached_market = None
+            prices_timestamp = None
+
+    # Case 1: Return from cache (no API call)
+    if cached_market is not None and not force_refresh:
+        logging.debug(f"Returning cached market data for {waypoint_symbol}")
+        return cached_market
+
+    # Case 2: API call (cache miss or force_refresh=True)
+    logging.debug(f"Fetching fresh market data for {waypoint_symbol}")
+
     client = SpaceTradersClient(token=token)
-    return client.systems.get_market(system_symbol, waypoint_symbol)
+    fresh_market: Market = client.systems.get_market(
+        system_symbol, waypoint_symbol
+    )
+
+    new_entry_data: dict[str, object]
+    new_timestamp: str | None
+
+    # Sub-Case 2a: API returned new prices
+    # (fresh_market.tradeGoods is not None)
+    if fresh_market.tradeGoods is not None:
+        # This is the new "best" data
+        new_entry_data = fresh_market.model_dump(mode="json")
+        new_timestamp = datetime.now(UTC).isoformat()
+        return_market = fresh_market
+
+    # Sub-Case 2b: API returned NO prices (fresh_market.tradeGoods is None)
+    else:
+        # We must preserve old prices if they exist
+        if cached_market is not None and cached_market.tradeGoods is not None:
+            # Merge: Update static fields from fresh_market, keep old prices
+            cached_market.exports = fresh_market.exports
+            cached_market.imports = fresh_market.imports
+            cached_market.exchange = fresh_market.exchange
+            # tradeGoods remains unchanged (preserves old prices)
+
+            new_entry_data = cached_market.model_dump(mode="json")
+            # Keep the original price timestamp
+            new_timestamp = (
+                prices_timestamp.isoformat() if prices_timestamp else None
+            )
+            return_market = cached_market
+        else:
+            # No old prices to preserve, use the new (priceless) data
+            new_entry_data = fresh_market.model_dump(mode="json")
+            new_timestamp = None
+            return_market = fresh_market
+
+    # Save and return
+    full_cache[cache_key] = {
+        "prices_updated": new_timestamp,
+        "data": new_entry_data,
+    }
+    save_cache(full_cache)
+
+    return return_market
 
 
 def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
