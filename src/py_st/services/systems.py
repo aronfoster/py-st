@@ -65,19 +65,25 @@ def list_waypoints(
 ) -> list[Waypoint]:
     """
     Lists waypoints in a system, optionally filtered by traits.
+
+    Currently retrieves all waypoints via list_waypoints_all. The
+    traits parameter is kept for backward compatibility and will be
+    used for client-side filtering in a future step.
     """
-    client = SpaceTradersClient(token=token)
-    waypoints = client.systems.get_waypoints_in_system(
-        system_symbol, traits=traits
-    )
-    return waypoints
+    all_waypoints = list_waypoints_all(token, system_symbol)
+    return all_waypoints
 
 
 def list_waypoints_all(
     token: str, system_symbol: str, traits: list[str] | None = None
 ) -> list[Waypoint]:
     """
-    Lists waypoints in a system, optionally filtered by traits.
+    Fetches all waypoints in a system from the API.
+
+    This is the core function for retrieving waypoints. In the future,
+    this will be backed by caching. The traits parameter is kept for
+    backward compatibility with existing CLI commands but may be
+    removed in future refactoring.
     """
     client = SpaceTradersClient(token=token)
     waypoints = client.systems.list_waypoints_all(system_symbol, traits=traits)

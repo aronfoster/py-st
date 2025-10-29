@@ -17,7 +17,7 @@ from tests.factories import MarketFactory, ShipyardFactory, WaypointFactory
 
 @patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_basic(mock_client_class: Any) -> None:
-    """Test list_waypoints returns waypoints from the client."""
+    """Test list_waypoints returns waypoints via list_waypoints_all."""
     # Create mock waypoints
     waypoint1_data = WaypointFactory.build_minimal()
     waypoint2_data = WaypointFactory.build_minimal(symbol="X1-ABC-2")
@@ -28,7 +28,7 @@ def test_list_waypoints_basic(mock_client_class: Any) -> None:
     # Configure mock client
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
-    mock_client.systems.get_waypoints_in_system.return_value = [
+    mock_client.systems.list_waypoints_all.return_value = [
         waypoint1,
         waypoint2,
     ]
@@ -43,16 +43,16 @@ def test_list_waypoints_basic(mock_client_class: Any) -> None:
     assert result[0].symbol.root == "X1-ABC-1"
     assert result[1].symbol.root == "X1-ABC-2"
 
-    # Verify client was called correctly
-    mock_client.systems.get_waypoints_in_system.assert_called_once_with(
+    # Verify client was called correctly (via list_waypoints_all)
+    mock_client.systems.list_waypoints_all.assert_called_once_with(
         "X1-ABC", traits=None
     )
 
 
 @patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
-    """Test list_waypoints correctly passes traits parameter."""
-    # Create a waypoint with MARKETPLACE trait
+    """Test list_waypoints retrieves all waypoints (traits not yet used)."""
+    # Create waypoints (traits param accepted but not used yet)
     waypoint_data = WaypointFactory.build_minimal(
         traits=[WaypointTraitSymbol.MARKETPLACE]
     )
@@ -61,9 +61,10 @@ def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
     # Configure mock client
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
-    mock_client.systems.get_waypoints_in_system.return_value = [waypoint]
+    mock_client.systems.list_waypoints_all.return_value = [waypoint]
 
     # Call the function with traits filter
+    # (traits accepted but not used yet - filtering comes later)
     traits_filter = ["MARKETPLACE", "SHIPYARD"]
     result = systems.list_waypoints("fake_token", "X1-ABC", traits_filter)
 
@@ -72,9 +73,9 @@ def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
     assert len(result) == 1
     assert result[0].symbol.root == "X1-ABC-1"
 
-    # Verify client was called with traits
-    mock_client.systems.get_waypoints_in_system.assert_called_once_with(
-        "X1-ABC", traits=traits_filter
+    # Verify that list_waypoints_all is called without traits
+    mock_client.systems.list_waypoints_all.assert_called_once_with(
+        "X1-ABC", traits=None
     )
 
 
