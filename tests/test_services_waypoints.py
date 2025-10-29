@@ -456,3 +456,223 @@ def test_list_system_goods_sorts_goods(mock_client_class: Any) -> None:
     # Check that buys are sorted
     buy_symbols = [good.symbol.value for good in wp_goods.buys]
     assert buy_symbols == sorted(buy_symbols)
+
+
+# ============================================================================
+# Caching Tests for list_waypoints_all
+# ============================================================================
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_all_cache_miss(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test that cache miss causes API call and saves data to cache."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create mock waypoints
+    waypoint1 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(symbol="X1-ABC-1")
+    )
+    waypoint2 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(symbol="X1-ABC-2")
+    )
+
+    # Configure mock client to return waypoints
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.list_waypoints_all.return_value = [
+        waypoint1,
+        waypoint2,
+    ]
+
+    # Call the function
+    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+
+    # Assertions: API was called
+    mock_client.systems.list_waypoints_all.assert_called_once_with(
+        "X1-ABC", traits=None
+    )
+
+    # Assert: result matches API response
+    assert len(result) == 2
+    assert result[0].symbol.root == "X1-ABC-1"
+    assert result[1].symbol.root == "X1-ABC-2"
+
+    # Assert: save_cache was called with proper structure
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    assert "waypoints_X1-ABC" in saved_cache
+    cache_entry = saved_cache["waypoints_X1-ABC"]
+    assert "last_updated" in cache_entry
+    assert "data" in cache_entry
+    assert isinstance(cache_entry["data"], list)
+    assert len(cache_entry["data"]) == 2
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_all_cache_hit(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test that cache hit returns data without calling API."""
+    # Setup: populate cache with waypoint data
+    waypoint1_data = WaypointFactory.build_minimal(symbol="X1-ABC-1")
+    waypoint2_data = WaypointFactory.build_minimal(symbol="X1-ABC-2")
+
+    cached_data = {
+        "waypoints_X1-ABC": {
+            "last_updated": "2025-10-29T12:00:00+00:00",
+            "data": [waypoint1_data, waypoint2_data],
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Configure mock client (should NOT be called)
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+
+    # Call the function
+    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+
+    # Assertions: API was NOT called
+    mock_client.systems.list_waypoints_all.assert_not_called()
+
+    # Assert: result matches cached data
+    assert len(result) == 2
+    assert isinstance(result[0], Waypoint)
+    assert isinstance(result[1], Waypoint)
+    assert result[0].symbol.root == "X1-ABC-1"
+    assert result[1].symbol.root == "X1-ABC-2"
+
+    # Assert: save_cache was NOT called
+    mock_save_cache.assert_not_called()
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_all_invalid_cache_entry_missing_keys(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test that invalid cache entry (missing keys) triggers API call."""
+    # Setup: cache with invalid entry (missing 'data' key)
+    cached_data = {
+        "waypoints_X1-ABC": {
+            "last_updated": "2025-10-29T12:00:00+00:00",
+            # Missing 'data' key
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Create mock waypoints
+    waypoint = Waypoint.model_validate(
+        WaypointFactory.build_minimal(symbol="X1-ABC-1")
+    )
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.list_waypoints_all.return_value = [waypoint]
+
+    # Call the function
+    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+
+    # Assertions: API was called due to invalid cache
+    mock_client.systems.list_waypoints_all.assert_called_once_with(
+        "X1-ABC", traits=None
+    )
+
+    # Assert: result matches API response
+    assert len(result) == 1
+    assert result[0].symbol.root == "X1-ABC-1"
+
+    # Assert: save_cache was called to update cache
+    mock_save_cache.assert_called_once()
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_all_invalid_cache_entry_bad_data(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test that invalid cache data (failed validation) triggers API call."""
+    # Setup: cache with malformed waypoint data
+    cached_data = {
+        "waypoints_X1-ABC": {
+            "last_updated": "2025-10-29T12:00:00+00:00",
+            "data": [
+                {"invalid": "data", "missing": "required_fields"}
+            ],  # Invalid waypoint
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Create mock waypoints
+    waypoint = Waypoint.model_validate(
+        WaypointFactory.build_minimal(symbol="X1-ABC-1")
+    )
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.list_waypoints_all.return_value = [waypoint]
+
+    # Call the function
+    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+
+    # Assertions: API was called due to validation failure
+    mock_client.systems.list_waypoints_all.assert_called_once_with(
+        "X1-ABC", traits=None
+    )
+
+    # Assert: result matches API response
+    assert len(result) == 1
+    assert result[0].symbol.root == "X1-ABC-1"
+
+    # Assert: save_cache was called to update cache with valid data
+    mock_save_cache.assert_called_once()
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_list_waypoints_all_cache_entry_not_dict(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test that cache entry that's not a dict triggers API call."""
+    # Setup: cache with entry that's not a dict
+    cached_data = {
+        "waypoints_X1-ABC": "invalid_string_value"  # Should be a dict
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Create mock waypoints
+    waypoint = Waypoint.model_validate(
+        WaypointFactory.build_minimal(symbol="X1-ABC-1")
+    )
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.list_waypoints_all.return_value = [waypoint]
+
+    # Call the function
+    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+
+    # Assertions: API was called due to invalid cache structure
+    mock_client.systems.list_waypoints_all.assert_called_once_with(
+        "X1-ABC", traits=None
+    )
+
+    # Assert: result matches API response
+    assert len(result) == 1
+    assert result[0].symbol.root == "X1-ABC-1"
+
+    # Assert: save_cache was called to update cache
+    mock_save_cache.assert_called_once()

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from py_st._generated.models import (
     Market,
@@ -11,6 +13,7 @@ from py_st._generated.models import (
     TradeSymbol,
     Waypoint,
 )
+from py_st.cache import load_cache, save_cache
 from py_st.client import SpaceTradersClient
 
 
@@ -78,15 +81,89 @@ def list_waypoints_all(
     token: str, system_symbol: str, traits: list[str] | None = None
 ) -> list[Waypoint]:
     """
-    Fetches all waypoints in a system from the API.
+    Fetches all waypoints in a system, using file-based caching to
+    reduce API calls.
 
-    This is the core function for retrieving waypoints. In the future,
-    this will be backed by caching. The traits parameter is kept for
-    backward compatibility with existing CLI commands but may be
-    removed in future refactoring.
+    Waypoint data is cached per system and remains valid until
+    manually cleared, as waypoints are generally static between
+    weekly server resets.
+
+    The traits parameter is kept for backward compatibility with existing CLI
+    commands but may be removed in future refactoring.
+
+    Args:
+        token: API authentication token
+        system_symbol: The system symbol (e.g., "X1-ABC")
+        traits: Optional list of trait filters (currently unused)
+
+    Returns:
+        List of Waypoint models for the system
     """
+    # Define cache key for this system
+    cache_key = f"waypoints_{system_symbol}"
+
+    # Load the full cache
+    full_cache = load_cache()
+
+    # Check if we have a cached entry for this system
+    if cache_key in full_cache:
+        cache_entry = full_cache[cache_key]
+
+        # Validate cache entry structure
+        if (
+            isinstance(cache_entry, dict)
+            and "last_updated" in cache_entry
+            and "data" in cache_entry
+        ):
+            try:
+                # Parse cached data back into Waypoint models
+                cached_data = cache_entry["data"]
+                if isinstance(cached_data, list):
+                    waypoints = [
+                        Waypoint.model_validate(wp_dict)
+                        for wp_dict in cached_data
+                    ]
+                    logging.info(
+                        "Cache hit for system %s waypoints (%d waypoints)",
+                        system_symbol,
+                        len(waypoints),
+                    )
+                    return waypoints
+            except Exception as e:
+                # Log validation error and proceed to cache miss
+                logging.warning(
+                    "Failed to validate cached waypoints for %s: %s",
+                    system_symbol,
+                    e,
+                )
+
+    # Cache miss or invalid data - fetch from API
+    logging.info(
+        "Cache miss for system %s waypoints, fetching from API",
+        system_symbol,
+    )
+
     client = SpaceTradersClient(token=token)
-    waypoints = client.systems.list_waypoints_all(system_symbol, traits=traits)
+    # Fetch all waypoints without trait filtering for complete cache
+    waypoints = client.systems.list_waypoints_all(system_symbol, traits=None)
+
+    # Prepare data for caching - convert Waypoint models to dicts
+    waypoint_dicts = [wp.model_dump(mode="json") for wp in waypoints]
+
+    # Create cache entry with timestamp and data
+    cache_entry = {
+        "last_updated": datetime.now(UTC).isoformat(),
+        "data": waypoint_dicts,
+    }
+
+    # Update and save the cache
+    full_cache[cache_key] = cache_entry
+    save_cache(full_cache)
+
+    logging.info(
+        "Cached %d waypoints for system %s", len(waypoints), system_symbol
+    )
+
     return waypoints
 
 
