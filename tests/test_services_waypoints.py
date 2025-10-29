@@ -15,7 +15,7 @@ from py_st.services import MarketGoods, SystemGoods
 from tests.factories import MarketFactory, ShipyardFactory, WaypointFactory
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_basic(mock_client_class: Any) -> None:
     """Test list_waypoints returns waypoints from the client."""
     # Create mock waypoints
@@ -49,7 +49,7 @@ def test_list_waypoints_basic(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
     """Test list_waypoints correctly passes traits parameter."""
     # Create a waypoint with MARKETPLACE trait
@@ -78,7 +78,7 @@ def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_all_basic(mock_client_class: Any) -> None:
     """Test list_waypoints_all returns all waypoints from the client."""
     # Create mock waypoints
@@ -115,7 +115,7 @@ def test_list_waypoints_all_basic(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_all_with_traits(mock_client_class: Any) -> None:
     """Test list_waypoints_all correctly passes traits parameter."""
     # Create waypoints
@@ -152,7 +152,7 @@ def test_list_waypoints_all_with_traits(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_get_shipyard(mock_client_class: Any) -> None:
     """Test get_shipyard returns a Shipyard from the client."""
     # Create mock shipyard
@@ -179,7 +179,7 @@ def test_get_shipyard(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_get_market(mock_client_class: Any) -> None:
     """Test get_market returns a Market from the client."""
     # Create mock market
@@ -215,7 +215,7 @@ def test_get_market(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_system_goods_basic(mock_client_class: Any) -> None:
     """Test list_system_goods aggregates goods from multiple markets."""
     # Create waypoints - one with marketplace, one without
@@ -335,7 +335,7 @@ def test_list_system_goods_basic(mock_client_class: Any) -> None:
     )  # Called for 2 marketplaces
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_system_goods_no_marketplaces(mock_client_class: Any) -> None:
     """Test list_system_goods handles systems with no marketplaces."""
     # Create waypoints without marketplaces
@@ -370,7 +370,7 @@ def test_list_system_goods_no_marketplaces(mock_client_class: Any) -> None:
     mock_client.systems.get_market.assert_not_called()
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_system_goods_deduplicates_goods(mock_client_class: Any) -> None:
     """Test list_system_goods deduplicates goods in sells/buys lists."""
     # Create waypoint with marketplace
@@ -412,7 +412,7 @@ def test_list_system_goods_deduplicates_goods(mock_client_class: Any) -> None:
     assert TradeSymbol.FOOD in buy_symbols
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_system_goods_sorts_goods(mock_client_class: Any) -> None:
     """Test list_system_goods returns sorted lists of goods."""
     # Create waypoint with marketplace

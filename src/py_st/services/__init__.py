@@ -1,82 +1,39 @@
+"""Services for interacting with the SpaceTraders API."""
+
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from pydantic import ValidationError
 
+from py_st import cache
 from py_st._generated.models import (
     Agent,
     Contract,
     Extraction,
-    Market,
     MarketTransaction,
     Ship,
     ShipCargo,
     ShipFuel,
     ShipNav,
     ShipNavFlightMode,
-    Shipyard,
     ShipyardTransaction,
     Survey,
-    TradeGood,
-    TradeSymbol,
-    Waypoint,
 )
 from py_st._manual_models import RefineResult
-
-from . import cache
-from .client import APIError, SpaceTradersClient
-
-
-@dataclass
-class MarketGoods:
-    sells: list[TradeGood] = field(default_factory=list)
-    buys: list[TradeGood] = field(default_factory=list)
-
-
-@dataclass
-class SystemGoods:
-    by_waypoint: dict[str, MarketGoods] = field(default_factory=dict)
-    by_good: dict[str, dict[str, list[str]]] = field(default_factory=dict)
-
-
-def _sym(obj: TradeGood | TradeSymbol | str) -> str:
-    """
-    Return a plain string trade symbol from either:
-    - a TradeGood (g.symbol may be Enum or str)
-    - an Enum value (use .value)
-    - a raw str
-    """
-    if hasattr(obj, "symbol"):
-        s = obj.symbol
-    elif hasattr(obj, "tradeSymbol"):
-        s = obj.tradeSymbol
-    else:
-        s = obj
-    return s.value if hasattr(s, "value") else str(s)
-
-
-def _has_marketplace(wp: Waypoint) -> bool:
-    """Checks if a Waypoint model has the MARKETPLACE trait."""
-    return any(trait.symbol.value == "MARKETPLACE" for trait in wp.traits)
-
-
-def _uniq_by_symbol(goods: list[TradeGood] | None) -> list[TradeGood]:
-    if not goods:
-        return []
-    seen: set[str] = set()
-    out: list[TradeGood] = []
-    for g in goods:
-        k = _sym(g)
-        if k not in seen:
-            seen.add(k)
-            out.append(g)
-    return out
-
+from py_st.client import APIError, SpaceTradersClient
+from py_st.services.systems import (
+    MarketGoods,
+    SystemGoods,
+    get_market,
+    get_shipyard,
+    list_system_goods,
+    list_waypoints,
+    list_waypoints_all,
+)
 
 # Cache configuration for agent info
 AGENT_CACHE_KEY = "agent_info"
@@ -113,7 +70,7 @@ def get_agent_info(token: str) -> Agent:
                 last_updated = last_updated.replace(tzinfo=UTC)
 
             # Check if cache is fresh
-            if datetime.now(UTC) - last_updated < (CACHE_STALENESS_THRESHOLD):
+            if datetime.now(UTC) - last_updated < CACHE_STALENESS_THRESHOLD:
                 # Try to parse agent data
                 agent = Agent.model_validate(cached_entry["data"])
                 return agent
@@ -299,41 +256,6 @@ def set_flight_mode(
     return nav
 
 
-def list_waypoints(
-    token: str, system_symbol: str, traits: list[str] | None
-) -> list[Waypoint]:
-    """
-    Lists waypoints in a system, optionally filtered by traits.
-    """
-    client = SpaceTradersClient(token=token)
-    waypoints = client.systems.get_waypoints_in_system(
-        system_symbol, traits=traits
-    )
-    return waypoints
-
-
-def list_waypoints_all(
-    token: str, system_symbol: str, traits: list[str] | None = None
-) -> list[Waypoint]:
-    """
-    Lists waypoints in a system, optionally filtered by traits.
-    """
-    client = SpaceTradersClient(token=token)
-    waypoints = client.systems.list_waypoints_all(system_symbol, traits=traits)
-    return waypoints
-
-
-def get_shipyard(
-    token: str, system_symbol: str, waypoint_symbol: str
-) -> Shipyard:
-    """
-    Gets the shipyard for a waypoint.
-    """
-    client = SpaceTradersClient(token=token)
-    shipyard = client.systems.get_shipyard(system_symbol, waypoint_symbol)
-    return shipyard
-
-
 def refine_materials(
     token: str, ship_symbol: str, produce: str
 ) -> RefineResult:
@@ -342,14 +264,6 @@ def refine_materials(
     """
     client = SpaceTradersClient(token=token)
     return client.ships.refine_materials(ship_symbol, produce)
-
-
-def get_market(token: str, system_symbol: str, waypoint_symbol: str) -> Market:
-    """
-    Gets the market for a waypoint.
-    """
-    client = SpaceTradersClient(token=token)
-    return client.systems.get_market(system_symbol, waypoint_symbol)
 
 
 def sell_cargo(
@@ -375,49 +289,32 @@ def purchase_ship(
     return agent, ship, transaction
 
 
-def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
-    """
-    Aggregate goods across all markets in a system (no prices).
-    - sells := exports ∪ exchange
-    - buys  := imports ∪ exchange
-    Returns real TradeGood objects grouped by waypoint, plus a reverse index.
-    """
-    client = SpaceTradersClient(token=token)
-    waypoints: list[Waypoint] = client.systems.list_waypoints_all(
-        system_symbol
-    )
-    waypoints = [wp for wp in waypoints if _has_marketplace(wp)]
-
-    by_waypoint: dict[str, MarketGoods] = {}
-    by_good_sells: dict[str, list[str]] = {}
-    by_good_buys: dict[str, list[str]] = {}
-
-    for wp in waypoints:
-        wp_sym = wp.symbol.root
-        mkt: Market = client.systems.get_market(system_symbol, wp_sym)
-
-        imports = list(mkt.imports or [])
-        exports = list(mkt.exports or [])
-        exchange = list(mkt.exchange or [])
-
-        sells = _uniq_by_symbol(exports + exchange)
-        buys = _uniq_by_symbol(imports + exchange)
-
-        by_waypoint[wp_sym] = MarketGoods(
-            sells=sorted(sells, key=_sym),
-            buys=sorted(buys, key=_sym),
-        )
-
-        for g in by_waypoint[wp_sym].sells:
-            by_good_sells.setdefault(_sym(g), []).append(wp_sym)
-        for g in by_waypoint[wp_sym].buys:
-            by_good_buys.setdefault(_sym(g), []).append(wp_sym)
-
-    by_good: dict[str, dict[str, list[str]]] = {}
-    for sym in sorted(set(by_good_sells) | set(by_good_buys)):
-        by_good[sym] = {
-            "sells": sorted(by_good_sells.get(sym, [])),
-            "buys": sorted(by_good_buys.get(sym, [])),
-        }
-
-    return SystemGoods(by_waypoint=by_waypoint, by_good=by_good)
+__all__ = [
+    "AGENT_CACHE_KEY",
+    "CACHE_STALENESS_THRESHOLD",
+    "MarketGoods",
+    "SystemGoods",
+    "accept_contract",
+    "create_survey",
+    "deliver_contract",
+    "dock_ship",
+    "extract_resources",
+    "fulfill_contract",
+    "get_agent_info",
+    "get_market",
+    "get_shipyard",
+    "jettison_cargo",
+    "list_contracts",
+    "list_ships",
+    "list_system_goods",
+    "list_waypoints",
+    "list_waypoints_all",
+    "navigate_ship",
+    "negotiate_contract",
+    "orbit_ship",
+    "purchase_ship",
+    "refine_materials",
+    "refuel_ship",
+    "sell_cargo",
+    "set_flight_mode",
+]
