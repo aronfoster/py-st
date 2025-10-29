@@ -7,6 +7,7 @@ from py_st._generated.models import (
     ContractPayment,
     ContractTerms,
     Cooldown,
+    Market,
     Ship,
     ShipCargo,
     ShipComponentCondition,
@@ -25,9 +26,14 @@ from py_st._generated.models import (
     ShipRegistration,
     ShipRequirements,
     ShipRole,
+    Shipyard,
     SystemSymbol,
+    TradeGood,
+    TradeSymbol,
     Waypoint,
     WaypointSymbol,
+    WaypointTrait,
+    WaypointTraitSymbol,
     WaypointType,
 )
 from py_st._generated.models.Contract import Type as ContractType
@@ -35,6 +41,8 @@ from py_st._generated.models.ShipCrew import Rotation
 from py_st._generated.models.ShipEngine import Symbol as EngineSymbol
 from py_st._generated.models.ShipFrame import Symbol as FrameSymbol
 from py_st._generated.models.ShipReactor import Symbol as ReactorSymbol
+from py_st._generated.models.ShipType import ShipType as ShipTypeEnum
+from py_st._generated.models.Shipyard import ShipType
 
 
 class AgentFactory:
@@ -217,21 +225,150 @@ class ShipFactory:
 
 class WaypointFactory:
     @staticmethod
-    def build_minimal() -> dict[str, Any]:
-        """Build a minimal valid Waypoint payload dict."""
+    def build_minimal(
+        symbol: str = "X1-ABC-1",
+        system_symbol: str = "X1-ABC",
+        waypoint_type: WaypointType = WaypointType.PLANET,
+        traits: list[WaypointTraitSymbol] | None = None,
+        x: int = 0,
+        y: int = 0,
+    ) -> dict[str, Any]:
+        """Build a minimal valid Waypoint payload dict.
+
+        Args:
+            symbol: The waypoint symbol (e.g., "X1-ABC-1")
+            system_symbol: The system symbol (e.g., "X1-ABC")
+            waypoint_type: The type of waypoint
+            traits: List of trait symbols to add to the waypoint
+            x: X coordinate
+            y: Y coordinate
+        """
+        trait_list = []
+        if traits:
+            for trait_symbol in traits:
+                trait_list.append(
+                    WaypointTrait(
+                        symbol=trait_symbol,
+                        name=trait_symbol.value,
+                        description=f"A waypoint with {trait_symbol.value}",
+                    )
+                )
+
         waypoint = Waypoint(
-            symbol=WaypointSymbol("X1-ABC-1"),
-            type=WaypointType.PLANET,
-            systemSymbol=SystemSymbol("X1-ABC"),
-            x=0,
-            y=0,
+            symbol=WaypointSymbol(symbol),
+            type=waypoint_type,
+            systemSymbol=SystemSymbol(system_symbol),
+            x=x,
+            y=y,
             orbitals=[],
             orbits=None,
-            traits=[],
+            traits=trait_list,
             modifiers=None,
             isUnderConstruction=False,
         )
         return waypoint.model_dump(mode="json")
+
+
+class TradeGoodFactory:
+    @staticmethod
+    def build_minimal(
+        symbol: TradeSymbol = TradeSymbol.IRON_ORE,
+    ) -> dict[str, Any]:
+        """Build a minimal valid TradeGood payload dict.
+
+        Args:
+            symbol: The trade symbol for this good
+        """
+        trade_good = TradeGood(
+            symbol=symbol,
+            name=symbol.value,
+            description=f"A trade good: {symbol.value}",
+        )
+        return trade_good.model_dump(mode="json")
+
+
+class MarketFactory:
+    @staticmethod
+    def build_minimal(
+        waypoint_symbol: str = "X1-ABC-1",
+        exports: list[TradeSymbol] | None = None,
+        imports: list[TradeSymbol] | None = None,
+        exchange: list[TradeSymbol] | None = None,
+    ) -> dict[str, Any]:
+        """Build a minimal valid Market payload dict.
+
+        Args:
+            waypoint_symbol: The waypoint symbol for this market
+            exports: List of trade symbols that are exported
+            imports: List of trade symbols that are imported
+            exchange: List of trade symbols that are exchanged
+        """
+        export_goods = [
+            TradeGood(
+                symbol=sym,
+                name=sym.value,
+                description=f"A trade good: {sym.value}",
+            )
+            for sym in (exports or [])
+        ]
+        import_goods = [
+            TradeGood(
+                symbol=sym,
+                name=sym.value,
+                description=f"A trade good: {sym.value}",
+            )
+            for sym in (imports or [])
+        ]
+        exchange_goods = [
+            TradeGood(
+                symbol=sym,
+                name=sym.value,
+                description=f"A trade good: {sym.value}",
+            )
+            for sym in (exchange or [])
+        ]
+
+        market = Market(
+            symbol=waypoint_symbol,
+            exports=export_goods,
+            imports=import_goods,
+            exchange=exchange_goods,
+            transactions=None,
+            tradeGoods=None,
+        )
+        return market.model_dump(mode="json")
+
+
+class ShipyardFactory:
+    @staticmethod
+    def build_minimal(
+        waypoint_symbol: str = "X1-ABC-1",
+        ship_types: list[ShipTypeEnum] | None = None,
+        modifications_fee: int = 1000,
+    ) -> dict[str, Any]:
+        """Build a minimal valid Shipyard payload dict.
+
+        Args:
+            waypoint_symbol: The waypoint symbol for this shipyard
+            ship_types: List of ship type enums available for purchase
+            modifications_fee: The fee for modifications
+        """
+        if ship_types is None:
+            ship_types = [
+                ShipTypeEnum.SHIP_PROBE,
+                ShipTypeEnum.SHIP_MINING_DRONE,
+            ]
+
+        ship_type_list = [ShipType(type=ship_type) for ship_type in ship_types]
+
+        shipyard = Shipyard(
+            symbol=waypoint_symbol,
+            shipTypes=ship_type_list,
+            transactions=None,
+            ships=None,
+            modificationsFee=modifications_fee,
+        )
+        return shipyard.model_dump(mode="json")
 
 
 class CacheFactory:
