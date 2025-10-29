@@ -69,12 +69,40 @@ def list_waypoints(
     """
     Lists waypoints in a system, optionally filtered by traits.
 
-    Currently retrieves all waypoints via list_waypoints_all. The
-    traits parameter is kept for backward compatibility and will be
-    used for client-side filtering in a future step.
+    Retrieves all waypoints via list_waypoints_all (which uses caching)
+    and performs client-side AND filtering if traits are specified.
+    Only waypoints possessing all specified traits are returned.
+
+    Args:
+        token: API authentication token
+        system_symbol: The system symbol (e.g., "X1-ABC")
+        traits: Optional list of trait symbols to filter by (AND logic)
+
+    Returns:
+        List of Waypoint models, filtered if traits are specified
     """
     all_waypoints = list_waypoints_all(token, system_symbol)
-    return all_waypoints
+
+    # If no traits specified, return all waypoints
+    if not traits:
+        return all_waypoints
+
+    # Create set of requested traits for efficient lookup
+    requested_traits = set(traits)
+
+    # Filter waypoints - keep only those with ALL requested traits
+    filtered_waypoints = []
+    for waypoint in all_waypoints:
+        # Extract trait symbols from waypoint
+        waypoint_trait_symbols = {
+            trait.symbol.value for trait in waypoint.traits
+        }
+
+        # Check if waypoint has all requested traits (superset)
+        if waypoint_trait_symbols.issuperset(requested_traits):
+            filtered_waypoints.append(waypoint)
+
+    return filtered_waypoints
 
 
 def list_waypoints_all(
