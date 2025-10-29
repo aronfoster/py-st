@@ -5,7 +5,7 @@ import logging
 
 import typer
 
-from .. import services
+from ..services import agent
 from .options import SHOW_OPTION, TOKEN_OPTION, VERBOSE_OPTION, _get_token
 
 agent_app: typer.Typer = typer.Typer(help="Manage agent information.")
@@ -26,5 +26,5 @@ def agent_info(
     )
     t = _get_token(token)
     if show:
-        agent_info = services.get_agent_info(t)
-        print(json.dumps(agent_info.model_dump(mode="json"), indent=2))
+        agent_info_data = agent.get_agent_info(t)
+        print(json.dumps(agent_info_data.model_dump(mode="json"), indent=2))

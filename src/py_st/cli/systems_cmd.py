@@ -8,7 +8,7 @@ import typer
 
 from py_st.cli._errors import handle_errors
 
-from .. import services
+from ..services import systems
 from .options import (
     SYSTEM_SYMBOL_ARG,
     TOKEN_OPTION,
@@ -37,7 +37,7 @@ def list_waypoints(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    waypoints = services.list_waypoints(t, system_symbol, traits)
+    waypoints = systems.list_waypoints(t, system_symbol, traits)
     waypoints_list = [w.model_dump(mode="json") for w in waypoints]
     print(json.dumps(waypoints_list, indent=2))
 
@@ -58,7 +58,7 @@ def list_waypoints_all(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    waypoints = services.list_waypoints_all(t, system_symbol, traits=traits)
+    waypoints = systems.list_waypoints_all(t, system_symbol, traits=traits)
     waypoints_list = [w.model_dump(mode="json") for w in waypoints]
     print(json.dumps(waypoints_list, indent=2))
 
@@ -79,7 +79,7 @@ def get_shipyard_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    shipyard = services.get_shipyard(t, system_symbol, waypoint_symbol)
+    shipyard = systems.get_shipyard(t, system_symbol, waypoint_symbol)
     print(json.dumps(shipyard.model_dump(mode="json"), indent=2))
 
 
@@ -99,7 +99,7 @@ def get_market_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    market = services.get_market(t, system_symbol, waypoint_symbol)
+    market = systems.get_market(t, system_symbol, waypoint_symbol)
     if market is None:
         print(json.dumps({"market": None}, indent=2))
     else:
@@ -124,7 +124,7 @@ def systems_list_goods_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    data = services.list_system_goods(t, system_symbol)
+    data = systems.list_system_goods(t, system_symbol)
 
     def _sym(obj: Any) -> str:
         s = getattr(obj, "symbol", obj)

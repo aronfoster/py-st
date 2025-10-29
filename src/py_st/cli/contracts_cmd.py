@@ -7,7 +7,7 @@ import typer
 
 from py_st.cli._errors import handle_errors
 
-from .. import services
+from ..services import contracts
 from .options import (
     CONTRACT_ID_ARG,
     DELIVER_TRADE_SYMBOL_ARG,
@@ -35,8 +35,8 @@ def list_contracts(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    contracts = services.list_contracts(t)
-    contracts_list = [c.model_dump(mode="json") for c in contracts]
+    contracts_list_data = contracts.list_contracts(t)
+    contracts_list = [c.model_dump(mode="json") for c in contracts_list_data]
     print(json.dumps(contracts_list, indent=2))
 
 
@@ -55,7 +55,7 @@ def negotiate_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    new_contract = services.negotiate_contract(t, ship_symbol)
+    new_contract = contracts.negotiate_contract(t, ship_symbol)
     print("🎉 New contract negotiated!")
     print(json.dumps(new_contract.model_dump(mode="json"), indent=2))
 
@@ -78,7 +78,7 @@ def deliver_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    contract, cargo = services.deliver_contract(
+    contract, cargo = contracts.deliver_contract(
         t, contract_id, ship_symbol, trade_symbol, units
     )
     print("📦 Cargo delivered!")
@@ -104,7 +104,7 @@ def fulfill_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    agent, contract = services.fulfill_contract(t, contract_id)
+    agent, contract = contracts.fulfill_contract(t, contract_id)
     print("🎉 Contract fulfilled!")
     output_data = {
         "agent": agent.model_dump(mode="json"),
@@ -128,7 +128,7 @@ def accept_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    agent, contract = services.accept_contract(t, contract_id)
+    agent, contract = contracts.accept_contract(t, contract_id)
     print(f"✅ Contract {contract_id} accepted!")
     output_data = {
         "agent": agent.model_dump(mode="json"),

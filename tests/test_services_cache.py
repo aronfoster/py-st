@@ -1,17 +1,17 @@
-"""Unit tests for the caching behavior of services.get_agent_info."""
+"""Unit tests for the caching behavior of agent.get_agent_info."""
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
-from py_st import services
 from py_st._generated.models import Agent
+from py_st.services import agent
 from tests.factories import AgentFactory
 
 
-@patch("py_st.services.SpaceTradersClient")
-@patch("py_st.services.cache.save_cache")
-@patch("py_st.services.cache.load_cache")
+@patch("py_st.services.agent.SpaceTradersClient")
+@patch("py_st.cache.save_cache")
+@patch("py_st.cache.load_cache")
 def test_get_agent_info_cache_hit(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
@@ -38,7 +38,7 @@ def test_get_agent_info_cache_hit(
     )
 
     # Call the function
-    result = services.get_agent_info("fake_token")
+    result = agent.get_agent_info("fake_token")
 
     # Assert the result is an Agent instance matching mock data
     assert isinstance(result, Agent)
@@ -53,9 +53,9 @@ def test_get_agent_info_cache_hit(
     assert mock_save_cache.call_count == 0
 
 
-@patch("py_st.services.SpaceTradersClient")
-@patch("py_st.services.cache.save_cache")
-@patch("py_st.services.cache.load_cache")
+@patch("py_st.services.agent.SpaceTradersClient")
+@patch("py_st.cache.save_cache")
+@patch("py_st.cache.load_cache")
 def test_get_agent_info_cache_miss_stale(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
@@ -88,7 +88,7 @@ def test_get_agent_info_cache_miss_stale(
     )
 
     # Call the function
-    result = services.get_agent_info("fake_token")
+    result = agent.get_agent_info("fake_token")
 
     # Assert the result matches the new agent object
     assert isinstance(result, Agent)
@@ -118,9 +118,9 @@ def test_get_agent_info_cache_miss_stale(
     assert saved_cache["agent_info"]["data"]["credits"] == 200
 
 
-@patch("py_st.services.SpaceTradersClient")
-@patch("py_st.services.cache.save_cache")
-@patch("py_st.services.cache.load_cache")
+@patch("py_st.services.agent.SpaceTradersClient")
+@patch("py_st.cache.save_cache")
+@patch("py_st.cache.load_cache")
 def test_get_agent_info_cache_miss_not_found(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
@@ -139,7 +139,7 @@ def test_get_agent_info_cache_miss_not_found(
     )
 
     # Call the function
-    result = services.get_agent_info("fake_token")
+    result = agent.get_agent_info("fake_token")
 
     # Assert the result matches the new agent object
     assert isinstance(result, Agent)
@@ -166,9 +166,9 @@ def test_get_agent_info_cache_miss_not_found(
     assert time_diff < timedelta(seconds=5), "Saved timestamp should be recent"
 
 
-@patch("py_st.services.SpaceTradersClient")
-@patch("py_st.services.cache.save_cache")
-@patch("py_st.services.cache.load_cache")
+@patch("py_st.services.agent.SpaceTradersClient")
+@patch("py_st.cache.save_cache")
+@patch("py_st.cache.load_cache")
 def test_get_agent_info_cache_invalid_timestamp(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
@@ -196,7 +196,7 @@ def test_get_agent_info_cache_invalid_timestamp(
     )
 
     # Call the function
-    result = services.get_agent_info("fake_token")
+    result = agent.get_agent_info("fake_token")
 
     # Assert API was called (invalid timestamp triggers cache miss)
     assert mock_client_class.return_value.agent.get_agent.call_count == 1
@@ -209,9 +209,9 @@ def test_get_agent_info_cache_invalid_timestamp(
     assert result.credits == 400
 
 
-@patch("py_st.services.SpaceTradersClient")
-@patch("py_st.services.cache.save_cache")
-@patch("py_st.services.cache.load_cache")
+@patch("py_st.services.agent.SpaceTradersClient")
+@patch("py_st.cache.save_cache")
+@patch("py_st.cache.load_cache")
 def test_get_agent_info_cache_invalid_data(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
@@ -240,7 +240,7 @@ def test_get_agent_info_cache_invalid_data(
     )
 
     # Call the function
-    result = services.get_agent_info("fake_token")
+    result = agent.get_agent_info("fake_token")
 
     # Assert API was called (invalid data triggers cache miss)
     assert mock_client_class.return_value.agent.get_agent.call_count == 1
