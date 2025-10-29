@@ -404,9 +404,16 @@ def test_get_shipyard(mock_client_class: Any) -> None:
     )
 
 
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_get_market(mock_client_class: Any) -> None:
-    """Test get_market returns a Market from the client."""
+def test_get_market_legacy(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test get_market returns a Market from the client (legacy test)."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
     # Create mock market
     market_data = MarketFactory.build_minimal(
         waypoint_symbol="X1-ABC-1",
@@ -438,6 +445,404 @@ def test_get_market(mock_client_class: Any) -> None:
     mock_client.systems.get_market.assert_called_once_with(
         "X1-ABC", "X1-ABC-1"
     )
+
+
+# ============================================================================
+# Smart Caching Tests for get_market
+# ============================================================================
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_market_cache_hit_no_refresh(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """
+    Test Case 1: Cache hit, no refresh.
+
+    Returns cached data without API call.
+    """
+    from py_st._generated.models import MarketTradeGood, SupplyLevel
+    from py_st._generated.models.MarketTradeGood import (
+        Type as MarketTradeGoodType,
+    )
+
+    # Setup: populate cache with market data (with tradeGoods)
+    trade_goods = [
+        MarketTradeGood(
+            symbol=TradeSymbol.IRON_ORE,
+            type=MarketTradeGoodType.EXPORT,
+            tradeVolume=100,
+            supply=SupplyLevel.ABUNDANT,
+            purchasePrice=50,
+            sellPrice=45,
+        )
+    ]
+
+    market_data = MarketFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        exports=[TradeSymbol.IRON_ORE],
+        imports=[TradeSymbol.FUEL],
+        exchange=[TradeSymbol.FOOD],
+    )
+    market_dict = Market.model_validate(market_data).model_dump(mode="json")
+    market_dict["tradeGoods"] = [
+        tg.model_dump(mode="json") for tg in trade_goods
+    ]
+
+    cached_data = {
+        "market_X1-ABC-1": {
+            "prices_updated": "2025-10-29T12:00:00+00:00",
+            "data": market_dict,
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Configure mock client (should NOT be called)
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+
+    # Call the function without force_refresh
+    result = systems.get_market("fake_token", "X1-ABC", "X1-ABC-1")
+
+    # Assertions: API was NOT called
+    mock_client.systems.get_market.assert_not_called()
+
+    # Assert: result matches cached data
+    assert isinstance(result, Market)
+    assert result.symbol == "X1-ABC-1"
+    assert result.tradeGoods is not None
+    assert len(result.tradeGoods) == 1
+    assert result.tradeGoods[0].symbol == TradeSymbol.IRON_ORE
+
+    # Assert: save_cache was NOT called
+    mock_save_cache.assert_not_called()
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_market_cache_miss_with_prices(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test Case 2a: Cache miss, API returns with prices."""
+    from py_st._generated.models import MarketTradeGood, SupplyLevel
+    from py_st._generated.models.MarketTradeGood import (
+        Type as MarketTradeGoodType,
+    )
+
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create mock market with tradeGoods
+    trade_goods = [
+        MarketTradeGood(
+            symbol=TradeSymbol.IRON_ORE,
+            type=MarketTradeGoodType.EXPORT,
+            tradeVolume=100,
+            supply=SupplyLevel.ABUNDANT,
+            purchasePrice=50,
+            sellPrice=45,
+        )
+    ]
+
+    market_data = MarketFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        exports=[TradeSymbol.IRON_ORE],
+        imports=[TradeSymbol.FUEL],
+        exchange=[TradeSymbol.FOOD],
+    )
+    market = Market.model_validate(market_data)
+    market.tradeGoods = trade_goods
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.get_market.return_value = market
+
+    # Call the function
+    result = systems.get_market("fake_token", "X1-ABC", "X1-ABC-1")
+
+    # Assertions: API was called
+    mock_client.systems.get_market.assert_called_once_with(
+        "X1-ABC", "X1-ABC-1"
+    )
+
+    # Assert: result matches API response
+    assert isinstance(result, Market)
+    assert result.symbol == "X1-ABC-1"
+    assert result.tradeGoods is not None
+    assert len(result.tradeGoods) == 1
+
+    # Assert: save_cache was called with new data and new timestamp
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    assert "market_X1-ABC-1" in saved_cache
+    cache_entry = saved_cache["market_X1-ABC-1"]
+    assert "prices_updated" in cache_entry
+    assert cache_entry["prices_updated"] is not None
+    assert "data" in cache_entry
+    assert cache_entry["data"]["tradeGoods"] is not None
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_market_cache_miss_without_prices(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test Case 2b: Cache miss, API returns without prices."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create mock market WITHOUT tradeGoods
+    market_data = MarketFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        exports=[TradeSymbol.IRON_ORE],
+        imports=[TradeSymbol.FUEL],
+        exchange=[TradeSymbol.FOOD],
+    )
+    market = Market.model_validate(market_data)
+    # tradeGoods is already None from factory
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.get_market.return_value = market
+
+    # Call the function
+    result = systems.get_market("fake_token", "X1-ABC", "X1-ABC-1")
+
+    # Assertions: API was called
+    mock_client.systems.get_market.assert_called_once_with(
+        "X1-ABC", "X1-ABC-1"
+    )
+
+    # Assert: result matches API response
+    assert isinstance(result, Market)
+    assert result.symbol == "X1-ABC-1"
+    assert result.tradeGoods is None
+
+    # Assert: save_cache was called with new data and None timestamp
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    assert "market_X1-ABC-1" in saved_cache
+    cache_entry = saved_cache["market_X1-ABC-1"]
+    assert "prices_updated" in cache_entry
+    assert cache_entry["prices_updated"] is None
+    assert "data" in cache_entry
+    assert cache_entry["data"]["tradeGoods"] is None
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_market_force_refresh_with_prices(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test Case 3: Cache hit, force_refresh=True, API returns with prices."""
+    from py_st._generated.models import MarketTradeGood, SupplyLevel
+    from py_st._generated.models.MarketTradeGood import (
+        Type as MarketTradeGoodType,
+    )
+
+    # Setup: populate cache with old market data
+    old_trade_goods = [
+        MarketTradeGood(
+            symbol=TradeSymbol.IRON_ORE,
+            type=MarketTradeGoodType.EXPORT,
+            tradeVolume=100,
+            supply=SupplyLevel.ABUNDANT,
+            purchasePrice=50,
+            sellPrice=45,
+        )
+    ]
+
+    old_market_data = MarketFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        exports=[TradeSymbol.IRON_ORE],
+        imports=[TradeSymbol.FUEL],
+        exchange=[TradeSymbol.FOOD],
+    )
+    old_market_dict = Market.model_validate(old_market_data).model_dump(
+        mode="json"
+    )
+    old_market_dict["tradeGoods"] = [
+        tg.model_dump(mode="json") for tg in old_trade_goods
+    ]
+
+    cached_data = {
+        "market_X1-ABC-1": {
+            "prices_updated": "2025-10-29T10:00:00+00:00",
+            "data": old_market_dict,
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Create new mock market with DIFFERENT tradeGoods
+    new_trade_goods = [
+        MarketTradeGood(
+            symbol=TradeSymbol.IRON_ORE,
+            type=MarketTradeGoodType.EXPORT,
+            tradeVolume=100,
+            supply=SupplyLevel.MODERATE,
+            purchasePrice=60,  # Different price
+            sellPrice=55,  # Different price
+        )
+    ]
+
+    new_market_data = MarketFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        exports=[TradeSymbol.IRON_ORE],
+        imports=[TradeSymbol.FUEL],
+        exchange=[TradeSymbol.FOOD],
+    )
+    new_market = Market.model_validate(new_market_data)
+    new_market.tradeGoods = new_trade_goods
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.get_market.return_value = new_market
+
+    # Call the function with force_refresh=True
+    result = systems.get_market(
+        "fake_token", "X1-ABC", "X1-ABC-1", force_refresh=True
+    )
+
+    # Assertions: API WAS called despite cache hit
+    mock_client.systems.get_market.assert_called_once_with(
+        "X1-ABC", "X1-ABC-1"
+    )
+
+    # Assert: result matches new API response
+    assert isinstance(result, Market)
+    assert result.symbol == "X1-ABC-1"
+    assert result.tradeGoods is not None
+    assert len(result.tradeGoods) == 1
+    assert result.tradeGoods[0].purchasePrice == 60  # New price
+
+    # Assert: save_cache was called with new data and new timestamp
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    cache_entry = saved_cache["market_X1-ABC-1"]
+    assert cache_entry["prices_updated"] is not None
+    assert cache_entry["data"]["tradeGoods"] is not None
+    assert cache_entry["data"]["tradeGoods"][0]["purchasePrice"] == 60
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_market_force_refresh_without_prices_preserves_old_prices(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """
+    Test Case 4 (CRITICAL): force_refresh=True, no prices from API.
+
+    When API returns without prices, preserves old prices.
+    """
+    from py_st._generated.models import MarketTradeGood, SupplyLevel
+    from py_st._generated.models.MarketTradeGood import (
+        Type as MarketTradeGoodType,
+    )
+
+    # Setup: populate cache with old market data WITH tradeGoods
+    old_trade_goods = [
+        MarketTradeGood(
+            symbol=TradeSymbol.IRON_ORE,
+            type=MarketTradeGoodType.EXPORT,
+            tradeVolume=100,
+            supply=SupplyLevel.ABUNDANT,
+            purchasePrice=50,
+            sellPrice=45,
+        )
+    ]
+
+    old_market_data = MarketFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        exports=[TradeSymbol.IRON_ORE],
+        imports=[TradeSymbol.FUEL],
+        exchange=[TradeSymbol.FOOD],
+    )
+    old_market_dict = Market.model_validate(old_market_data).model_dump(
+        mode="json"
+    )
+    old_market_dict["tradeGoods"] = [
+        tg.model_dump(mode="json") for tg in old_trade_goods
+    ]
+
+    old_timestamp = "2025-10-29T10:00:00+00:00"
+    cached_data = {
+        "market_X1-ABC-1": {
+            "prices_updated": old_timestamp,
+            "data": old_market_dict,
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Create new mock market WITHOUT tradeGoods but with UPDATED static fields
+    new_market_data = MarketFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        exports=[TradeSymbol.COPPER_ORE],  # Different exports
+        imports=[TradeSymbol.AMMUNITION],  # Different imports
+        exchange=[TradeSymbol.FOOD],
+    )
+    new_market = Market.model_validate(new_market_data)
+    # tradeGoods is None
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.get_market.return_value = new_market
+
+    # Call the function with force_refresh=True
+    result = systems.get_market(
+        "fake_token", "X1-ABC", "X1-ABC-1", force_refresh=True
+    )
+
+    # Assertions: API WAS called
+    mock_client.systems.get_market.assert_called_once_with(
+        "X1-ABC", "X1-ABC-1"
+    )
+
+    # Assert: result has OLD tradeGoods (preserved) but NEW static fields
+    assert isinstance(result, Market)
+    assert result.symbol == "X1-ABC-1"
+
+    # OLD prices preserved
+    assert result.tradeGoods is not None
+    assert len(result.tradeGoods) == 1
+    assert result.tradeGoods[0].symbol == TradeSymbol.IRON_ORE
+    assert result.tradeGoods[0].purchasePrice == 50
+    assert result.tradeGoods[0].sellPrice == 45
+
+    # NEW static fields updated
+    assert len(result.exports) == 1
+    assert result.exports[0].symbol == TradeSymbol.COPPER_ORE
+    assert len(result.imports) == 1
+    assert result.imports[0].symbol == TradeSymbol.AMMUNITION
+
+    # Assert: save_cache was called
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    cache_entry = saved_cache["market_X1-ABC-1"]
+
+    # Verify OLD timestamp preserved
+    assert cache_entry["prices_updated"] == old_timestamp
+
+    # Verify saved data has OLD prices
+    assert cache_entry["data"]["tradeGoods"] is not None
+    assert len(cache_entry["data"]["tradeGoods"]) == 1
+    assert cache_entry["data"]["tradeGoods"][0]["symbol"] == "IRON_ORE"
+    assert cache_entry["data"]["tradeGoods"][0]["purchasePrice"] == 50
+
+    # Verify saved data has NEW static fields
+    assert len(cache_entry["data"]["exports"]) == 1
+    assert cache_entry["data"]["exports"][0]["symbol"] == "COPPER_ORE"
+    assert len(cache_entry["data"]["imports"]) == 1
+    assert cache_entry["data"]["imports"][0]["symbol"] == "AMMUNITION"
 
 
 @patch("py_st.services.systems.SpaceTradersClient")
