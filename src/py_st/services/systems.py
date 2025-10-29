@@ -63,69 +63,22 @@ def _uniq_by_symbol(goods: list[TradeGood] | None) -> list[TradeGood]:
     return out
 
 
-def list_waypoints(
-    token: str, system_symbol: str, traits: list[str] | None
+def _fetch_and_cache_waypoints(
+    token: str, system_symbol: str
 ) -> list[Waypoint]:
     """
-    Lists waypoints in a system, optionally filtered by traits.
+    Internal function to fetch and cache all waypoints for a system.
 
-    Retrieves all waypoints via list_waypoints_all (which uses caching)
-    and performs client-side AND filtering if traits are specified.
-    Only waypoints possessing all specified traits are returned.
+    This function handles the API communication and file-based caching logic.
+    Waypoint data is cached per system and remains valid until manually
+    cleared, as waypoints are generally static between weekly server resets.
 
     Args:
         token: API authentication token
         system_symbol: The system symbol (e.g., "X1-ABC")
-        traits: Optional list of trait symbols to filter by (AND logic)
 
     Returns:
-        List of Waypoint models, filtered if traits are specified
-    """
-    all_waypoints = list_waypoints_all(token, system_symbol)
-
-    # If no traits specified, return all waypoints
-    if not traits:
-        return all_waypoints
-
-    # Create set of requested traits for efficient lookup
-    requested_traits = set(traits)
-
-    # Filter waypoints - keep only those with ALL requested traits
-    filtered_waypoints = []
-    for waypoint in all_waypoints:
-        # Extract trait symbols from waypoint
-        waypoint_trait_symbols = {
-            trait.symbol.value for trait in waypoint.traits
-        }
-
-        # Check if waypoint has all requested traits (superset)
-        if waypoint_trait_symbols.issuperset(requested_traits):
-            filtered_waypoints.append(waypoint)
-
-    return filtered_waypoints
-
-
-def list_waypoints_all(
-    token: str, system_symbol: str, traits: list[str] | None = None
-) -> list[Waypoint]:
-    """
-    Fetches all waypoints in a system, using file-based caching to
-    reduce API calls.
-
-    Waypoint data is cached per system and remains valid until
-    manually cleared, as waypoints are generally static between
-    weekly server resets.
-
-    The traits parameter is kept for backward compatibility with existing CLI
-    commands but may be removed in future refactoring.
-
-    Args:
-        token: API authentication token
-        system_symbol: The system symbol (e.g., "X1-ABC")
-        traits: Optional list of trait filters (currently unused)
-
-    Returns:
-        List of Waypoint models for the system
+        List of all Waypoint models for the system
     """
     # Define cache key for this system
     cache_key = f"waypoints_{system_symbol}"
@@ -193,6 +146,48 @@ def list_waypoints_all(
     )
 
     return waypoints
+
+
+def list_waypoints(
+    token: str, system_symbol: str, traits: list[str] | None
+) -> list[Waypoint]:
+    """
+    Lists waypoints in a system, optionally filtered by traits.
+
+    Fetches all waypoints using file-based caching and performs client-side
+    AND filtering if traits are specified. Only waypoints possessing all
+    specified traits are returned.
+
+    Args:
+        token: API authentication token
+        system_symbol: The system symbol (e.g., "X1-ABC")
+        traits: Optional list of trait symbols to filter by (AND logic)
+
+    Returns:
+        List of Waypoint models, filtered if traits are specified
+    """
+    all_waypoints = _fetch_and_cache_waypoints(token, system_symbol)
+
+    # If no traits specified, return all waypoints
+    if not traits:
+        return all_waypoints
+
+    # Create set of requested traits for efficient lookup
+    requested_traits = set(traits)
+
+    # Filter waypoints - keep only those with ALL requested traits
+    filtered_waypoints = []
+    for waypoint in all_waypoints:
+        # Extract trait symbols from waypoint
+        waypoint_trait_symbols = {
+            trait.symbol.value for trait in waypoint.traits
+        }
+
+        # Check if waypoint has all requested traits (superset)
+        if waypoint_trait_symbols.issuperset(requested_traits):
+            filtered_waypoints.append(waypoint)
+
+    return filtered_waypoints
 
 
 def get_shipyard(

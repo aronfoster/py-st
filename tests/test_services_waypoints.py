@@ -21,7 +21,7 @@ from tests.factories import MarketFactory, ShipyardFactory, WaypointFactory
 def test_list_waypoints_basic(
     mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
 ) -> None:
-    """Test list_waypoints returns waypoints via list_waypoints_all."""
+    """Test list_waypoints returns waypoints via internal fetch function."""
     # Setup: empty cache (cache miss)
     mock_load_cache.return_value = {}
 
@@ -50,7 +50,7 @@ def test_list_waypoints_basic(
     assert result[0].symbol.root == "X1-ABC-1"
     assert result[1].symbol.root == "X1-ABC-2"
 
-    # Verify client was called correctly (via list_waypoints_all)
+    # Verify client was called correctly (via _fetch_and_cache_waypoints)
     mock_client.systems.list_waypoints_all.assert_called_once_with(
         "X1-ABC", traits=None
     )
@@ -683,14 +683,14 @@ def test_list_system_goods_sorts_goods(mock_client_class: Any) -> None:
 
 
 # ============================================================================
-# Caching Tests for list_waypoints_all
+# Caching Tests for _fetch_and_cache_waypoints
 # ============================================================================
 
 
 @patch("py_st.services.systems.save_cache")
 @patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_list_waypoints_all_cache_miss(
+def test_fetch_and_cache_waypoints_cache_miss(
     mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
 ) -> None:
     """Test that cache miss causes API call and saves data to cache."""
@@ -714,7 +714,7 @@ def test_list_waypoints_all_cache_miss(
     ]
 
     # Call the function
-    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+    result = systems._fetch_and_cache_waypoints("fake_token", "X1-ABC")
 
     # Assertions: API was called
     mock_client.systems.list_waypoints_all.assert_called_once_with(
@@ -740,7 +740,7 @@ def test_list_waypoints_all_cache_miss(
 @patch("py_st.services.systems.save_cache")
 @patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_list_waypoints_all_cache_hit(
+def test_fetch_and_cache_waypoints_cache_hit(
     mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
 ) -> None:
     """Test that cache hit returns data without calling API."""
@@ -761,7 +761,7 @@ def test_list_waypoints_all_cache_hit(
     mock_client_class.return_value = mock_client
 
     # Call the function
-    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+    result = systems._fetch_and_cache_waypoints("fake_token", "X1-ABC")
 
     # Assertions: API was NOT called
     mock_client.systems.list_waypoints_all.assert_not_called()
@@ -780,7 +780,7 @@ def test_list_waypoints_all_cache_hit(
 @patch("py_st.services.systems.save_cache")
 @patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_list_waypoints_all_invalid_cache_entry_missing_keys(
+def test_fetch_and_cache_waypoints_invalid_cache_entry_missing_keys(
     mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
 ) -> None:
     """Test that invalid cache entry (missing keys) triggers API call."""
@@ -804,7 +804,7 @@ def test_list_waypoints_all_invalid_cache_entry_missing_keys(
     mock_client.systems.list_waypoints_all.return_value = [waypoint]
 
     # Call the function
-    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+    result = systems._fetch_and_cache_waypoints("fake_token", "X1-ABC")
 
     # Assertions: API was called due to invalid cache
     mock_client.systems.list_waypoints_all.assert_called_once_with(
@@ -822,7 +822,7 @@ def test_list_waypoints_all_invalid_cache_entry_missing_keys(
 @patch("py_st.services.systems.save_cache")
 @patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_list_waypoints_all_invalid_cache_entry_bad_data(
+def test_fetch_and_cache_waypoints_invalid_cache_entry_bad_data(
     mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
 ) -> None:
     """Test that invalid cache data (failed validation) triggers API call."""
@@ -848,7 +848,7 @@ def test_list_waypoints_all_invalid_cache_entry_bad_data(
     mock_client.systems.list_waypoints_all.return_value = [waypoint]
 
     # Call the function
-    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+    result = systems._fetch_and_cache_waypoints("fake_token", "X1-ABC")
 
     # Assertions: API was called due to validation failure
     mock_client.systems.list_waypoints_all.assert_called_once_with(
@@ -866,7 +866,7 @@ def test_list_waypoints_all_invalid_cache_entry_bad_data(
 @patch("py_st.services.systems.save_cache")
 @patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_list_waypoints_all_cache_entry_not_dict(
+def test_fetch_and_cache_waypoints_cache_entry_not_dict(
     mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
 ) -> None:
     """Test that cache entry that's not a dict triggers API call."""
@@ -887,7 +887,7 @@ def test_list_waypoints_all_cache_entry_not_dict(
     mock_client.systems.list_waypoints_all.return_value = [waypoint]
 
     # Call the function
-    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+    result = systems._fetch_and_cache_waypoints("fake_token", "X1-ABC")
 
     # Assertions: API was called due to invalid cache structure
     mock_client.systems.list_waypoints_all.assert_called_once_with(
@@ -905,7 +905,7 @@ def test_list_waypoints_all_cache_entry_not_dict(
 @patch("py_st.services.systems.save_cache")
 @patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_list_waypoints_all_cache_data_not_list(
+def test_fetch_and_cache_waypoints_cache_data_not_list(
     mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
 ) -> None:
     """Test that cache entry with non-list data triggers API call."""
@@ -929,7 +929,7 @@ def test_list_waypoints_all_cache_data_not_list(
     mock_client.systems.list_waypoints_all.return_value = [waypoint]
 
     # Call the function
-    result = systems.list_waypoints_all("fake_token", "X1-ABC")
+    result = systems._fetch_and_cache_waypoints("fake_token", "X1-ABC")
 
     # Assertions: API was called due to invalid data type
     mock_client.systems.list_waypoints_all.assert_called_once_with(
