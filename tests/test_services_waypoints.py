@@ -7,89 +7,12 @@ from py_st import services
 from py_st._generated.models import (
     Market,
     Shipyard,
-    TradeGood,
     TradeSymbol,
     Waypoint,
-    WaypointSymbol,
-    WaypointTrait,
     WaypointTraitSymbol,
-    WaypointType,
 )
-from py_st._generated.models.ShipType import ShipType as ShipTypeEnum
-from py_st._generated.models.Shipyard import ShipType
 from py_st.services import MarketGoods, SystemGoods
-from tests.factories import WaypointFactory
-
-
-def create_waypoint(
-    symbol: str,
-    system_symbol: str = "X1-ABC",
-    traits: list[WaypointTraitSymbol] | None = None,
-) -> Waypoint:
-    """Helper to create a Waypoint with specified traits."""
-    trait_list = []
-    if traits:
-        for trait_symbol in traits:
-            trait_list.append(
-                WaypointTrait(
-                    symbol=trait_symbol,
-                    name=trait_symbol.value,
-                    description=f"A waypoint with {trait_symbol.value}",
-                )
-            )
-
-    return Waypoint(
-        symbol=WaypointSymbol(symbol),
-        type=WaypointType.PLANET,
-        systemSymbol=system_symbol,
-        x=0,
-        y=0,
-        orbitals=[],
-        orbits=None,
-        traits=trait_list,
-        modifiers=None,
-        isUnderConstruction=False,
-    )
-
-
-def create_trade_good(symbol: TradeSymbol) -> TradeGood:
-    """Helper to create a TradeGood."""
-    return TradeGood(
-        symbol=symbol,
-        name=symbol.value,
-        description=f"A trade good: {symbol.value}",
-    )
-
-
-def create_market(
-    waypoint_symbol: str,
-    exports: list[TradeSymbol] | None = None,
-    imports: list[TradeSymbol] | None = None,
-    exchange: list[TradeSymbol] | None = None,
-) -> Market:
-    """Helper to create a Market."""
-    return Market(
-        symbol=waypoint_symbol,
-        exports=[create_trade_good(s) for s in (exports or [])],
-        imports=[create_trade_good(s) for s in (imports or [])],
-        exchange=[create_trade_good(s) for s in (exchange or [])],
-        transactions=None,
-        tradeGoods=None,
-    )
-
-
-def create_shipyard(waypoint_symbol: str) -> Shipyard:
-    """Helper to create a Shipyard."""
-    return Shipyard(
-        symbol=waypoint_symbol,
-        shipTypes=[
-            ShipType(type=ShipTypeEnum.SHIP_PROBE),
-            ShipType(type=ShipTypeEnum.SHIP_MINING_DRONE),
-        ],
-        transactions=None,
-        ships=None,
-        modificationsFee=1000,
-    )
+from tests.factories import MarketFactory, ShipyardFactory, WaypointFactory
 
 
 @patch("py_st.services.SpaceTradersClient")
@@ -97,8 +20,7 @@ def test_list_waypoints_basic(mock_client_class: Any) -> None:
     """Test list_waypoints returns waypoints from the client."""
     # Create mock waypoints
     waypoint1_data = WaypointFactory.build_minimal()
-    waypoint2_data = WaypointFactory.build_minimal()
-    waypoint2_data["symbol"] = "X1-ABC-2"
+    waypoint2_data = WaypointFactory.build_minimal(symbol="X1-ABC-2")
 
     waypoint1 = Waypoint.model_validate(waypoint1_data)
     waypoint2 = Waypoint.model_validate(waypoint2_data)
@@ -131,9 +53,10 @@ def test_list_waypoints_basic(mock_client_class: Any) -> None:
 def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
     """Test list_waypoints correctly passes traits parameter."""
     # Create a waypoint with MARKETPLACE trait
-    waypoint = create_waypoint(
-        "X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
+    waypoint_data = WaypointFactory.build_minimal(
+        traits=[WaypointTraitSymbol.MARKETPLACE]
     )
+    waypoint = Waypoint.model_validate(waypoint_data)
 
     # Configure mock client
     mock_client = MagicMock()
@@ -159,9 +82,15 @@ def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
 def test_list_waypoints_all_basic(mock_client_class: Any) -> None:
     """Test list_waypoints_all returns all waypoints from the client."""
     # Create mock waypoints
-    waypoint1 = create_waypoint("X1-ABC-1")
-    waypoint2 = create_waypoint("X1-ABC-2")
-    waypoint3 = create_waypoint("X1-ABC-3")
+    waypoint1 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(symbol="X1-ABC-1")
+    )
+    waypoint2 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(symbol="X1-ABC-2")
+    )
+    waypoint3 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(symbol="X1-ABC-3")
+    )
 
     # Configure mock client
     mock_client = MagicMock()
@@ -190,11 +119,15 @@ def test_list_waypoints_all_basic(mock_client_class: Any) -> None:
 def test_list_waypoints_all_with_traits(mock_client_class: Any) -> None:
     """Test list_waypoints_all correctly passes traits parameter."""
     # Create waypoints
-    waypoint1 = create_waypoint(
-        "X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
+    waypoint1 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(
+            symbol="X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
+        )
     )
-    waypoint2 = create_waypoint(
-        "X1-ABC-2", traits=[WaypointTraitSymbol.SHIPYARD]
+    waypoint2 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(
+            symbol="X1-ABC-2", traits=[WaypointTraitSymbol.SHIPYARD]
+        )
     )
 
     # Configure mock client
@@ -223,7 +156,8 @@ def test_list_waypoints_all_with_traits(mock_client_class: Any) -> None:
 def test_get_shipyard(mock_client_class: Any) -> None:
     """Test get_shipyard returns a Shipyard from the client."""
     # Create mock shipyard
-    shipyard = create_shipyard("X1-ABC-1")
+    shipyard_data = ShipyardFactory.build_minimal(waypoint_symbol="X1-ABC-1")
+    shipyard = Shipyard.model_validate(shipyard_data)
 
     # Configure mock client
     mock_client = MagicMock()
@@ -249,12 +183,13 @@ def test_get_shipyard(mock_client_class: Any) -> None:
 def test_get_market(mock_client_class: Any) -> None:
     """Test get_market returns a Market from the client."""
     # Create mock market
-    market = create_market(
-        "X1-ABC-1",
+    market_data = MarketFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
         exports=[TradeSymbol.IRON_ORE],
         imports=[TradeSymbol.FUEL],
         exchange=[TradeSymbol.FOOD],
     )
+    market = Market.model_validate(market_data)
 
     # Configure mock client
     mock_client = MagicMock()
@@ -284,28 +219,38 @@ def test_get_market(mock_client_class: Any) -> None:
 def test_list_system_goods_basic(mock_client_class: Any) -> None:
     """Test list_system_goods aggregates goods from multiple markets."""
     # Create waypoints - one with marketplace, one without
-    waypoint1 = create_waypoint(
-        "X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
+    waypoint1 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(
+            symbol="X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
+        )
     )
-    waypoint2 = create_waypoint(
-        "X1-ABC-2", traits=[WaypointTraitSymbol.OUTPOST]
+    waypoint2 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(
+            symbol="X1-ABC-2", traits=[WaypointTraitSymbol.OUTPOST]
+        )
     )
-    waypoint3 = create_waypoint(
-        "X1-ABC-3", traits=[WaypointTraitSymbol.MARKETPLACE]
+    waypoint3 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(
+            symbol="X1-ABC-3", traits=[WaypointTraitSymbol.MARKETPLACE]
+        )
     )
 
     # Create markets
-    market1 = create_market(
-        "X1-ABC-1",
-        exports=[TradeSymbol.IRON_ORE],
-        imports=[TradeSymbol.FUEL],
-        exchange=[TradeSymbol.FOOD],
+    market1 = Market.model_validate(
+        MarketFactory.build_minimal(
+            waypoint_symbol="X1-ABC-1",
+            exports=[TradeSymbol.IRON_ORE],
+            imports=[TradeSymbol.FUEL],
+            exchange=[TradeSymbol.FOOD],
+        )
     )
-    market3 = create_market(
-        "X1-ABC-3",
-        exports=[TradeSymbol.COPPER_ORE],
-        imports=[TradeSymbol.IRON_ORE],
-        exchange=[TradeSymbol.FOOD],
+    market3 = Market.model_validate(
+        MarketFactory.build_minimal(
+            waypoint_symbol="X1-ABC-3",
+            exports=[TradeSymbol.COPPER_ORE],
+            imports=[TradeSymbol.IRON_ORE],
+            exchange=[TradeSymbol.FOOD],
+        )
     )
 
     # Configure mock client
@@ -394,11 +339,15 @@ def test_list_system_goods_basic(mock_client_class: Any) -> None:
 def test_list_system_goods_no_marketplaces(mock_client_class: Any) -> None:
     """Test list_system_goods handles systems with no marketplaces."""
     # Create waypoints without marketplaces
-    waypoint1 = create_waypoint(
-        "X1-ABC-1", traits=[WaypointTraitSymbol.OUTPOST]
+    waypoint1 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(
+            symbol="X1-ABC-1", traits=[WaypointTraitSymbol.OUTPOST]
+        )
     )
-    waypoint2 = create_waypoint(
-        "X1-ABC-2", traits=[WaypointTraitSymbol.SHIPYARD]
+    waypoint2 = Waypoint.model_validate(
+        WaypointFactory.build_minimal(
+            symbol="X1-ABC-2", traits=[WaypointTraitSymbol.SHIPYARD]
+        )
     )
 
     # Configure mock client
@@ -425,17 +374,21 @@ def test_list_system_goods_no_marketplaces(mock_client_class: Any) -> None:
 def test_list_system_goods_deduplicates_goods(mock_client_class: Any) -> None:
     """Test list_system_goods deduplicates goods in sells/buys lists."""
     # Create waypoint with marketplace
-    waypoint = create_waypoint(
-        "X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
+    waypoint = Waypoint.model_validate(
+        WaypointFactory.build_minimal(
+            symbol="X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
+        )
     )
 
     # Create market where FOOD appears in both exports and exchange
     # This should only appear once in the sells list
-    market = create_market(
-        "X1-ABC-1",
-        exports=[TradeSymbol.FOOD, TradeSymbol.IRON_ORE],
-        imports=[TradeSymbol.FUEL],
-        exchange=[TradeSymbol.FOOD],  # FOOD appears again
+    market = Market.model_validate(
+        MarketFactory.build_minimal(
+            waypoint_symbol="X1-ABC-1",
+            exports=[TradeSymbol.FOOD, TradeSymbol.IRON_ORE],
+            imports=[TradeSymbol.FUEL],
+            exchange=[TradeSymbol.FOOD],  # FOOD appears again
+        )
     )
 
     # Configure mock client
@@ -463,20 +416,24 @@ def test_list_system_goods_deduplicates_goods(mock_client_class: Any) -> None:
 def test_list_system_goods_sorts_goods(mock_client_class: Any) -> None:
     """Test list_system_goods returns sorted lists of goods."""
     # Create waypoint with marketplace
-    waypoint = create_waypoint(
-        "X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
+    waypoint = Waypoint.model_validate(
+        WaypointFactory.build_minimal(
+            symbol="X1-ABC-1", traits=[WaypointTraitSymbol.MARKETPLACE]
+        )
     )
 
     # Create market with multiple goods
-    market = create_market(
-        "X1-ABC-1",
-        exports=[
-            TradeSymbol.IRON_ORE,
-            TradeSymbol.COPPER_ORE,
-            TradeSymbol.FUEL,
-        ],
-        imports=[TradeSymbol.FOOD, TradeSymbol.AMMUNITION],
-        exchange=[],
+    market = Market.model_validate(
+        MarketFactory.build_minimal(
+            waypoint_symbol="X1-ABC-1",
+            exports=[
+                TradeSymbol.IRON_ORE,
+                TradeSymbol.COPPER_ORE,
+                TradeSymbol.FUEL,
+            ],
+            imports=[TradeSymbol.FOOD, TradeSymbol.AMMUNITION],
+            exchange=[],
+        )
     )
 
     # Configure mock client
