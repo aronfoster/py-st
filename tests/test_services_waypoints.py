@@ -1,9 +1,8 @@
-"""Unit tests for waypoint-related functions in services.py."""
+"""Unit tests for waypoint-related functions in systems.py."""
 
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from py_st import services
 from py_st._generated.models import (
     Market,
     Shipyard,
@@ -11,11 +10,12 @@ from py_st._generated.models import (
     Waypoint,
     WaypointTraitSymbol,
 )
-from py_st.services import MarketGoods, SystemGoods
+from py_st.services import systems
+from py_st.services.systems import MarketGoods, SystemGoods
 from tests.factories import MarketFactory, ShipyardFactory, WaypointFactory
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_basic(mock_client_class: Any) -> None:
     """Test list_waypoints returns waypoints from the client."""
     # Create mock waypoints
@@ -34,7 +34,7 @@ def test_list_waypoints_basic(mock_client_class: Any) -> None:
     ]
 
     # Call the function
-    result = services.list_waypoints("fake_token", "X1-ABC", None)
+    result = systems.list_waypoints("fake_token", "X1-ABC", None)
 
     # Assertions
     assert isinstance(result, list)
@@ -49,7 +49,7 @@ def test_list_waypoints_basic(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
     """Test list_waypoints correctly passes traits parameter."""
     # Create a waypoint with MARKETPLACE trait
@@ -65,7 +65,7 @@ def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
 
     # Call the function with traits filter
     traits_filter = ["MARKETPLACE", "SHIPYARD"]
-    result = services.list_waypoints("fake_token", "X1-ABC", traits_filter)
+    result = systems.list_waypoints("fake_token", "X1-ABC", traits_filter)
 
     # Assertions
     assert isinstance(result, list)
@@ -78,7 +78,7 @@ def test_list_waypoints_with_traits(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_all_basic(mock_client_class: Any) -> None:
     """Test list_waypoints_all returns all waypoints from the client."""
     # Create mock waypoints
@@ -102,7 +102,7 @@ def test_list_waypoints_all_basic(mock_client_class: Any) -> None:
     ]
 
     # Call the function
-    result = services.list_waypoints_all("fake_token", "X1-ABC")
+    result = systems.list_waypoints_all("fake_token", "X1-ABC")
 
     # Assertions
     assert isinstance(result, list)
@@ -115,7 +115,7 @@ def test_list_waypoints_all_basic(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_waypoints_all_with_traits(mock_client_class: Any) -> None:
     """Test list_waypoints_all correctly passes traits parameter."""
     # Create waypoints
@@ -140,7 +140,7 @@ def test_list_waypoints_all_with_traits(mock_client_class: Any) -> None:
 
     # Call the function with traits
     traits_filter = ["MARKETPLACE", "SHIPYARD"]
-    result = services.list_waypoints_all("fake_token", "X1-ABC", traits_filter)
+    result = systems.list_waypoints_all("fake_token", "X1-ABC", traits_filter)
 
     # Assertions
     assert isinstance(result, list)
@@ -152,7 +152,7 @@ def test_list_waypoints_all_with_traits(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_get_shipyard(mock_client_class: Any) -> None:
     """Test get_shipyard returns a Shipyard from the client."""
     # Create mock shipyard
@@ -165,7 +165,7 @@ def test_get_shipyard(mock_client_class: Any) -> None:
     mock_client.systems.get_shipyard.return_value = shipyard
 
     # Call the function
-    result = services.get_shipyard("fake_token", "X1-ABC", "X1-ABC-1")
+    result = systems.get_shipyard("fake_token", "X1-ABC", "X1-ABC-1")
 
     # Assertions
     assert isinstance(result, Shipyard)
@@ -179,7 +179,7 @@ def test_get_shipyard(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_get_market(mock_client_class: Any) -> None:
     """Test get_market returns a Market from the client."""
     # Create mock market
@@ -197,7 +197,7 @@ def test_get_market(mock_client_class: Any) -> None:
     mock_client.systems.get_market.return_value = market
 
     # Call the function
-    result = services.get_market("fake_token", "X1-ABC", "X1-ABC-1")
+    result = systems.get_market("fake_token", "X1-ABC", "X1-ABC-1")
 
     # Assertions
     assert isinstance(result, Market)
@@ -215,7 +215,7 @@ def test_get_market(mock_client_class: Any) -> None:
     )
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_system_goods_basic(mock_client_class: Any) -> None:
     """Test list_system_goods aggregates goods from multiple markets."""
     # Create waypoints - one with marketplace, one without
@@ -273,7 +273,7 @@ def test_list_system_goods_basic(mock_client_class: Any) -> None:
     mock_client.systems.get_market.side_effect = get_market_side_effect
 
     # Call the function
-    result = services.list_system_goods("fake_token", "X1-ABC")
+    result = systems.list_system_goods("fake_token", "X1-ABC")
 
     # Assertions
     assert isinstance(result, SystemGoods)
@@ -335,7 +335,7 @@ def test_list_system_goods_basic(mock_client_class: Any) -> None:
     )  # Called for 2 marketplaces
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_system_goods_no_marketplaces(mock_client_class: Any) -> None:
     """Test list_system_goods handles systems with no marketplaces."""
     # Create waypoints without marketplaces
@@ -359,7 +359,7 @@ def test_list_system_goods_no_marketplaces(mock_client_class: Any) -> None:
     ]
 
     # Call the function
-    result = services.list_system_goods("fake_token", "X1-ABC")
+    result = systems.list_system_goods("fake_token", "X1-ABC")
 
     # Assertions
     assert isinstance(result, SystemGoods)
@@ -370,7 +370,7 @@ def test_list_system_goods_no_marketplaces(mock_client_class: Any) -> None:
     mock_client.systems.get_market.assert_not_called()
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_system_goods_deduplicates_goods(mock_client_class: Any) -> None:
     """Test list_system_goods deduplicates goods in sells/buys lists."""
     # Create waypoint with marketplace
@@ -398,7 +398,7 @@ def test_list_system_goods_deduplicates_goods(mock_client_class: Any) -> None:
     mock_client.systems.get_market.return_value = market
 
     # Call the function
-    result = services.list_system_goods("fake_token", "X1-ABC")
+    result = systems.list_system_goods("fake_token", "X1-ABC")
 
     # Assertions
     wp_goods = result.by_waypoint["X1-ABC-1"]
@@ -412,7 +412,7 @@ def test_list_system_goods_deduplicates_goods(mock_client_class: Any) -> None:
     assert TradeSymbol.FOOD in buy_symbols
 
 
-@patch("py_st.services.SpaceTradersClient")
+@patch("py_st.services.systems.SpaceTradersClient")
 def test_list_system_goods_sorts_goods(mock_client_class: Any) -> None:
     """Test list_system_goods returns sorted lists of goods."""
     # Create waypoint with marketplace
@@ -443,7 +443,7 @@ def test_list_system_goods_sorts_goods(mock_client_class: Any) -> None:
     mock_client.systems.get_market.return_value = market
 
     # Call the function
-    result = services.list_system_goods("fake_token", "X1-ABC")
+    result = systems.list_system_goods("fake_token", "X1-ABC")
 
     # Assertions
     wp_goods = result.by_waypoint["X1-ABC-1"]
