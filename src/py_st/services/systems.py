@@ -69,9 +69,9 @@ def list_waypoints(
     """
     Lists waypoints in a system, optionally filtered by traits.
 
-    Retrieves all waypoints via list_waypoints_all (which uses caching)
-    and performs client-side AND filtering if traits are specified.
-    Only waypoints possessing all specified traits are returned.
+    Fetches all waypoints using file-based caching and performs client-side
+    AND filtering if traits are specified. Only waypoints possessing all
+    specified traits are returned.
 
     Args:
         token: API authentication token
@@ -81,7 +81,7 @@ def list_waypoints(
     Returns:
         List of Waypoint models, filtered if traits are specified
     """
-    all_waypoints = list_waypoints_all(token, system_symbol)
+    all_waypoints = _fetch_and_cache_waypoints(token, system_symbol)
 
     # If no traits specified, return all waypoints
     if not traits:
@@ -105,27 +105,22 @@ def list_waypoints(
     return filtered_waypoints
 
 
-def list_waypoints_all(
-    token: str, system_symbol: str, traits: list[str] | None = None
+def _fetch_and_cache_waypoints(
+    token: str, system_symbol: str
 ) -> list[Waypoint]:
     """
-    Fetches all waypoints in a system, using file-based caching to
-    reduce API calls.
+    Internal function to fetch and cache all waypoints for a system.
 
-    Waypoint data is cached per system and remains valid until
-    manually cleared, as waypoints are generally static between
-    weekly server resets.
-
-    The traits parameter is kept for backward compatibility with existing CLI
-    commands but may be removed in future refactoring.
+    This function handles the API communication and file-based caching logic.
+    Waypoint data is cached per system and remains valid until manually
+    cleared, as waypoints are generally static between weekly server resets.
 
     Args:
         token: API authentication token
         system_symbol: The system symbol (e.g., "X1-ABC")
-        traits: Optional list of trait filters (currently unused)
 
     Returns:
-        List of Waypoint models for the system
+        List of all Waypoint models for the system
     """
     # Define cache key for this system
     cache_key = f"waypoints_{system_symbol}"
