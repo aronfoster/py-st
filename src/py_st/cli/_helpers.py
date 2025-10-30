@@ -71,7 +71,7 @@ def resolve_waypoint_id(token: str, system_symbol: str, wp_id_arg: str) -> str:
     all_waypoints.sort(key=lambda w: w.symbol.root)
 
     if 0 <= index < len(all_waypoints):
-        resolved = all_waypoints[index].symbol.root
+        resolved: str = all_waypoints[index].symbol.root
         logging.info(
             "Resolved waypoint index %d to symbol: %s", index, resolved
         )
