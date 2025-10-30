@@ -377,9 +377,16 @@ def test_list_waypoints_filter_works_with_cached_data(
     mock_save_cache.assert_not_called()
 
 
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_get_shipyard(mock_client_class: Any) -> None:
+def test_get_shipyard(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
     """Test get_shipyard returns a Shipyard from the client."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
     # Create mock shipyard
     shipyard_data = ShipyardFactory.build_minimal(waypoint_symbol="X1-ABC-1")
     shipyard = Shipyard.model_validate(shipyard_data)
@@ -1437,6 +1444,9 @@ def test_get_shipyard_cache_miss_with_ships(
             "symbol": "FRAME_PROBE",
             "name": "Frame Probe",
             "description": "Test frame",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
             "moduleSlots": 0,
             "mountingPoints": 0,
             "fuelCapacity": 100,
@@ -1446,7 +1456,9 @@ def test_get_shipyard_cache_miss_with_ships(
             "symbol": "REACTOR_SOLAR_I",
             "name": "Solar Reactor I",
             "description": "Test reactor",
-            "condition": 100,
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
             "powerOutput": 10,
             "requirements": {"crew": 1},
         },
@@ -1454,7 +1466,9 @@ def test_get_shipyard_cache_miss_with_ships(
             "symbol": "ENGINE_IMPULSE_DRIVE_I",
             "name": "Impulse Drive I",
             "description": "Test engine",
-            "condition": 100,
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
             "speed": 10,
             "requirements": {"power": 1, "crew": 1},
         },
@@ -1603,6 +1617,9 @@ def test_get_shipyard_force_refresh_with_ships(
             "symbol": "FRAME_DRONE",
             "name": "Frame Drone",
             "description": "Test frame",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
             "moduleSlots": 1,
             "mountingPoints": 1,
             "fuelCapacity": 50,
@@ -1612,7 +1629,9 @@ def test_get_shipyard_force_refresh_with_ships(
             "symbol": "REACTOR_SOLAR_I",
             "name": "Solar Reactor I",
             "description": "Test reactor",
-            "condition": 100,
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
             "powerOutput": 10,
             "requirements": {"crew": 0},
         },
@@ -1620,7 +1639,9 @@ def test_get_shipyard_force_refresh_with_ships(
             "symbol": "ENGINE_IMPULSE_DRIVE_I",
             "name": "Impulse Drive I",
             "description": "Test engine",
-            "condition": 100,
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
             "speed": 10,
             "requirements": {"power": 1, "crew": 0},
         },
@@ -1707,6 +1728,9 @@ def test_get_shipyard_force_refresh_without_ships_preserves_old_ships(
             "symbol": "FRAME_PROBE",
             "name": "Frame Probe",
             "description": "Test frame",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
             "moduleSlots": 0,
             "mountingPoints": 0,
             "fuelCapacity": 100,
@@ -1716,7 +1740,9 @@ def test_get_shipyard_force_refresh_without_ships_preserves_old_ships(
             "symbol": "REACTOR_SOLAR_I",
             "name": "Solar Reactor I",
             "description": "Test reactor",
-            "condition": 100,
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
             "powerOutput": 10,
             "requirements": {"crew": 1},
         },
@@ -1724,7 +1750,9 @@ def test_get_shipyard_force_refresh_without_ships_preserves_old_ships(
             "symbol": "ENGINE_IMPULSE_DRIVE_I",
             "name": "Impulse Drive I",
             "description": "Test engine",
-            "condition": 100,
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
             "speed": 10,
             "requirements": {"power": 1, "crew": 1},
         },
