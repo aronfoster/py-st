@@ -4,9 +4,15 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ---
 
-## Sprint 3: Prefixed Indexing & Contracts
+## Sprint 3: Cargo & Contracts
 
-The goal of this sprint is to refactor all 0-based index lookups to use an unambiguous prefix (e.g., `s-0`, `w-0`). We will then apply this logic to the `contracts` domain.
+The goal of this sprint is to add the core gameplay loop of buying and delivering cargo for contracts. We will refactor all index lookups to use unambiguous prefixes (e.g., `s-0`, `w-0`).
+
+* **Implement `purchase-cargo` Command:**
+    * Add `purchase_cargo` to `client/endpoints/ships.py` (it's missing, but is `POST /my/ships/{shipSymbol}/purchase` in the API).
+    * Add a `purchase_cargo` function to `services/ships.py`.
+    * Add unit tests for the new service function to `tests/test_services_ships.py`.
+    * Add a new `purchase-cargo` command to `cli/ships_cmd.py` (e.g., `py-st ships purchase-cargo <ship_id> <trade_symbol> <units>`).
 
 * **Refactor Index Helpers to Use Prefixes:**
     * Modify `cli/_helpers.py` to change `resolve_ship_id` to look for a prefix (e.g., `s-0`) instead of just digits.
@@ -66,7 +72,7 @@ These items improve code quality and performance but are not tied to a specific 
     * Research and select a GUI framework (e.g., PySide6, Tkinter).
     * Design a basic UI to display universe/fleet data and trigger actions.
     * Implement the GUI, ensuring it runs in a separate thread from the automation logic.
-
+ 
 ---
 
 ## ✅ Done
