@@ -21,6 +21,12 @@ DELIVER_TRADE_SYMBOL_ARG = typer.Argument(
 )
 DELIVER_UNITS_ARG = typer.Argument(..., help="The number of units to deliver.")
 CONTRACT_ID_ARG = typer.Argument(..., help="The ID of the contract to accept.")
+PURCHASE_TRADE_SYMBOL_ARG = typer.Argument(
+    ..., help="The symbol of the good to purchase."
+)
+PURCHASE_UNITS_ARG = typer.Argument(
+    ..., help="The number of units to purchase."
+)
 
 # Ships-specific
 REFUEL_UNITS_OPTION = typer.Option(

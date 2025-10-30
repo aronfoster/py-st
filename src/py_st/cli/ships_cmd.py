@@ -20,6 +20,8 @@ from .options import (
     DELIVER_UNITS_ARG,
     FLIGHT_MODE_ARG,
     PRODUCE_ARG,
+    PURCHASE_TRADE_SYMBOL_ARG,
+    PURCHASE_UNITS_ARG,
     REFUEL_UNITS_OPTION,
     SHIP_SYMBOL_ARG,
     SHIP_TYPE_ARG,
@@ -298,6 +300,36 @@ def sell_cargo_cli(
         t, resolved_symbol, trade_symbol, units
     )
     print("💱 Sale complete!")
+    output = {
+        "agent": agent.model_dump(mode="json"),
+        "cargo": cargo.model_dump(mode="json"),
+        "transaction": transaction.model_dump(mode="json"),
+    }
+    print(json.dumps(output, indent=2))
+
+
+@ships_app.command("purchase-cargo")
+@handle_errors
+def purchase_cargo_cli(
+    ship_symbol: str = SHIP_SYMBOL_ARG,
+    trade_symbol: str = PURCHASE_TRADE_SYMBOL_ARG,
+    units: int = PURCHASE_UNITS_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Purchase cargo at the current marketplace (must be DOCKED there).
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    agent, cargo, transaction = ships.purchase_cargo(
+        t, resolved_symbol, trade_symbol, units
+    )
+    print("🛒 Purchase complete!")
     output = {
         "agent": agent.model_dump(mode="json"),
         "cargo": cargo.model_dump(mode="json"),

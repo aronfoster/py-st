@@ -155,6 +155,23 @@ class ShipsEndpoint:
             MarketTransaction.model_validate(data["transaction"]),
         )
 
+    def purchase_cargo(
+        self, ship_symbol: str, trade_symbol: str, units: int
+    ) -> tuple[Agent, ShipCargo, MarketTransaction]:
+        """
+        Purchase cargo at a marketplace.
+        """
+        url = f"/my/ships/{ship_symbol}/purchase"
+        payload = {"symbol": trade_symbol, "units": units}
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
+        return (
+            Agent.model_validate(data["agent"]),
+            ShipCargo.model_validate(data["cargo"]),
+            MarketTransaction.model_validate(data["transaction"]),
+        )
+
     def purchase_ship(
         self, ship_type: str, waypoint_symbol: str
     ) -> tuple[Agent, Ship, ShipyardTransaction]:

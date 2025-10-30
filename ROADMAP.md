@@ -8,12 +8,6 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 The goal of this sprint is to add the core gameplay loop of buying and delivering cargo for contracts. We will refactor all index lookups to use unambiguous prefixes (e.g., `s-0`, `w-0`).
 
-* **Implement `purchase-cargo` Command:**
-    * Add `purchase_cargo` to `client/endpoints/ships.py` (it's missing, but is `POST /my/ships/{shipSymbol}/purchase` in the API).
-    * Add a `purchase_cargo` function to `services/ships.py`.
-    * Add unit tests for the new service function to `tests/test_services_ships.py`.
-    * Add a new `purchase-cargo` command to `cli/ships_cmd.py` (e.g., `py-st ships purchase-cargo <ship_id> <trade_symbol> <units>`).
-
 * **Refactor Index Helpers to Use Prefixes:**
     * Modify `cli/_helpers.py` to change `resolve_ship_id` to look for a prefix (e.g., `s-0`) instead of just digits.
     * Modify `cli/_helpers.py` to change `resolve_waypoint_id` to look for a prefix (e.g., `w-0`).
@@ -76,6 +70,13 @@ These items improve code quality and performance but are not tied to a specific 
 ---
 
 ## ✅ Done
+
+* **Sprint 3: Cargo & Contracts**
+    * ✅ **Implement `purchase-cargo` Command:**
+        * ✅ Added `purchase_cargo` to `client/endpoints/ships.py` (POST /my/ships/{shipSymbol}/purchase).
+        * ✅ Added `purchase_cargo` function to `services/ships.py`.
+        * ✅ Added unit tests for the new service function to `tests/test_services_ships.py`.
+        * ✅ Added new `purchase-cargo` command to `cli/ships_cmd.py`.
 
 * **Sprint 2: QOL & Waypoint Playability**
     * ✅ **Implement "Default to HQ System" Feature:**

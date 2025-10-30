@@ -273,6 +273,25 @@ def sell_cargo(
     return client.ships.sell_cargo(ship_symbol, trade_symbol, units)
 
 
+def purchase_cargo(
+    token: str, ship_symbol: str, trade_symbol: str, units: int
+) -> tuple[Agent, ShipCargo, MarketTransaction]:
+    """
+    Purchases cargo at the current marketplace.
+
+    Args:
+        token: The API authentication token.
+        ship_symbol: The symbol of the ship purchasing cargo.
+        trade_symbol: The trade good symbol to purchase.
+        units: The number of units to purchase.
+
+    Returns:
+        Tuple of (Agent, ShipCargo, MarketTransaction) with updated state.
+    """
+    client = SpaceTradersClient(token=token)
+    return client.ships.purchase_cargo(ship_symbol, trade_symbol, units)
+
+
 def purchase_ship(
     token: str, ship_type: str, waypoint_symbol: str
 ) -> tuple[Agent, Ship, ShipyardTransaction]:

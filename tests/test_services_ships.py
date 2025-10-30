@@ -408,6 +408,41 @@ def test_sell_cargo(mock_client_class: Any) -> None:
 
 
 @patch("py_st.services.ships.SpaceTradersClient")
+def test_purchase_cargo(mock_client_class: Any) -> None:
+    """Test purchase_cargo calls client with correct arguments."""
+    # Arrange
+    agent_data = AgentFactory.build_minimal()
+    agent = Agent.model_validate(agent_data)
+
+    ship_data = ShipFactory.build_minimal()
+    cargo_data = ship_data["cargo"]
+    cargo = ShipCargo.model_validate(cargo_data)
+
+    transaction_data = MarketTransactionFactory.build_minimal()
+    transaction = MarketTransaction.model_validate(transaction_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.purchase_cargo.return_value = (agent, cargo, transaction)
+
+    # Act
+    result_agent, result_cargo, result_transaction = ships.purchase_cargo(
+        "fake_token", "SHIP-1", "SHIP_PARTS", 8
+    )
+
+    # Assert
+    assert isinstance(result_agent, Agent), "Should return Agent object"
+    assert isinstance(result_cargo, ShipCargo), "Should return ShipCargo"
+    assert isinstance(
+        result_transaction, MarketTransaction
+    ), "Should return MarketTransaction"
+
+    mock_client.ships.purchase_cargo.assert_called_once_with(
+        "SHIP-1", "SHIP_PARTS", 8
+    )
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
 def test_purchase_ship(mock_client_class: Any) -> None:
     """Test purchase_ship calls client with correct arguments."""
     # Arrange
