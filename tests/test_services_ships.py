@@ -1,6 +1,6 @@
 """Unit tests for ship-related functions in services/ships.py."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -19,6 +19,7 @@ from py_st._generated.models import (
 from py_st._manual_models import RefineResult
 from py_st.client import APIError
 from py_st.services import ships
+from py_st.services.ships import CACHE_STALENESS_THRESHOLD
 from tests.factories import (
     AgentFactory,
     ExtractionFactory,
@@ -30,10 +31,15 @@ from tests.factories import (
 )
 
 
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
 @patch("py_st.services.ships.SpaceTradersClient")
-def test_list_ships(mock_client_class: Any) -> None:
+def test_list_ships(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
     """Test list_ships returns a list of Ship objects."""
-    # Create mock ships
+    mock_load_cache.return_value = {}
+
     ship1_data = ShipFactory.build_minimal()
     ship2_data = ShipFactory.build_minimal()
     ship2_data["symbol"] = "SHIP-2"
@@ -41,22 +47,18 @@ def test_list_ships(mock_client_class: Any) -> None:
     ship1 = Ship.model_validate(ship1_data)
     ship2 = Ship.model_validate(ship2_data)
 
-    # Configure mock client
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
     mock_client.ships.get_ships.return_value = [ship1, ship2]
 
-    # Call the function
     result = ships.list_ships("fake_token")
 
-    # Assertions
     assert isinstance(result, list)
     assert len(result) == 2
     assert all(isinstance(s, Ship) for s in result)
     assert result[0].symbol == "SHIP-1"
     assert result[1].symbol == "SHIP-2"
 
-    # Verify client was called correctly
     mock_client.ships.get_ships.assert_called_once()
 
 
@@ -463,9 +465,8 @@ def test_list_ships_cache_hit(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
     """Test list_ships returns cached data when cache is fresh."""
-    # Create fresh cached data (30 minutes old)
     now = datetime.now(UTC)
-    cache_time = now - timedelta(minutes=30)
+    cache_time = now - CACHE_STALENESS_THRESHOLD / 2
 
     ship1_data = ShipFactory.build_minimal()
     ship2_data = ShipFactory.build_minimal()
@@ -505,9 +506,8 @@ def test_list_ships_cache_miss_stale(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
     """Test list_ships fetches fresh data when cache is stale."""
-    # Create stale cached data (2 hours old)
     now = datetime.now(UTC)
-    cache_time = now - timedelta(hours=2)
+    cache_time = now - CACHE_STALENESS_THRESHOLD * 2
 
     old_ship_data = ShipFactory.build_minimal()
     old_ship_data["symbol"] = "OLD-SHIP"
@@ -596,9 +596,8 @@ def test_list_ships_cache_invalid_data(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
     """Test list_ships handles invalid cached data gracefully."""
-    # Create cache with invalid ship data (will cause ValidationError)
     now = datetime.now(UTC)
-    cache_time = now - timedelta(minutes=30)
+    cache_time = now - CACHE_STALENESS_THRESHOLD / 2
 
     invalid_ship_data = {
         "symbol": "SHIP-1",
