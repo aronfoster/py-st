@@ -443,6 +443,185 @@ def test_purchase_cargo(mock_client_class: Any) -> None:
 
 
 @patch("py_st.services.ships.SpaceTradersClient")
+def test_purchase_cargo_with_different_amounts(mock_client_class: Any) -> None:
+    """Test purchase_cargo with various unit amounts."""
+    # Arrange
+    agent_data = AgentFactory.build_minimal()
+    agent = Agent.model_validate(agent_data)
+
+    ship_data = ShipFactory.build_minimal()
+    cargo_data = ship_data["cargo"]
+    cargo = ShipCargo.model_validate(cargo_data)
+
+    transaction_data = MarketTransactionFactory.build_minimal()
+    transaction = MarketTransaction.model_validate(transaction_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.purchase_cargo.return_value = (agent, cargo, transaction)
+
+    # Act - Test with 1 unit
+    ships.purchase_cargo("fake_token", "SHIP-1", "FUEL", 1)
+
+    # Assert
+    mock_client.ships.purchase_cargo.assert_called_with("SHIP-1", "FUEL", 1)
+
+    # Act - Test with large amount
+    ships.purchase_cargo("fake_token", "SHIP-2", "IRON_ORE", 100)
+
+    # Assert
+    assert (
+        mock_client.ships.purchase_cargo.call_count == 2
+    ), "Should be called twice"
+    mock_client.ships.purchase_cargo.assert_called_with(
+        "SHIP-2", "IRON_ORE", 100
+    )
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
+def test_purchase_cargo_multiple_goods(mock_client_class: Any) -> None:
+    """Test purchasing different trade goods."""
+    # Arrange
+    agent_data = AgentFactory.build_minimal()
+    agent = Agent.model_validate(agent_data)
+
+    ship_data = ShipFactory.build_minimal()
+    cargo_data = ship_data["cargo"]
+    cargo = ShipCargo.model_validate(cargo_data)
+
+    transaction_data = MarketTransactionFactory.build_minimal()
+    transaction = MarketTransaction.model_validate(transaction_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.purchase_cargo.return_value = (agent, cargo, transaction)
+
+    # Act - Purchase different goods
+    goods_to_purchase = ["SHIP_PARTS", "FUEL", "IRON_ORE", "FOOD"]
+    for good in goods_to_purchase:
+        result_agent, result_cargo, result_transaction = ships.purchase_cargo(
+            "fake_token", "SHIP-1", good, 5
+        )
+
+        # Assert each returns correct types
+        assert isinstance(
+            result_agent, Agent
+        ), f"Should return Agent for {good}"
+        assert isinstance(
+            result_cargo, ShipCargo
+        ), f"Should return ShipCargo for {good}"
+        assert isinstance(
+            result_transaction, MarketTransaction
+        ), f"Should return MarketTransaction for {good}"
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
+def test_purchase_cargo_updates_agent_credits(mock_client_class: Any) -> None:
+    """Test purchase_cargo returns updated agent with decreased credits."""
+    # Arrange
+    agent_data = AgentFactory.build_minimal()
+    agent_data["credits"] = 8000  # Decreased from original 42
+    agent = Agent.model_validate(agent_data)
+
+    ship_data = ShipFactory.build_minimal()
+    cargo_data = ship_data["cargo"]
+    cargo = ShipCargo.model_validate(cargo_data)
+
+    transaction_data = MarketTransactionFactory.build_minimal()
+    transaction_data["totalPrice"] = 2000
+    transaction_data["type"] = "PURCHASE"
+    transaction = MarketTransaction.model_validate(transaction_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.purchase_cargo.return_value = (agent, cargo, transaction)
+
+    # Act
+    result_agent, result_cargo, result_transaction = ships.purchase_cargo(
+        "fake_token", "SHIP-1", "SHIP_PARTS", 10
+    )
+
+    # Assert
+    assert (
+        result_agent.credits == 8000
+    ), "Agent credits should be decreased after purchase"
+    assert (
+        result_transaction.totalPrice == 2000
+    ), "Transaction should reflect purchase price"
+    assert (
+        result_transaction.type.value == "PURCHASE"
+    ), "Transaction type should be PURCHASE"
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
+def test_purchase_cargo_updates_ship_cargo(mock_client_class: Any) -> None:
+    """Test purchase_cargo returns updated cargo with increased units."""
+    # Arrange
+    agent_data = AgentFactory.build_minimal()
+    agent = Agent.model_validate(agent_data)
+
+    ship_data = ShipFactory.build_minimal()
+    cargo_data = ship_data["cargo"]
+    cargo_data["units"] = 25  # Increased from some previous amount
+    cargo_data["capacity"] = 40
+    cargo = ShipCargo.model_validate(cargo_data)
+
+    transaction_data = MarketTransactionFactory.build_minimal()
+    transaction = MarketTransaction.model_validate(transaction_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.purchase_cargo.return_value = (agent, cargo, transaction)
+
+    # Act
+    result_agent, result_cargo, result_transaction = ships.purchase_cargo(
+        "fake_token", "SHIP-1", "IRON_ORE", 15
+    )
+
+    # Assert
+    assert result_cargo.units == 25, "Cargo units should be updated"
+    assert result_cargo.capacity == 40, "Cargo capacity should be present"
+    assert isinstance(
+        result_cargo.inventory, list
+    ), "Cargo should have inventory"
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
+def test_purchase_cargo_with_different_ships(mock_client_class: Any) -> None:
+    """Test purchase_cargo works with different ship symbols."""
+    # Arrange
+    agent_data = AgentFactory.build_minimal()
+    agent = Agent.model_validate(agent_data)
+
+    ship_data = ShipFactory.build_minimal()
+    cargo_data = ship_data["cargo"]
+    cargo = ShipCargo.model_validate(cargo_data)
+
+    transaction_data = MarketTransactionFactory.build_minimal()
+    transaction = MarketTransaction.model_validate(transaction_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.purchase_cargo.return_value = (agent, cargo, transaction)
+
+    # Act - Test with various ship naming patterns
+    ship_symbols = [
+        "SHIP-1",
+        "MY-SHIP-ABC",
+        "TRADER-001",
+        "MINING-DRONE-5",
+    ]
+
+    for ship_symbol in ship_symbols:
+        ships.purchase_cargo("fake_token", ship_symbol, "FUEL", 10)
+
+    # Assert - Verify all calls were made correctly
+    assert (
+        mock_client.ships.purchase_cargo.call_count == 4
+    ), "Should handle different ship symbols"
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
 def test_purchase_ship(mock_client_class: Any) -> None:
     """Test purchase_ship calls client with correct arguments."""
     # Arrange
