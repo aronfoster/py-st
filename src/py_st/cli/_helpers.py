@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 import typer
 
+from py_st._generated.models import Ship, ShipNavStatus
 from py_st.services import ships
 
 
@@ -43,3 +45,52 @@ def resolve_ship_id(token: str, ship_id_arg: str) -> str:
         err=True,
     )
     raise typer.Exit(code=1)
+
+
+def _format_time_remaining(arrival: datetime) -> str:
+    """
+    Format the time remaining until arrival.
+
+    Args:
+        arrival: The arrival datetime.
+
+    Returns:
+        A formatted string like "5m 23s" or "42s", or "Arrived" if
+        arrival is in the past.
+    """
+    now = datetime.now(UTC)
+    if arrival <= now:
+        return "Arrived"
+
+    delta = arrival - now
+    total_seconds = int(delta.total_seconds())
+    minutes = total_seconds // 60
+    seconds = total_seconds % 60
+
+    if minutes > 0:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
+
+
+def format_ship_status(ship: Ship) -> str:
+    """
+    Format the status of a ship for display.
+
+    Args:
+        ship: The Ship object to format.
+
+    Returns:
+        A formatted status string showing location or transit info.
+    """
+    status = ship.nav.status
+
+    if status == ShipNavStatus.DOCKED:
+        return f"DOCKED at {ship.nav.waypointSymbol.root}"
+    elif status == ShipNavStatus.IN_ORBIT:
+        return f"IN_ORBIT at {ship.nav.waypointSymbol.root}"
+    elif status == ShipNavStatus.IN_TRANSIT:
+        destination = ship.nav.route.destination.symbol
+        time_str = _format_time_remaining(ship.nav.route.arrival)
+        return f"IN_TRANSIT to {destination} ({time_str})"
+    else:
+        return f"{status.value}"

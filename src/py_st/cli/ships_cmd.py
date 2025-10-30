@@ -7,7 +7,7 @@ import typer
 
 from py_st._generated.models import ShipNavFlightMode
 from py_st.cli._errors import handle_errors
-from py_st.cli._helpers import resolve_ship_id
+from py_st.cli._helpers import format_ship_status, resolve_ship_id
 
 from ..services import ships
 from .options import (
@@ -32,6 +32,9 @@ ships_app: typer.Typer = typer.Typer(help="Manage your ships.")
 def list_ships(
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
+    json_output: bool = typer.Option(
+        False, "--json", help="Output raw JSON instead of summary."
+    ),
 ) -> None:
     """
     List all of your ships.
@@ -42,8 +45,16 @@ def list_ships(
     )
     t = _get_token(token)
     ships_list_data = ships.list_ships(t)
-    ships_list = [s.model_dump(mode="json") for s in ships_list_data]
-    print(json.dumps(ships_list, indent=2))
+    ships_list_data.sort(key=lambda s: s.symbol)
+
+    if json_output:
+        ships_list = [s.model_dump(mode="json") for s in ships_list_data]
+        print(json.dumps(ships_list, indent=2))
+    else:
+        for i, ship in enumerate(ships_list_data):
+            status_str = format_ship_status(ship)
+            role_str = ship.registration.role.value
+            print(f"[{i}] {ship.symbol:<20} " f"{role_str:<12} {status_str}")
 
 
 @ships_app.command("navigate")
