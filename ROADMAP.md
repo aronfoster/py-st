@@ -4,41 +4,40 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ---
 
-## Sprint 2: QOL & Waypoint Playability
+## Sprint 3: Prefixed Indexing & Contracts
 
-The goal of this sprint is to replicate the ship "playability" features for **waypoints**. This will allow users to omit system symbols and use 0-based indexes for waypoints (e.g., `py-st systems market 0`).
+The goal of this sprint is to refactor all 0-based index lookups to use an unambiguous prefix (e.g., `s-0`, `w-0`). We will then apply this logic to the `contracts` domain.
 
-* **Implement Waypoint Index Lookup:**
-    * Create a `resolve_waypoint_id(token: str, system: str, wp_id_arg: str) -> str` helper in `cli/_helpers.py`.
-    * This helper must use the (now resolved) system symbol to fetch the correct waypoint list from `services.systems.list_waypoints`, sort them by symbol, and resolve the 0-based index.
-    * Update CLI commands that take a `waypoint_symbol` (like `ships navigate`, `systems market`) to use this new helper.
+* **Refactor Index Helpers to Use Prefixes:**
+    * Modify `cli/_helpers.py` to change `resolve_ship_id` to look for a prefix (e.g., `s-0`) instead of just digits.
+    * Modify `cli/_helpers.py` to change `resolve_waypoint_id` to look for a prefix (e.g., `w-0`).
+    * Update help text in `cli/options.py` to reflect the new `s-0` and `w-0` format.
+    * Update tests in `test_cli_helpers.py` to verify the new prefix logic.
 
-* **Improve `systems list-waypoints` command:**
-    * Modify the `waypoints` command in `cli/systems_cmd.py` to default to a "pretty-print" format (showing `[i] SYMBOL (TYPE) [TRAITS]`).
-    * Retain the existing JSON output via a `--json` flag.
-
-* **Improve CLI Argument Ergonomics:**
-    * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help text.
----
-
-## Sprint 3: Contracts & Market Queries
-
-This sprint focuses on adding caching to the `contracts` domain and making market data queryable from the CLI.
+* **Implement Ship Index Lookup for `contracts` Commands:**
+    * Update `contracts_cmd.py` (for `negotiate`, `deliver`) to use the (now prefixed) `resolve_ship_id` helper.
 
 * **Write Unit Tests for `contracts.py`:**
     * Add a new test file (`tests/test_services_contracts.py`).
     * Write tests for all public functions in `services/contracts.py`, mocking the `SpaceTradersClient`.
 
-* **Implement `contracts` Caching:**
+* **Implement `contracts` Caching & Indexing:**
     * Implement time-based caching for `services/contracts.list_contracts`.
-    * Implement "pretty-print" for the `contracts list` command, showing an index.
-    * Implement index lookup for contract commands (e.g., `contracts accept 0`).
+    * Implement "pretty-print" for the `contracts list` command, showing an index (e.g., `[c-0]`).
+    * Create a `resolve_contract_id` helper that looks for a prefix (e.g., `c-0`).
+    * Update contract commands (`accept`, `deliver`, `fulfill`) to use the new `resolve_contract_id` helper.
+
+---
+
+## Sprint 4: Market Queries & Ergonomics
 
 * **Add CLI Commands to Query Cache:**
     * Create new CLI commands to query cached system data. Examples:
         * `py-st systems markets --buys IRON_ORE`
         * `py-st systems markets --sells FUEL`
-        * `py-st systems waypoints --trait SHIPYARD` (This should be fast, as `list_waypoints` is already cached).
+
+* **Improve CLI Argument Ergonomics:**
+    * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help text.
 
 ---
 
@@ -67,12 +66,12 @@ These items improve code quality and performance but are not tied to a specific 
     * Research and select a GUI framework (e.g., PySide6, Tkinter).
     * Design a basic UI to display universe/fleet data and trigger actions.
     * Implement the GUI, ensuring it runs in a separate thread from the automation logic.
- 
+
 ---
 
 ## ✅ Done
 
-* **Sprint 2: Waypoint Playability**
+* **Sprint 2: QOL & Waypoint Playability**
     * ✅ **Implement "Default to HQ System" Feature:**
         * ✅ Created `get_default_system` helper to parse HQ system from cached agent info.
         * ✅ Changed `SYSTEM_SYMBOL_ARG` to `SYSTEM_SYMBOL_OPTION` in `options.py`.
