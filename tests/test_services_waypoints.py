@@ -1412,12 +1412,8 @@ def test_get_shipyard_cache_miss_with_ships(
     API should be called and new data (with ships) should be cached with
     new timestamp.
     """
-    from py_st._generated.models import (
-        ShipType as ShipTypeEnum,
-    )
-    from py_st._generated.models import (
-        ShipyardShip,
-    )
+    from py_st._generated.models import ShipType as ShipTypeEnum
+    from py_st._generated.models import ShipyardShip
 
     # Setup: empty cache (cache miss)
     mock_load_cache.return_value = {}
@@ -1568,12 +1564,8 @@ def test_get_shipyard_force_refresh_with_ships(
     API should be called and new data (with ships) should be cached with
     new timestamp.
     """
-    from py_st._generated.models import (
-        ShipType as ShipTypeEnum,
-    )
-    from py_st._generated.models import (
-        ShipyardShip,
-    )
+    from py_st._generated.models import ShipType as ShipTypeEnum
+    from py_st._generated.models import ShipyardShip
 
     # Setup: populate cache with old shipyard data
     old_shipyard_data = ShipyardFactory.build_minimal(
