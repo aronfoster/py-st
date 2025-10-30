@@ -1,29 +1,76 @@
 # Roadmap
 
-Here are the outstanding tasks for `py-st`.
+The immediate goal is to improve the "playability" of the CLI by implementing a comprehensive cache. This will reduce the need to copy-paste IDs, remember waypoint symbols, and manually look up market data.
 
-- Progress the file-based cache for ships and waypoints to speed up gameplay and reduce manual data entry.
-  - Connect the game data cache into commands so I don't have to type ship and system names each time (e.g., allow --ship 1 or --wp 3).
-- Refactor services.py to split services into sensible parts.
-  - Unit test of services.py before or after the refactor?
+---
 
-- Develop a script to run a basic ship automation loop.
+## 🚀 Playability & CLI Enhancements
 
-- Investigate openapi-python-client or rolling my own method to turn SpaceTraders.json spec automatically into client prototypes.
-- Currently using agent tokens, which expire every week. Explore Register by API (https://spacetraders.io/quickstart/new-game) with an account token, then automatically create a new agent if none exist.
+The top priority is making the CLI "smart" by leveraging cached data.
 
-- Improve web requests.
-  - We have transport.py request_json, which handles 409s and 429s.
-  - Rate limiting and backoff logic has room for improvement but is okay for now
-    - Rate limits are per account, not per command.
-    - 2 requests/second max, burst up to 30 requests per 60 seconds.
-    - Whole page of response error codes at https://spacetraders.io/api-guide/response-errors
-    - Do I see the whole response when it fails?
-  - While waiting for something to cool down (e.g. ship travel), can do other work. Might eventually implement a queue and threading
+* **Connect Cache to CLI Arguments:**
+    * Modify `ships` commands to accept a short index (e.g., `--ship 1`) in addition to the full ship symbol. This will fetch the ship list from the cache and look up the full symbol.
+    * Implement a similar system for waypoints (`--wp 1`, `--wp 2`) once a good way to "list" and index waypoints is established.
 
-- I'm unhappy with the unit testing level of detail. Don't think it will actually catch problems in refactoring.
+* **Add CLI Commands to Query Cache:**
+    * Create new CLI commands to quickly query the cached data, addressing the "which market bought iron?" problem. Examples:
+        * `py-st systems markets --buys IRON_ORE`
+        * `py-st systems markets --sells FUEL`
+        * `py-st ships list` (should now be fast, reading from cache)
 
-## GUI
-- Research and select a GUI framework (e.g., PySide6, Tkinter).
-- Design a basic UI to display universe/fleet data and trigger actions.
-- Implement the GUI, ensuring it runs in a separate thread from the automation logic.
+* **Improve CLI Argument Ergonomics:**
+    * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help.
+
+---
+
+## 🗃️ Caching & Service Layer
+
+This is the core implementation work required for the playability features.
+
+* **Refactor "Smart Merge" Caching Logic:**
+    * The `get_market` and `get_shipyard` functions in `services/systems.py` share nearly identical "smart merge" caching logic.
+    * Refactor this duplicated code into a single, generic helper function to keep the services module clean.
+
+* **Update `list_system_goods`:**
+    * Modify `list_system_goods` to use the cached `get_market` function. This will make it much faster as it will no longer make N-1 API calls.
+
+* **Implement `ships` Caching:**
+    * Implement caching for `services/ships.py`, particularly for `list_ships`.
+    * This cache will be read by the `py-st ships list` and `--ship 1` features.
+
+* **Implement `contracts` Caching:**
+    * Implement caching for `services/contracts.py` (e.g., for `list_contracts`).
+
+* **Add Cache Clearing Mechanism:**
+    * Add a command to the `Makefile` (e.g., `make clear-cache`) to delete the `.cache/data.json` file. This is needed to manually invalidate the cache after a weekly server reset.
+
+---
+
+## 🧪 Testing & Correctness
+
+This is a high-priority background task to ensure the project remains stable and "un-sloppy."
+
+* **Write Unit Tests for `ships.py`:**
+    * Add a new test file (`tests/test_services_ships.py`).
+    * Write tests for all public functions in `services/ships.py`, mocking the `SpaceTradersClient`.
+    * This should be done *before or during* the implementation of caching for this module.
+
+* **Write Unit Tests for `contracts.py`:**
+    * Add a new test file (`tests/test_services_contracts.py`).
+    * Write tests for all public functions in `services/contracts.py`, mocking the `SpaceTradersClient`.
+    * This should be done *before or during* the implementation of caching for this module.
+
+---
+
+## 🔭 Long-Term Goals
+
+(These items are carried over from the previous roadmap)
+
+* Develop a script to run a basic ship automation loop.
+* Investigate `openapi-python-client` or rolling my own method to turn `SpaceTraders.json` spec automatically into client prototypes.
+* Currently using agent tokens, which expire every week. Explore Register by API with an account token, then automatically create a new agent if none exist.
+* Improve web requests (rate limiting, async, etc.).
+* GUI
+    * Research and select a GUI framework (e.g., PySide6, Tkinter).
+    * Design a basic UI to display universe/fleet data and trigger actions.
+    * Implement the GUI, ensuring it runs in a separate thread from the automation logic.
