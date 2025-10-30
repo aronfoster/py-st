@@ -283,3 +283,69 @@ def test_get_default_system_complex_symbol() -> None:
     assert (
         result == "X1-LONG-SYSTEM-NAME"
     ), "Should correctly parse a system with multiple hyphens"
+
+
+def test_get_default_system_no_headquarters() -> None:
+    """Test get_default_system raises Exit when headquarters is None."""
+    # Arrange
+    # Use model_construct to bypass validation and set headquarters to None
+    mock_agent = Agent.model_construct(
+        accountId=None,
+        symbol="TEST",
+        headquarters=None,
+        credits=100,
+        startingFaction="COSMIC",
+        shipCount=1,
+    )
+
+    # Act & Assert
+    with patch("py_st.cli._helpers.agent.get_agent_info") as mock_get_agent:
+        mock_get_agent.return_value = mock_agent
+        with pytest.raises(typer.Exit) as exc_info:
+            get_default_system("fake_token")
+
+    assert (
+        exc_info.value.exit_code == 1
+    ), "Should exit with code 1 when headquarters is None"
+
+
+def test_get_default_system_empty_headquarters() -> None:
+    """Test get_default_system raises Exit when headquarters is empty."""
+    # Arrange
+    # Use model_construct to bypass validation and set headquarters to ""
+    mock_agent = Agent.model_construct(
+        accountId=None,
+        symbol="TEST",
+        headquarters="",
+        credits=100,
+        startingFaction="COSMIC",
+        shipCount=1,
+    )
+
+    # Act & Assert
+    with patch("py_st.cli._helpers.agent.get_agent_info") as mock_get_agent:
+        mock_get_agent.return_value = mock_agent
+        with pytest.raises(typer.Exit) as exc_info:
+            get_default_system("fake_token")
+
+    assert (
+        exc_info.value.exit_code == 1
+    ), "Should exit with code 1 when headquarters is empty string"
+
+
+def test_get_default_system_malformed_symbol() -> None:
+    """Test get_default_system raises Exit for malformed symbol."""
+    # Arrange
+    agent_data = AgentFactory.build_minimal()
+    agent_data["headquarters"] = "MALFORMED"
+    mock_agent = Agent.model_validate(agent_data)
+
+    # Act & Assert
+    with patch("py_st.cli._helpers.agent.get_agent_info") as mock_get_agent:
+        mock_get_agent.return_value = mock_agent
+        with pytest.raises(typer.Exit) as exc_info:
+            get_default_system("fake_token")
+
+    assert (
+        exc_info.value.exit_code == 1
+    ), "Should exit with code 1 when headquarters has no hyphens"

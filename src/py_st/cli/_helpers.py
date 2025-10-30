@@ -153,9 +153,32 @@ def get_default_system(token: str) -> str:
     try:
         agent_info = agent.get_agent_info(token)
         hq_symbol_str: str = agent_info.headquarters
-        system_symbol = hq_symbol_str.rsplit("-", 1)[0]
+
+        # Validate headquarters is not None or empty
+        if not hq_symbol_str:
+            raise ValueError("Headquarters symbol is empty or None")
+
+        # Split on the last hyphen to separate system from waypoint
+        parts = hq_symbol_str.rsplit("-", 1)
+
+        # Validate that we actually split on a hyphen
+        if len(parts) < 2:
+            raise ValueError(
+                f"Invalid headquarters format '{hq_symbol_str}': "
+                "expected format SECTOR-SYSTEM-WAYPOINT"
+            )
+
+        system_symbol = parts[0]
+
+        # Validate the result is not empty
+        if not system_symbol:
+            raise ValueError(
+                f"Could not extract system from headquarters "
+                f"'{hq_symbol_str}'"
+            )
+
         return system_symbol
-    except (ValueError, IndexError) as e:
+    except (ValueError, IndexError, AttributeError) as e:
         typer.secho(
             f"Error: Could not parse system symbol from agent "
             f"headquarters: {e}",
