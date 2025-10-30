@@ -7,6 +7,7 @@ import typer
 
 from py_st._generated.models import ShipNavFlightMode
 from py_st.cli._errors import handle_errors
+from py_st.cli._helpers import resolve_ship_id
 
 from ..services import ships
 from .options import (
@@ -61,8 +62,9 @@ def navigate_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    result = ships.navigate_ship(t, ship_symbol, waypoint_symbol)
-    print(f"🚀 Ship {ship_symbol} is navigating to {waypoint_symbol}.")
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    result = ships.navigate_ship(t, resolved_symbol, waypoint_symbol)
+    print(f"🚀 Ship {resolved_symbol} is navigating to {waypoint_symbol}.")
     print(json.dumps(result.model_dump(mode="json"), indent=2))
 
 
@@ -81,8 +83,9 @@ def orbit_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    result = ships.orbit_ship(t, ship_symbol)
-    print(f"🛰️  Ship {ship_symbol} is now in orbit.")
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    result = ships.orbit_ship(t, resolved_symbol)
+    print(f"🛰️  Ship {resolved_symbol} is now in orbit.")
     print(json.dumps(result.model_dump(mode="json"), indent=2))
 
 
@@ -101,8 +104,9 @@ def dock_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    result = ships.dock_ship(t, ship_symbol)
-    print(f"⚓ Ship {ship_symbol} is now docked.")
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    result = ships.dock_ship(t, resolved_symbol)
+    print(f"⚓ Ship {resolved_symbol} is now docked.")
     print(json.dumps(result.model_dump(mode="json"), indent=2))
 
 
@@ -121,7 +125,8 @@ def extract_resources_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    extraction = ships.extract_resources(t, ship_symbol)
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    extraction = ships.extract_resources(t, resolved_symbol)
     if extraction is None:
         print("Extraction failed or aborted.")
         return
@@ -144,7 +149,8 @@ def create_survey_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    surveys = ships.create_survey(t, ship_symbol)
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    surveys = ships.create_survey(t, resolved_symbol)
     print("🔭 Survey complete!")
     surveys_list = [s.model_dump(mode="json") for s in surveys]
     print(json.dumps(surveys_list, indent=2))
@@ -166,7 +172,8 @@ def refuel_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    agent, fuel, transaction = ships.refuel_ship(t, ship_symbol, units)
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    agent, fuel, transaction = ships.refuel_ship(t, resolved_symbol, units)
     print("⛽ Refueling complete!")
     output_data = {
         "agent": agent.model_dump(mode="json"),
@@ -192,8 +199,9 @@ def set_flight_mode_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    nav = ships.set_flight_mode(t, ship_symbol, flight_mode)
-    print(f"✈️ Flight mode for {ship_symbol} set to {flight_mode.value}.")
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    nav = ships.set_flight_mode(t, resolved_symbol, flight_mode)
+    print(f"✈️ Flight mode for {resolved_symbol} set to {flight_mode.value}.")
     print(json.dumps(nav.model_dump(mode="json"), indent=2))
 
 
@@ -214,7 +222,8 @@ def jettison_cargo_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    cargo = ships.jettison_cargo(t, ship_symbol, trade_symbol, units)
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    cargo = ships.jettison_cargo(t, resolved_symbol, trade_symbol, units)
     print("🗑️ Cargo jettisoned!")
     print(json.dumps(cargo.model_dump(mode="json"), indent=2))
 
@@ -235,7 +244,8 @@ def refine_materials_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    ships.refine_materials(t, ship_symbol, produce)
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
+    ships.refine_materials(t, resolved_symbol, produce)
 
 
 @ships_app.command("sell")
@@ -255,8 +265,9 @@ def sell_cargo_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
+    resolved_symbol = resolve_ship_id(t, ship_symbol)
     agent, cargo, transaction = ships.sell_cargo(
-        t, ship_symbol, trade_symbol, units
+        t, resolved_symbol, trade_symbol, units
     )
     print("💱 Sale complete!")
     output = {

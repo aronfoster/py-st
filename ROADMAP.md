@@ -15,14 +15,17 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
     * ✅ Added time-based caching to `services/ships.py` for `list_ships`.
     * ✅ Added unit tests to `tests/test_services_ships.py` for cache-hit, cache-miss (stale), and cache-miss (not found) scenarios.
 
+* **Connect Cache to CLI Arguments:**
+    * ✅ Modify `ships` commands to accept a 0-based index (e.g., `0`) in addition to the full ship symbol.
+        * ✅ Implemented `cli/_helpers.py` with `resolve_ship_id` and updated all commands in `ships_cmd.py`.
+
 ---
 
 ## 🚀 Playability & CLI Enhancements
 
 The top priority is making the CLI "smart" by leveraging cached data.
 
-* **Connect Cache to CLI Arguments:**
-    * Modify `ships` commands to accept a short index (e.g., `--ship 1`) in addition to the full ship symbol. This will fetch the ship list from the cache and look up the full symbol.
+* **Waypoint Index Lookup:**
     * Implement a similar system for waypoints (`--wp 1`, `--wp 2`) once a good way to "list" and index waypoints is established.
 
 * **Add CLI Commands to Query Cache:**

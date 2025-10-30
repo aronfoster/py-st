@@ -14,7 +14,7 @@ SHOW_OPTION = typer.Option(True, help="Show current agent info.")
 
 # Contract-specific
 SHIP_SYMBOL_ARG = typer.Argument(
-    ..., help="The symbol of the ship to use for negotiation."
+    ..., help="The ship's full symbol or 0-based index."
 )
 DELIVER_TRADE_SYMBOL_ARG = typer.Argument(
     ..., help="The symbol of the trade good to deliver."
