@@ -4,48 +4,49 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ---
 
-## ✅ Done
+## Sprint 2: Waypoint Playability
 
-* **Write Unit Tests for `ships.py`:**
-    * ✅ Added test file `tests/test_services_ships.py` with comprehensive unit tests.
-    * ✅ Added factories for `Extraction`, `Survey`, `MarketTransaction`, `ShipyardTransaction`, and `RefineResult` to `tests/factories.py`.
-    * ✅ All 15 test cases pass, covering all public functions in `services/ships.py`.
+The goal of this sprint is to replicate the "playability" features from Sprint 1 for **waypoints**. This will allow users to use `wp 0` in commands like `ships navigate`.
 
-* **Implement `ships` Caching:**
-    * ✅ Added time-based caching to `services/ships.py` for `list_ships`.
-    * ✅ Added unit tests to `tests/test_services_ships.py` for cache-hit, cache-miss (stale), and cache-miss (not found) scenarios.
+* **Improve `systems list-waypoints` command:**
+    * Modify `systems_cmd.py` so the `waypoints` command defaults to a "pretty-print" format (showing `[i] SYMBOL (TYPE) [TRAITS]`).
+    * This command should use the cached `services.systems.list_waypoints` function (which is already cached).
+    * The existing JSON output should be retained via a `--json` flag.
 
-* **Connect Cache to CLI Arguments:**
-    * ✅ Modify `ships` commands to accept a 0-based index (e.g., `0`) in addition to the full ship symbol.
-        * ✅ Implemented `cli/_helpers.py` with `resolve_ship_id` and updated all commands in `ships_cmd.py`.
-
-* **Improve `ships list` command:**
-    * ✅ `py-st ships list` now reads from cache.
-    * ✅ Replaced default JSON dump with a "pretty-print" format showing 0-based index, symbol, role, and status.
-    * ✅ Added a `--json` flag to retain the old JSON output behavior.
-
----
-
-## 🚀 Playability & CLI Enhancements
-
-The top priority is making the CLI "smart" by leveraging cached data.
-
-* **Waypoint Index Lookup:**
-    * Implement a similar system for waypoints (`--wp 1`, `--wp 2`) once a good way to "list" and index waypoints is established.
-
-* **Add CLI Commands to Query Cache:**
-    * Create new CLI commands to quickly query the cached data, addressing the "which market bought iron?" problem. Examples:
-        * `py-st systems markets --buys IRON_ORE`
-        * `py-st systems markets --sells FUEL`
+* **Implement Waypoint Index Lookup:**
+    * Create a `resolve_waypoint_id(token: str, system: str, wp_id_arg: str) -> str` helper in `cli/_helpers.py`.
+    * This helper must fetch all waypoints for the *given system* (e.g., from `services.systems.list_waypoints`), sort them by symbol, and resolve the 0-based index.
+    * Update CLI commands that take a `waypoint_symbol` (like `ships navigate`, `systems market`, `systems shipyard`) to use this new helper.
 
 * **Improve CLI Argument Ergonomics:**
     * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help.
 
 ---
 
-## 🗃️ Caching & Service Layer
+## Sprint 3: Contracts & Market Queries
 
-This is the core implementation work required for the playability features.
+This sprint focuses on adding caching to the `contracts` domain and making market data queryable from the CLI.
+
+* **Write Unit Tests for `contracts.py`:**
+    * Add a new test file (`tests/test_services_contracts.py`).
+    * Write tests for all public functions in `services/contracts.py`, mocking the `SpaceTradersClient`.
+
+* **Implement `contracts` Caching:**
+    * Implement time-based caching for `services/contracts.list_contracts`.
+    * Implement "pretty-print" for the `contracts list` command, showing an index.
+    * Implement index lookup for contract commands (e.g., `contracts accept 0`).
+
+* **Add CLI Commands to Query Cache:**
+    * Create new CLI commands to query cached system data. Examples:
+        * `py-st systems markets --buys IRON_ORE`
+        * `py-st systems markets --sells FUEL`
+        * `py-st systems waypoints --trait SHIPYARD` (This should be fast, as `list_waypoints` is already cached).
+
+---
+
+## 🧹 Refactoring & Tech Debt
+
+These items improve code quality and performance but are not tied to a specific feature sprint.
 
 * **Refactor "Smart Merge" Caching Logic:**
     * The `get_market` and `get_shipyard` functions in `services/systems.py` share nearly identical "smart merge" caching logic.
@@ -53,23 +54,6 @@ This is the core implementation work required for the playability features.
 
 * **Update `list_system_goods`:**
     * Modify `list_system_goods` to use the cached `get_market` function. This will make it much faster as it will no longer make N-1 API calls.
-
-* **Implement `contracts` Caching:**
-    * Implement caching for `services/contracts.py` (e.g., for `list_contracts`).
-
-* **Add Cache Clearing Mechanism:**
-    * Add a command to the `Makefile` (e.g., `make clear-cache`) to delete the `.cache/data.json` file. This is needed to manually invalidate the cache after a weekly server reset.
-
----
-
-## 🧪 Testing & Correctness
-
-This is a high-priority background task to ensure the project remains stable and "un-sloppy."
-
-* **Write Unit Tests for `contracts.py`:**
-    * Add a new test file (`tests/test_services_contracts.py`).
-    * Write tests for all public functions in `services/contracts.py`, mocking the `SpaceTradersClient`.
-    * This should be done *before or during* the implementation of caching for this module.
 
 ---
 
@@ -85,3 +69,16 @@ This is a high-priority background task to ensure the project remains stable and
     * Research and select a GUI framework (e.g., PySide6, Tkinter).
     * Design a basic UI to display universe/fleet data and trigger actions.
     * Implement the GUI, ensuring it runs in a separate thread from the automation logic.
+ 
+---
+
+## ✅ Done
+
+* **Sprint 1: Ships Playability**
+    * ✅ **Testing:** Added `tests/test_services_ships.py` with full unit test coverage for `services/ships.py`.
+    * ✅ **Caching:** Added time-based caching to `services/ships.list_ships`.
+    * ✅ **CLI Indexing:** Implemented `cli/_helpers.py` with `resolve_ship_id` and updated all `ships_cmd.py` commands to accept a 0-based index.
+    * ✅ **CLI Listing:** `py-st ships list` now defaults to a "pretty-print" format and retains JSON output via `--json`.
+
+* **Infrastructure:**
+    * ✅ Added `make clear-cache` to the `Makefile` to delete `.cache/data.json`.
