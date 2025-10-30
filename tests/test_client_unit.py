@@ -5,6 +5,7 @@ from py_st.client import SpaceTradersClient
 from tests.factories import (
     AgentFactory,
     ContractFactory,
+    MarketTransactionFactory,
     ShipFactory,
     WaypointFactory,
 )
@@ -147,3 +148,105 @@ def test_get_waypoints_in_system_parses_response() -> None:
     assert isinstance(waypoints[0], Waypoint)
     assert waypoints[0].symbol.root == "X1-ABC-1"
     assert waypoints[0].type.value == "PLANET"
+
+
+def test_purchase_cargo_parses_response() -> None:
+    """Test purchase_cargo endpoint parses response correctly."""
+    # Arrange
+    agent_json = AgentFactory.build_minimal()
+    agent_json["credits"] = 8500  # Simulate decreased credits after purchase
+
+    ship_json = ShipFactory.build_minimal()
+    cargo_json = ship_json["cargo"]
+    cargo_json["units"] = 8
+    cargo_json["capacity"] = 40
+
+    transaction_json = MarketTransactionFactory.build_minimal()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/my/ships/SHIP-1/purchase"
+        assert request.method == "POST"
+        # Verify payload
+        import json
+
+        payload = json.loads(request.content)
+        assert payload["symbol"] == "SHIP_PARTS"
+        assert payload["units"] == 8
+        return httpx.Response(
+            201,
+            json={
+                "data": {
+                    "agent": agent_json,
+                    "cargo": cargo_json,
+                    "transaction": transaction_json,
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    fake_client = httpx.Client(
+        transport=transport, base_url="https://api.spacetraders.io/v2"
+    )
+    st = SpaceTradersClient(token="T", client=fake_client)
+
+    # Act
+    result_agent, result_cargo, result_transaction = st.ships.purchase_cargo(
+        "SHIP-1", "SHIP_PARTS", 8
+    )
+
+    # Assert
+    assert isinstance(result_agent, Agent), "Should return Agent object"
+    assert result_agent.credits == 8500, "Agent credits should be updated"
+    assert result_cargo.units == 8, "Cargo units should match purchase"
+    assert result_cargo.capacity == 40, "Cargo capacity should be present"
+
+
+def test_sell_cargo_parses_response() -> None:
+    """Test sell_cargo endpoint parses response correctly."""
+    # Arrange
+    agent_json = AgentFactory.build_minimal()
+    agent_json["credits"] = 11500  # Simulate increased credits after sale
+
+    ship_json = ShipFactory.build_minimal()
+    cargo_json = ship_json["cargo"]
+    cargo_json["units"] = 2
+    cargo_json["capacity"] = 40
+
+    transaction_json = MarketTransactionFactory.build_minimal()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/my/ships/SHIP-1/sell"
+        assert request.method == "POST"
+        # Verify payload
+        import json
+
+        payload = json.loads(request.content)
+        assert payload["symbol"] == "IRON_ORE"
+        assert payload["units"] == 10
+        return httpx.Response(
+            201,
+            json={
+                "data": {
+                    "agent": agent_json,
+                    "cargo": cargo_json,
+                    "transaction": transaction_json,
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    fake_client = httpx.Client(
+        transport=transport, base_url="https://api.spacetraders.io/v2"
+    )
+    st = SpaceTradersClient(token="T", client=fake_client)
+
+    # Act
+    result_agent, result_cargo, result_transaction = st.ships.sell_cargo(
+        "SHIP-1", "IRON_ORE", 10
+    )
+
+    # Assert
+    assert isinstance(result_agent, Agent), "Should return Agent object"
+    assert result_agent.credits == 11500, "Agent credits should be updated"
+    assert result_cargo.units == 2, "Cargo units should be decreased"
+    assert result_cargo.capacity == 40, "Cargo capacity should be present"
