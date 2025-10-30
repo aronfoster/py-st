@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
+from datetime import UTC, datetime, timedelta
 
+from pydantic import ValidationError
+
+from py_st import cache
 from py_st._generated.models import (
     Agent,
     Extraction,
@@ -19,13 +24,55 @@ from py_st._generated.models import (
 from py_st._manual_models import RefineResult
 from py_st.client import APIError, SpaceTradersClient
 
+# Cache configuration for ship list
+SHIP_LIST_CACHE_KEY = "ship_list"
+CACHE_STALENESS_THRESHOLD = timedelta(hours=1)
+
 
 def list_ships(token: str) -> list[Ship]:
     """
-    Fetches all ships from the API.
+    Fetches all ships from the API with caching.
+
+    Checks the cache first and returns cached data if it hasn't
+    exceeded CACHE_STALENESS_THRESHOLD. Otherwise, fetches from
+    the API and updates the cache.
     """
+    full_cache = cache.load_cache()
+
+    cached_entry = full_cache.get(SHIP_LIST_CACHE_KEY)
+    if cached_entry is not None and isinstance(cached_entry, dict):
+        try:
+            last_updated_str = cached_entry.get("last_updated")
+            if last_updated_str is None or not isinstance(
+                last_updated_str, str
+            ):
+                raise ValueError("Missing or invalid last_updated")
+
+            last_updated = datetime.fromisoformat(last_updated_str)
+
+            if last_updated.tzinfo is None:
+                last_updated = last_updated.replace(tzinfo=UTC)
+
+            if datetime.now(UTC) - last_updated < CACHE_STALENESS_THRESHOLD:
+                ships_data = cached_entry["data"]
+                ships = [Ship.model_validate(s) for s in ships_data]
+                return ships
+
+        except (ValueError, ValidationError, KeyError) as e:
+            logging.warning("Invalid cache entry for ship list: %s", e)
+
     client = SpaceTradersClient(token=token)
     ships = client.ships.get_ships()
+
+    now_utc = datetime.now(UTC)
+    now_iso = now_utc.isoformat()
+    new_entry = {
+        "last_updated": now_iso,
+        "data": [ship.model_dump(mode="json") for ship in ships],
+    }
+    full_cache[SHIP_LIST_CACHE_KEY] = new_entry
+    cache.save_cache(full_cache)
+
     return ships
 
 
