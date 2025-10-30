@@ -11,6 +11,10 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
     * ✅ Added factories for `Extraction`, `Survey`, `MarketTransaction`, `ShipyardTransaction`, and `RefineResult` to `tests/factories.py`.
     * ✅ All 15 test cases pass, covering all public functions in `services/ships.py`.
 
+* **Implement `ships` Caching:**
+    * ✅ Added time-based caching to `services/ships.py` for `list_ships`.
+    * ✅ Added unit tests to `tests/test_services_ships.py` for cache-hit, cache-miss (stale), and cache-miss (not found) scenarios.
+
 ---
 
 ## 🚀 Playability & CLI Enhancements
@@ -42,10 +46,6 @@ This is the core implementation work required for the playability features.
 
 * **Update `list_system_goods`:**
     * Modify `list_system_goods` to use the cached `get_market` function. This will make it much faster as it will no longer make N-1 API calls.
-
-* **Implement `ships` Caching:**
-    * Implement caching for `services/ships.py`, particularly for `list_ships`.
-    * This cache will be read by the `py-st ships list` and `--ship 1` features.
 
 * **Implement `contracts` Caching:**
     * Implement caching for `services/contracts.py` (e.g., for `list_contracts`).
