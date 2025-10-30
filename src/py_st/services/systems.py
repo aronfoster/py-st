@@ -191,14 +191,110 @@ def list_waypoints(
 
 
 def get_shipyard(
-    token: str, system_symbol: str, waypoint_symbol: str
+    token: str,
+    system_symbol: str,
+    waypoint_symbol: str,
+    force_refresh: bool = False,
 ) -> Shipyard:
     """
-    Gets the shipyard for a waypoint.
+    Gets the shipyard for a waypoint with smart caching.
+
+    The cache preserves ship data (ships) even when API calls made from
+    a distance return ships=null. The cache always stores the "best"
+    version of the Shipyard object (one with ships is better).
+
+    Args:
+        token: API authentication token
+        system_symbol: The system symbol (e.g., "X1-ABC")
+        waypoint_symbol: The waypoint symbol (e.g., "X1-ABC-1")
+        force_refresh: If True, fetch fresh data from API regardless of cache
+
+    Returns:
+        Shipyard object with the most complete data available
     """
+    # Define cache key for this shipyard
+    cache_key = f"shipyard_{waypoint_symbol}"
+
+    # Load the full cache
+    full_cache = load_cache()
+
+    # Try to get cached entry
+    cached_entry = full_cache.get(cache_key)
+    cached_shipyard: Shipyard | None = None
+    ships_timestamp: datetime | None = None
+
+    if cached_entry:
+        try:
+            # Parse cached shipyard data
+            cached_shipyard = Shipyard.model_validate(cached_entry["data"])
+
+            # Parse ships timestamp (may be None)
+            ships_updated_str = cached_entry.get("ships_updated")
+            if ships_updated_str:
+                ships_timestamp = datetime.fromisoformat(ships_updated_str)
+        except Exception as e:
+            # Log validation error and proceed as cache miss
+            logging.warning(
+                "Failed to validate cached shipyard for %s: %s",
+                waypoint_symbol,
+                e,
+            )
+            cached_shipyard = None
+            ships_timestamp = None
+
+    # Case 1: Return from cache (no API call)
+    if cached_shipyard is not None and not force_refresh:
+        logging.debug(f"Returning cached shipyard data for {waypoint_symbol}")
+        return cached_shipyard
+
+    # Case 2: API call (cache miss or force_refresh=True)
+    logging.debug(f"Fetching fresh shipyard data for {waypoint_symbol}")
+
     client = SpaceTradersClient(token=token)
-    shipyard = client.systems.get_shipyard(system_symbol, waypoint_symbol)
-    return shipyard
+    fresh_shipyard: Shipyard = client.systems.get_shipyard(
+        system_symbol, waypoint_symbol
+    )
+
+    new_entry_data: dict[str, object]
+    new_timestamp: str | None
+
+    # Sub-Case 2a: API returned new purchasable ships
+    # (fresh_shipyard.ships is not None)
+    if fresh_shipyard.ships is not None:
+        # This is the new "best" data
+        new_entry_data = fresh_shipyard.model_dump(mode="json")
+        new_timestamp = datetime.now(UTC).isoformat()
+        return_shipyard = fresh_shipyard
+
+    # Sub-Case 2b: API returned NO purchasable ships
+    # (fresh_shipyard.ships is None)
+    else:
+        # We must preserve old ship list if it exists
+        if cached_shipyard is not None and cached_shipyard.ships is not None:
+            # Merge: Update static fields from fresh_shipyard, keep old ships
+            cached_shipyard.shipTypes = fresh_shipyard.shipTypes
+            # ships, transactions, and modificationsFee remain unchanged
+
+            new_entry_data = cached_shipyard.model_dump(mode="json")
+            # Keep the original ship list timestamp
+            new_timestamp = (
+                ships_timestamp.isoformat() if ships_timestamp else None
+            )
+            return_shipyard = cached_shipyard
+        else:
+            # No old ship list to preserve, use the new (shipless) data
+            new_entry_data = fresh_shipyard.model_dump(mode="json")
+            new_timestamp = None
+            return_shipyard = fresh_shipyard
+
+    # Save and return
+    full_cache[cache_key] = {
+        "ships_updated": new_timestamp,
+        "data": new_entry_data,
+    }
+    save_cache(full_cache)
+
+    return return_shipyard
 
 
 def get_market(

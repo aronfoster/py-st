@@ -377,9 +377,16 @@ def test_list_waypoints_filter_works_with_cached_data(
     mock_save_cache.assert_not_called()
 
 
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
 @patch("py_st.services.systems.SpaceTradersClient")
-def test_get_shipyard(mock_client_class: Any) -> None:
+def test_get_shipyard(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
     """Test get_shipyard returns a Shipyard from the client."""
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
     # Create mock shipyard
     shipyard_data = ShipyardFactory.build_minimal(waypoint_symbol="X1-ABC-1")
     shipyard = Shipyard.model_validate(shipyard_data)
@@ -1347,3 +1354,489 @@ def test_fetch_and_cache_waypoints_cache_data_not_list(
 
     # Assert: save_cache was called to update cache
     mock_save_cache.assert_called_once()
+
+
+# ============================================================================
+# get_shipyard tests with smart merge caching
+# ============================================================================
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_shipyard_cache_hit_no_refresh(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """
+    Test Case 1: Cache hit, no refresh.
+
+    API should NOT be called when cache exists and force_refresh=False.
+    """
+    from py_st._generated.models import ShipType as ShipTypeEnum
+
+    # Setup: populate cache with shipyard data
+    shipyard_data = ShipyardFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        ship_types=[ShipTypeEnum.SHIP_PROBE, ShipTypeEnum.SHIP_MINING_DRONE],
+    )
+
+    old_timestamp = "2025-10-29T10:00:00+00:00"
+    cached_data = {
+        "shipyard_X1-ABC-1": {
+            "ships_updated": old_timestamp,
+            "data": shipyard_data,
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Configure mock client (should not be called)
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+
+    # Call the function
+    result = systems.get_shipyard("fake_token", "X1-ABC", "X1-ABC-1")
+
+    # Assertions: API was NOT called
+    mock_client.systems.get_shipyard.assert_not_called()
+
+    # Assert: result is from cache
+    assert isinstance(result, Shipyard)
+    assert result.symbol == "X1-ABC-1"
+
+    # Assert: save_cache was NOT called
+    mock_save_cache.assert_not_called()
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_shipyard_cache_miss_with_ships(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """
+    Test Case 2a: Cache miss, API returns WITH ships.
+
+    API should be called and new data (with ships) should be cached with
+    new timestamp.
+    """
+    from py_st._generated.models import ShipType as ShipTypeEnum
+    from py_st._generated.models import ShipyardShip
+
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create mock shipyard WITH ships
+    shipyard_data = ShipyardFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        ship_types=[ShipTypeEnum.SHIP_PROBE],
+    )
+    shipyard = Shipyard.model_validate(shipyard_data)
+
+    # Add a ship to the shipyard
+    # Create a minimal ShipyardShip for testing
+    mock_ship = {
+        "type": "SHIP_PROBE",
+        "name": "Test Probe",
+        "description": "A test probe ship",
+        "supply": "ABUNDANT",
+        "purchasePrice": 50000,
+        "frame": {
+            "symbol": "FRAME_PROBE",
+            "name": "Frame Probe",
+            "description": "Test frame",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
+            "moduleSlots": 0,
+            "mountingPoints": 0,
+            "fuelCapacity": 100,
+            "requirements": {"power": 1, "crew": 1},
+        },
+        "reactor": {
+            "symbol": "REACTOR_SOLAR_I",
+            "name": "Solar Reactor I",
+            "description": "Test reactor",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
+            "powerOutput": 10,
+            "requirements": {"crew": 1},
+        },
+        "engine": {
+            "symbol": "ENGINE_IMPULSE_DRIVE_I",
+            "name": "Impulse Drive I",
+            "description": "Test engine",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
+            "speed": 10,
+            "requirements": {"power": 1, "crew": 1},
+        },
+        "modules": [],
+        "mounts": [],
+        "crew": {"required": 1, "capacity": 2},
+    }
+    shipyard.ships = [ShipyardShip.model_validate(mock_ship)]
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.get_shipyard.return_value = shipyard
+
+    # Call the function
+    result = systems.get_shipyard("fake_token", "X1-ABC", "X1-ABC-1")
+
+    # Assertions: API WAS called
+    mock_client.systems.get_shipyard.assert_called_once_with(
+        "X1-ABC", "X1-ABC-1"
+    )
+
+    # Assert: result has ships
+    assert isinstance(result, Shipyard)
+    assert result.symbol == "X1-ABC-1"
+    assert result.ships is not None
+    assert len(result.ships) == 1
+    assert result.ships[0].name == "Test Probe"
+
+    # Assert: save_cache was called with new timestamp
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    cache_entry = saved_cache["shipyard_X1-ABC-1"]
+
+    # Verify new timestamp exists
+    assert cache_entry["ships_updated"] is not None
+
+    # Verify saved data has ships
+    assert cache_entry["data"]["ships"] is not None
+    assert len(cache_entry["data"]["ships"]) == 1
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_shipyard_cache_miss_without_ships(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """
+    Test Case 2b: Cache miss, API returns WITHOUT ships.
+
+    API should be called and new data (without ships) should be cached
+    with None timestamp.
+    """
+    from py_st._generated.models import ShipType as ShipTypeEnum
+
+    # Setup: empty cache (cache miss)
+    mock_load_cache.return_value = {}
+
+    # Create mock shipyard WITHOUT ships
+    shipyard_data = ShipyardFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        ship_types=[ShipTypeEnum.SHIP_PROBE],
+    )
+    shipyard = Shipyard.model_validate(shipyard_data)
+    # ships is None by default from factory
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.get_shipyard.return_value = shipyard
+
+    # Call the function
+    result = systems.get_shipyard("fake_token", "X1-ABC", "X1-ABC-1")
+
+    # Assertions: API WAS called
+    mock_client.systems.get_shipyard.assert_called_once_with(
+        "X1-ABC", "X1-ABC-1"
+    )
+
+    # Assert: result has no ships
+    assert isinstance(result, Shipyard)
+    assert result.symbol == "X1-ABC-1"
+    assert result.ships is None
+
+    # Assert: save_cache was called with None timestamp
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    cache_entry = saved_cache["shipyard_X1-ABC-1"]
+
+    # Verify timestamp is None
+    assert cache_entry["ships_updated"] is None
+
+    # Verify saved data has no ships
+    assert cache_entry["data"]["ships"] is None
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_shipyard_force_refresh_with_ships(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """
+    Test Case 3: Cache hit, force_refresh=True, API returns WITH ships.
+
+    API should be called and new data (with ships) should be cached with
+    new timestamp.
+    """
+    from py_st._generated.models import ShipType as ShipTypeEnum
+    from py_st._generated.models import ShipyardShip
+
+    # Setup: populate cache with old shipyard data
+    old_shipyard_data = ShipyardFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        ship_types=[ShipTypeEnum.SHIP_PROBE],
+    )
+
+    old_timestamp = "2025-10-29T10:00:00+00:00"
+    cached_data = {
+        "shipyard_X1-ABC-1": {
+            "ships_updated": old_timestamp,
+            "data": old_shipyard_data,
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Create new mock shipyard WITH ships
+    new_shipyard_data = ShipyardFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        ship_types=[
+            ShipTypeEnum.SHIP_PROBE,
+            ShipTypeEnum.SHIP_MINING_DRONE,
+        ],  # Different ship types
+    )
+    new_shipyard = Shipyard.model_validate(new_shipyard_data)
+
+    # Add a new ship
+    mock_ship = {
+        "type": "SHIP_MINING_DRONE",
+        "name": "New Mining Drone",
+        "description": "A new mining drone",
+        "supply": "ABUNDANT",
+        "purchasePrice": 75000,
+        "frame": {
+            "symbol": "FRAME_DRONE",
+            "name": "Frame Drone",
+            "description": "Test frame",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
+            "moduleSlots": 1,
+            "mountingPoints": 1,
+            "fuelCapacity": 50,
+            "requirements": {"power": 1, "crew": 0},
+        },
+        "reactor": {
+            "symbol": "REACTOR_SOLAR_I",
+            "name": "Solar Reactor I",
+            "description": "Test reactor",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
+            "powerOutput": 10,
+            "requirements": {"crew": 0},
+        },
+        "engine": {
+            "symbol": "ENGINE_IMPULSE_DRIVE_I",
+            "name": "Impulse Drive I",
+            "description": "Test engine",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
+            "speed": 10,
+            "requirements": {"power": 1, "crew": 0},
+        },
+        "modules": [],
+        "mounts": [],
+        "crew": {"required": 0, "capacity": 0},
+    }
+    new_shipyard.ships = [ShipyardShip.model_validate(mock_ship)]
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.get_shipyard.return_value = new_shipyard
+
+    # Call the function with force_refresh=True
+    result = systems.get_shipyard(
+        "fake_token", "X1-ABC", "X1-ABC-1", force_refresh=True
+    )
+
+    # Assertions: API WAS called
+    mock_client.systems.get_shipyard.assert_called_once_with(
+        "X1-ABC", "X1-ABC-1"
+    )
+
+    # Assert: result has new ships
+    assert isinstance(result, Shipyard)
+    assert result.symbol == "X1-ABC-1"
+    assert result.ships is not None
+    assert len(result.ships) == 1
+    assert result.ships[0].name == "New Mining Drone"
+
+    # Assert: shipTypes updated
+    assert len(result.shipTypes) == 2
+
+    # Assert: save_cache was called with new timestamp
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    cache_entry = saved_cache["shipyard_X1-ABC-1"]
+
+    # Verify new timestamp exists (different from old)
+    assert cache_entry["ships_updated"] is not None
+    assert cache_entry["ships_updated"] != old_timestamp
+
+    # Verify saved data has new ships
+    assert cache_entry["data"]["ships"] is not None
+    assert len(cache_entry["data"]["ships"]) == 1
+    assert cache_entry["data"]["ships"][0]["name"] == "New Mining Drone"
+
+
+@patch("py_st.services.systems.save_cache")
+@patch("py_st.services.systems.load_cache")
+@patch("py_st.services.systems.SpaceTradersClient")
+def test_get_shipyard_force_refresh_without_ships_preserves_old_ships(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """
+    Test Case 4 (CRITICAL): force_refresh=True, no ships from API.
+
+    When API returns without ships, preserves old ships and timestamp,
+    but updates static fields (shipTypes).
+    """
+    from py_st._generated.models import (
+        ShipType as ShipTypeEnum,
+    )
+
+    # Setup: populate cache with old shipyard data WITH ships
+    old_shipyard_data = ShipyardFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        ship_types=[ShipTypeEnum.SHIP_PROBE],
+        modifications_fee=1000,
+    )
+    old_shipyard_dict = Shipyard.model_validate(old_shipyard_data).model_dump(
+        mode="json"
+    )
+
+    # Add old ships to cache
+    old_ship = {
+        "type": "SHIP_PROBE",
+        "name": "Old Probe",
+        "description": "An old probe ship",
+        "supply": "ABUNDANT",
+        "purchasePrice": 50000,
+        "frame": {
+            "symbol": "FRAME_PROBE",
+            "name": "Frame Probe",
+            "description": "Test frame",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
+            "moduleSlots": 0,
+            "mountingPoints": 0,
+            "fuelCapacity": 100,
+            "requirements": {"power": 1, "crew": 1},
+        },
+        "reactor": {
+            "symbol": "REACTOR_SOLAR_I",
+            "name": "Solar Reactor I",
+            "description": "Test reactor",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
+            "powerOutput": 10,
+            "requirements": {"crew": 1},
+        },
+        "engine": {
+            "symbol": "ENGINE_IMPULSE_DRIVE_I",
+            "name": "Impulse Drive I",
+            "description": "Test engine",
+            "condition": 1.0,
+            "integrity": 1.0,
+            "quality": 1,
+            "speed": 10,
+            "requirements": {"power": 1, "crew": 1},
+        },
+        "modules": [],
+        "mounts": [],
+        "crew": {"required": 1, "capacity": 2},
+    }
+    old_shipyard_dict["ships"] = [old_ship]
+
+    old_timestamp = "2025-10-29T10:00:00+00:00"
+    cached_data = {
+        "shipyard_X1-ABC-1": {
+            "ships_updated": old_timestamp,
+            "data": old_shipyard_dict,
+        }
+    }
+    mock_load_cache.return_value = cached_data
+
+    # Create new mock shipyard WITHOUT ships but with UPDATED static fields
+    new_shipyard_data = ShipyardFactory.build_minimal(
+        waypoint_symbol="X1-ABC-1",
+        ship_types=[
+            ShipTypeEnum.SHIP_PROBE,
+            ShipTypeEnum.SHIP_MINING_DRONE,
+            ShipTypeEnum.SHIP_LIGHT_HAULER,
+        ],  # Different ship types
+        modifications_fee=1500,  # Different fee
+    )
+    new_shipyard = Shipyard.model_validate(new_shipyard_data)
+    # ships is None
+
+    # Configure mock client
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.systems.get_shipyard.return_value = new_shipyard
+
+    # Call the function with force_refresh=True
+    result = systems.get_shipyard(
+        "fake_token", "X1-ABC", "X1-ABC-1", force_refresh=True
+    )
+
+    # Assertions: API WAS called
+    mock_client.systems.get_shipyard.assert_called_once_with(
+        "X1-ABC", "X1-ABC-1"
+    )
+
+    # Assert: result has OLD ships (preserved)
+    assert isinstance(result, Shipyard)
+    assert result.symbol == "X1-ABC-1"
+    assert result.ships is not None
+    assert len(result.ships) == 1
+    assert result.ships[0].name == "Old Probe"
+    assert result.ships[0].purchasePrice == 50000
+
+    # Assert: NEW static fields updated (shipTypes)
+    assert len(result.shipTypes) == 3
+    ship_type_values = [st.type.value for st in result.shipTypes]
+    assert "SHIP_PROBE" in ship_type_values
+    assert "SHIP_MINING_DRONE" in ship_type_values
+    assert "SHIP_LIGHT_HAULER" in ship_type_values
+
+    # Assert: OLD dynamic fields preserved (modificationsFee)
+    assert result.modificationsFee == 1000  # Original value, not new 1500
+
+    # Assert: save_cache was called
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    cache_entry = saved_cache["shipyard_X1-ABC-1"]
+
+    # Verify OLD timestamp preserved
+    assert cache_entry["ships_updated"] == old_timestamp
+
+    # Verify saved data has OLD ships
+    assert cache_entry["data"]["ships"] is not None
+    assert len(cache_entry["data"]["ships"]) == 1
+    assert cache_entry["data"]["ships"][0]["name"] == "Old Probe"
+    assert cache_entry["data"]["ships"][0]["purchasePrice"] == 50000
+
+    # Verify saved data has NEW static fields (shipTypes)
+    assert len(cache_entry["data"]["shipTypes"]) == 3
+    saved_ship_types = [st["type"] for st in cache_entry["data"]["shipTypes"]]
+    assert "SHIP_PROBE" in saved_ship_types
+    assert "SHIP_MINING_DRONE" in saved_ship_types
+    assert "SHIP_LIGHT_HAULER" in saved_ship_types
+
+    # Verify saved data has OLD dynamic fields (modificationsFee)
+    assert cache_entry["data"]["modificationsFee"] == 1000
