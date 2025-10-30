@@ -4,12 +4,17 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ---
 
-## Sprint 2: Waypoint Playability
+## Sprint 2: QOL
 
 The goal of this sprint is to replicate the "playability" features from Sprint 1 for **waypoints**. This will allow users to use `wp 0` in commands like `ships navigate`.
 
 * **Improve CLI Argument Ergonomics:**
     * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help.
+      
+1.  **Create a New Helper:** Add a `get_default_system(token: str) -> str` function to `src/py_st/cli/_helpers.py`. This function will call `agent.get_agent_info(token)`, get the `.headquarters` string, and parse it to return just the system part (e.g., "X1-VF50").
+2.  **Update `cli/options.py`:** Change `SYSTEM_SYMBOL_ARG` (a required `Argument`) to `SYSTEM_SYMBOL_OPTION` (an optional `Option(None, "--system", "-s", ...)`).
+3.  **Update `cli/systems_cmd.py`:** Change all commands (like `list_waypoints`, `get_market_cli`) to use the new `SYSTEM_SYMBOL_OPTION`. Inside each, add logic: `if system_symbol is None: system_symbol = get_default_system(t)`.
+4.  **Update `cli/ships_cmd.py`:** This is the key edge case. Commands like `Maps_ship_cli` and `purchase_ship_cli` must *also* be modified to accept the new `SYSTEM_SYMBOL_OPTION`. This is so `resolve_waypoint_id` has a system to use when you type `py-st ships navigate 0 0`.
 
 ---
 
