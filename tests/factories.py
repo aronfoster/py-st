@@ -7,7 +7,9 @@ from py_st._generated.models import (
     ContractPayment,
     ContractTerms,
     Cooldown,
+    ExtractionYield,
     Market,
+    MarketTransaction,
     Ship,
     ShipCargo,
     ShipComponentCondition,
@@ -27,6 +29,9 @@ from py_st._generated.models import (
     ShipRequirements,
     ShipRole,
     Shipyard,
+    ShipyardTransaction,
+    Survey,
+    SurveyDeposit,
     SystemSymbol,
     TradeGood,
     TradeSymbol,
@@ -37,12 +42,15 @@ from py_st._generated.models import (
     WaypointType,
 )
 from py_st._generated.models.Contract import Type as ContractType
+from py_st._generated.models.MarketTransaction import Type as TransactionType
 from py_st._generated.models.ShipCrew import Rotation
 from py_st._generated.models.ShipEngine import Symbol as EngineSymbol
 from py_st._generated.models.ShipFrame import Symbol as FrameSymbol
 from py_st._generated.models.ShipReactor import Symbol as ReactorSymbol
 from py_st._generated.models.ShipType import ShipType as ShipTypeEnum
 from py_st._generated.models.Shipyard import ShipType
+from py_st._generated.models.Survey import Size as SurveySize
+from py_st._manual_models import RefineItem, RefineResult
 
 
 class AgentFactory:
@@ -409,3 +417,90 @@ class CacheFactory:
             "timestamp": datetime(2025, 10, 26, 18, 10, 0, tzinfo=UTC),
             "value": "some data",
         }
+
+
+class ExtractionFactory:
+    @staticmethod
+    def build_minimal() -> dict[str, Any]:
+        """Build a minimal valid Extraction payload dict."""
+        extraction_yield_data = ExtractionYield(
+            symbol=TradeSymbol.IRON_ORE,
+            units=10,
+        ).model_dump(mode="json")
+
+        return {
+            "shipSymbol": "SHIP-1",
+            "yield": extraction_yield_data,
+        }
+
+
+class SurveyFactory:
+    @staticmethod
+    def build_minimal() -> dict[str, Any]:
+        """Build a minimal valid Survey payload dict."""
+        deposit = SurveyDeposit(symbol="IRON_ORE")
+        survey = Survey(
+            signature="survey-signature-12345",
+            symbol="X1-ABC-1",
+            deposits=[deposit],
+            expiration=datetime.now(UTC) + timedelta(days=1),
+            size=SurveySize.SMALL,
+        )
+        return survey.model_dump(mode="json")
+
+
+class MarketTransactionFactory:
+    @staticmethod
+    def build_minimal() -> dict[str, Any]:
+        """Build a minimal valid MarketTransaction payload dict."""
+        transaction = MarketTransaction(
+            waypointSymbol=WaypointSymbol("X1-ABC-1"),
+            shipSymbol="SHIP-1",
+            tradeSymbol="IRON_ORE",
+            type=TransactionType.PURCHASE,
+            units=10,
+            pricePerUnit=100,
+            totalPrice=1000,
+            timestamp=datetime.now(UTC),
+        )
+        return transaction.model_dump(mode="json")
+
+
+class ShipyardTransactionFactory:
+    @staticmethod
+    def build_minimal() -> dict[str, Any]:
+        """Build a minimal valid ShipyardTransaction payload dict."""
+        transaction = ShipyardTransaction(
+            waypointSymbol=WaypointSymbol("X1-ABC-1"),
+            shipSymbol="SHIP-MINING-DRONE-1",
+            shipType="SHIP_MINING_DRONE",
+            price=50000,
+            agentSymbol="AGENT-1",
+            timestamp=datetime.now(UTC),
+        )
+        return transaction.model_dump(mode="json")
+
+
+class RefineResultFactory:
+    @staticmethod
+    def build_minimal() -> dict[str, Any]:
+        """Build a minimal valid RefineResult payload dict."""
+        # Get a minimal ship cargo from ShipFactory
+        ship_data = ShipFactory.build_minimal()
+        cargo_data = ship_data["cargo"]
+
+        # Get a minimal cooldown from ShipFactory
+        cooldown_data = ship_data["cooldown"]
+
+        # Create produced and consumed items
+        produced = [RefineItem(tradeSymbol="FUEL", units=10)]
+        consumed = [RefineItem(tradeSymbol="HYDROCARBON", units=100)]
+
+        # Build RefineResult
+        refine_result = RefineResult(
+            cargo=ShipCargo.model_validate(cargo_data),
+            cooldown=Cooldown.model_validate(cooldown_data),
+            produced=produced,
+            consumed=consumed,
+        )
+        return refine_result.model_dump(mode="json")

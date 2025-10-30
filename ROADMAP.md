@@ -4,6 +4,15 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ---
 
+## ✅ Done
+
+* **Write Unit Tests for `ships.py`:**
+    * ✅ Added test file `tests/test_services_ships.py` with comprehensive unit tests.
+    * ✅ Added factories for `Extraction`, `Survey`, `MarketTransaction`, `ShipyardTransaction`, and `RefineResult` to `tests/factories.py`.
+    * ✅ All 15 test cases pass, covering all public functions in `services/ships.py`.
+
+---
+
 ## 🚀 Playability & CLI Enhancements
 
 The top priority is making the CLI "smart" by leveraging cached data.
@@ -49,11 +58,6 @@ This is the core implementation work required for the playability features.
 ## 🧪 Testing & Correctness
 
 This is a high-priority background task to ensure the project remains stable and "un-sloppy."
-
-* **Write Unit Tests for `ships.py`:**
-    * Add a new test file (`tests/test_services_ships.py`).
-    * Write tests for all public functions in `services/ships.py`, mocking the `SpaceTradersClient`.
-    * This should be done *before or during* the implementation of caching for this module.
 
 * **Write Unit Tests for `contracts.py`:**
     * Add a new test file (`tests/test_services_contracts.py`).
