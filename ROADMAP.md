@@ -4,18 +4,27 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ---
 
-## Sprint 2: QOL
+## Sprint 2: QOL & Waypoint Playability
 
-The goal of this sprint is to replicate the "playability" features from Sprint 1 for **waypoints**. This will allow users to use `wp 0` in commands like `ships navigate`.
+The goal of this sprint is to implement the "default to HQ system" feature and replicate the ship "playability" features for **waypoints**. This will allow users to omit system symbols and use 0-based indexes for waypoints (e.g., `py-st systems market 0`).
+
+* **Implement "Default to HQ System" Feature:**
+    * Create a `get_default_system(token: str) -> str` function in `src/py_st/cli/_helpers.py` that parses the HQ system from cached agent info.
+    * Change `SYSTEM_SYMBOL_ARG` to `SYSTEM_SYMBOL_OPTION` (optional `--system` flag) in `src/py_st/cli/options.py`.
+    * Update all commands in `src/py_st/cli/systems_cmd.py` to use the new optional `--system` flag and call `get_default_system` if it's omitted.
+    * Update commands in `src/py_st/cli/ships_cmd.py` (e.g., `Maps`, `purchase`) to also accept the optional `--system` flag.
+
+* **Implement Waypoint Index Lookup:**
+    * Create a `resolve_waypoint_id(token: str, system: str, wp_id_arg: str) -> str` helper in `cli/_helpers.py`.
+    * This helper must use the (now resolved) system symbol to fetch the correct waypoint list from `services.systems.list_waypoints`, sort them by symbol, and resolve the 0-based index.
+    * Update CLI commands that take a `waypoint_symbol` (like `ships navigate`, `systems market`) to use this new helper.
+
+* **Improve `systems list-waypoints` command:**
+    * Modify the `waypoints` command in `cli/systems_cmd.py` to default to a "pretty-print" format (showing `[i] SYMBOL (TYPE) [TRAITS]`).
+    * Retain the existing JSON output via a `--json` flag.
 
 * **Improve CLI Argument Ergonomics:**
-    * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help.
-      
-1.  **Create a New Helper:** Add a `get_default_system(token: str) -> str` function to `src/py_st/cli/_helpers.py`. This function will call `agent.get_agent_info(token)`, get the `.headquarters` string, and parse it to return just the system part (e.g., "X1-VF50").
-2.  **Update `cli/options.py`:** Change `SYSTEM_SYMBOL_ARG` (a required `Argument`) to `SYSTEM_SYMBOL_OPTION` (an optional `Option(None, "--system", "-s", ...)`).
-3.  **Update `cli/systems_cmd.py`:** Change all commands (like `list_waypoints`, `get_market_cli`) to use the new `SYSTEM_SYMBOL_OPTION`. Inside each, add logic: `if system_symbol is None: system_symbol = get_default_system(t)`.
-4.  **Update `cli/ships_cmd.py`:** This is the key edge case. Commands like `Maps_ship_cli` and `purchase_ship_cli` must *also* be modified to accept the new `SYSTEM_SYMBOL_OPTION`. This is so `resolve_waypoint_id` has a system to use when you type `py-st ships navigate 0 0`.
-
+    * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help text.
 ---
 
 ## Sprint 3: Contracts & Market Queries
