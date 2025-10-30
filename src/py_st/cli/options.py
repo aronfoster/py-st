@@ -33,7 +33,12 @@ PRODUCE_ARG = typer.Argument(..., help="The good to produce from refining.")
 SHIP_TYPE_ARG = typer.Argument(..., help="The type of ship to purchase.")
 
 # Systems-specific
-SYSTEM_SYMBOL_ARG = typer.Argument(..., help="The system to scan.")
+SYSTEM_SYMBOL_OPTION = typer.Option(
+    None,
+    "--system",
+    "-s",
+    help="The system symbol. Defaults to your agent's HQ system.",
+)
 WAYPOINT_SYMBOL_ARG = typer.Argument(
     ...,
     help=(
