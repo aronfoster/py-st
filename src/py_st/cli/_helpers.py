@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import typer
 
 from py_st._generated.models import Ship, ShipNavStatus
-from py_st.services import ships
+from py_st.services import ships, systems
 
 
 def resolve_ship_id(token: str, ship_id_arg: str) -> str:
@@ -41,6 +41,45 @@ def resolve_ship_id(token: str, ship_id_arg: str) -> str:
     typer.secho(
         f"Error: Invalid ship index '{ship_id_arg}'. "
         f"Valid indexes are 0 to {len(all_ships) - 1}.",
+        fg=typer.colors.RED,
+        err=True,
+    )
+    raise typer.Exit(code=1)
+
+
+def resolve_waypoint_id(token: str, system_symbol: str, wp_id_arg: str) -> str:
+    """
+    Resolves a waypoint identifier to a full waypoint symbol.
+
+    Args:
+        token: The API authentication token.
+        system_symbol: The system symbol (e.g., "X1-ABC").
+        wp_id_arg: Either a full waypoint symbol or a 0-based index.
+
+    Returns:
+        The full waypoint symbol.
+
+    Raises:
+        typer.Exit: If the index is out of bounds.
+    """
+    if not wp_id_arg.isdigit():
+        return wp_id_arg
+
+    index = int(wp_id_arg)
+
+    all_waypoints = systems.list_waypoints(token, system_symbol, traits=None)
+    all_waypoints.sort(key=lambda w: w.symbol.root)
+
+    if 0 <= index < len(all_waypoints):
+        resolved = all_waypoints[index].symbol.root
+        logging.info(
+            "Resolved waypoint index %d to symbol: %s", index, resolved
+        )
+        return resolved
+
+    typer.secho(
+        f"Error: Invalid waypoint index '{wp_id_arg}' for system "
+        f"{system_symbol}. Valid indexes are 0 to {len(all_waypoints) - 1}.",
         fg=typer.colors.RED,
         err=True,
     )

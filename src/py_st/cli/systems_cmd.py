@@ -9,6 +9,7 @@ from typing import Any
 import typer
 
 from py_st.cli._errors import handle_errors
+from py_st.cli._helpers import resolve_waypoint_id
 
 from ..services import systems
 from .options import (
@@ -28,6 +29,9 @@ systems_app: typer.Typer = typer.Typer(help="View system information.")
 def list_waypoints(
     system_symbol: str = SYSTEM_SYMBOL_ARG,
     traits: list[str] = TRAITS_OPTION,
+    json_output: bool = typer.Option(
+        False, "--json", help="Output raw JSON instead of the default summary."
+    ),
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
@@ -40,28 +44,18 @@ def list_waypoints(
     )
     t = _get_token(token)
     waypoints = systems.list_waypoints(t, system_symbol, traits)
-    waypoints_list = [w.model_dump(mode="json") for w in waypoints]
-    print(json.dumps(waypoints_list, indent=2))
+    waypoints.sort(key=lambda w: w.symbol.root)
 
-
-@systems_app.command("waypoints-all")
-@handle_errors
-def list_waypoints_all(
-    system_symbol: str = SYSTEM_SYMBOL_ARG,
-    token: str | None = TOKEN_OPTION,
-    verbose: bool = VERBOSE_OPTION,
-) -> None:
-    """
-    List all waypoints in a system without filtering.
-    """
-    logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.INFO,
-        format="%(levelname)s %(name)s: %(message)s",
-    )
-    t = _get_token(token)
-    waypoints = systems.list_waypoints(t, system_symbol, None)
-    waypoints_list = [w.model_dump(mode="json") for w in waypoints]
-    print(json.dumps(waypoints_list, indent=2))
+    if json_output:
+        waypoints_list = [w.model_dump(mode="json") for w in waypoints]
+        print(json.dumps(waypoints_list, indent=2))
+    else:
+        for i, w in enumerate(waypoints):
+            traits_str = ", ".join(t.symbol.value for t in w.traits) or "N/A"
+            print(
+                f"[{i}] {w.symbol.root:<12} ({w.type.value:<18}) "
+                f"Traits: {traits_str}"
+            )
 
 
 @systems_app.command("shipyard")
@@ -80,7 +74,8 @@ def get_shipyard_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    shipyard = systems.get_shipyard(t, system_symbol, waypoint_symbol)
+    resolved_wp_symbol = resolve_waypoint_id(t, system_symbol, waypoint_symbol)
+    shipyard = systems.get_shipyard(t, system_symbol, resolved_wp_symbol)
     print(json.dumps(shipyard.model_dump(mode="json"), indent=2))
 
 
@@ -100,7 +95,8 @@ def get_market_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    market = systems.get_market(t, system_symbol, waypoint_symbol)
+    resolved_wp_symbol = resolve_waypoint_id(t, system_symbol, waypoint_symbol)
+    market = systems.get_market(t, system_symbol, resolved_wp_symbol)
     if market is None:
         print(json.dumps({"market": None}, indent=2))
     else:

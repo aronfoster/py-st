@@ -8,16 +8,6 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 The goal of this sprint is to replicate the "playability" features from Sprint 1 for **waypoints**. This will allow users to use `wp 0` in commands like `ships navigate`.
 
-* **Improve `systems list-waypoints` command:**
-    * Modify `systems_cmd.py` so the `waypoints` command defaults to a "pretty-print" format (showing `[i] SYMBOL (TYPE) [TRAITS]`).
-    * This command should use the cached `services.systems.list_waypoints` function (which is already cached).
-    * The existing JSON output should be retained via a `--json` flag.
-
-* **Implement Waypoint Index Lookup:**
-    * Create a `resolve_waypoint_id(token: str, system: str, wp_id_arg: str) -> str` helper in `cli/_helpers.py`.
-    * This helper must fetch all waypoints for the *given system* (e.g., from `services.systems.list_waypoints`), sort them by symbol, and resolve the 0-based index.
-    * Update CLI commands that take a `waypoint_symbol` (like `ships navigate`, `systems market`, `systems shipyard`) to use this new helper.
-
 * **Improve CLI Argument Ergonomics:**
     * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help.
 
@@ -73,6 +63,10 @@ These items improve code quality and performance but are not tied to a specific 
 ---
 
 ## ✅ Done
+
+* **Sprint 2: Waypoint Playability**
+    * ✅ **Improve `systems waypoints` command:** `waypoints` now defaults to an indexed "pretty-print" list and uses `--json` for raw output.
+    * ✅ **Implement Waypoint Index Lookup:** Added `resolve_waypoint_id` to `cli/_helpers.py` and updated `systems market/shipyard` commands to accept 0-based indexes.
 
 * **Sprint 1: Ships Playability**
     * ✅ **Testing:** Added `tests/test_services_ships.py` with full unit test coverage for `services/ships.py`.

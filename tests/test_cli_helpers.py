@@ -3,9 +3,16 @@
 from datetime import UTC, datetime
 from unittest.mock import patch
 
-from py_st._generated.models import Ship, ShipNavStatus
-from py_st.cli._helpers import _format_time_remaining, format_ship_status
-from tests.factories import ShipFactory
+import pytest
+import typer
+
+from py_st._generated.models import Ship, ShipNavStatus, Waypoint
+from py_st.cli._helpers import (
+    _format_time_remaining,
+    format_ship_status,
+    resolve_waypoint_id,
+)
+from tests.factories import ShipFactory, WaypointFactory
 
 
 def test_format_time_remaining_arrived() -> None:
@@ -155,3 +162,87 @@ def test_format_ship_status_in_transit_arrived() -> None:
     assert (
         result == "IN_TRANSIT to X1-GHI-999 (Arrived)"
     ), "Should show 'Arrived' when ship has reached destination"
+
+
+def test_resolve_waypoint_id_passthrough() -> None:
+    """Test resolve_waypoint_id returns full symbol unchanged."""
+    # Arrange
+    token = "test-token"
+    system_symbol = "X1-ABC"
+    wp_id_arg = "X1-ABC-A1"
+
+    # Act
+    result = resolve_waypoint_id(token, system_symbol, wp_id_arg)
+
+    # Assert
+    assert (
+        result == "X1-ABC-A1"
+    ), "Should return full waypoint symbol unchanged when input is not a digit"
+
+
+def test_resolve_waypoint_id_index_lookup() -> None:
+    """Test resolve_waypoint_id resolves index to waypoint symbol."""
+    # Arrange
+    token = "test-token"
+    system_symbol = "X1-ABC"
+    wp_id_arg = "0"
+
+    # Create mock waypoints (unsorted order)
+    wp_data_1 = WaypointFactory.build_minimal(
+        symbol="X1-ABC-C3", system_symbol="X1-ABC"
+    )
+    wp_data_2 = WaypointFactory.build_minimal(
+        symbol="X1-ABC-A1", system_symbol="X1-ABC"
+    )
+    wp_data_3 = WaypointFactory.build_minimal(
+        symbol="X1-ABC-B2", system_symbol="X1-ABC"
+    )
+    mock_waypoints = [
+        Waypoint.model_validate(wp_data_1),
+        Waypoint.model_validate(wp_data_2),
+        Waypoint.model_validate(wp_data_3),
+    ]
+
+    # Act
+    with patch(
+        "py_st.cli._helpers.systems.list_waypoints"
+    ) as mock_list_waypoints:
+        mock_list_waypoints.return_value = mock_waypoints
+        result = resolve_waypoint_id(token, system_symbol, wp_id_arg)
+
+    # Assert
+    assert (
+        result == "X1-ABC-A1"
+    ), "Should resolve index 0 to first waypoint after sorting by symbol"
+    mock_list_waypoints.assert_called_once_with(
+        token, system_symbol, traits=None
+    )
+
+
+def test_resolve_waypoint_id_out_of_bounds() -> None:
+    """Test resolve_waypoint_id raises Exit for invalid index."""
+    # Arrange
+    token = "test-token"
+    system_symbol = "X1-ABC"
+    wp_id_arg = "99"
+
+    # Create mock waypoints
+    wp_data = WaypointFactory.build_minimal(
+        symbol="X1-ABC-A1", system_symbol="X1-ABC"
+    )
+    mock_waypoints = [Waypoint.model_validate(wp_data)]
+
+    # Act & Assert
+    with patch(
+        "py_st.cli._helpers.systems.list_waypoints"
+    ) as mock_list_waypoints:
+        mock_list_waypoints.return_value = mock_waypoints
+        with pytest.raises(typer.Exit) as exc_info:
+            resolve_waypoint_id(token, system_symbol, wp_id_arg)
+
+    assert (
+        exc_info.value.exit_code == 1
+    ), "Should exit with code 1 for invalid index"
+    mock_list_waypoints.assert_called_once_with(
+        token, system_symbol, traits=None
+    )
