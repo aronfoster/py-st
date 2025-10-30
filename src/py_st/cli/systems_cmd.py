@@ -9,11 +9,11 @@ from typing import Any
 import typer
 
 from py_st.cli._errors import handle_errors
-from py_st.cli._helpers import resolve_waypoint_id
+from py_st.cli._helpers import get_default_system, resolve_waypoint_id
 
 from ..services import systems
 from .options import (
-    SYSTEM_SYMBOL_ARG,
+    SYSTEM_SYMBOL_OPTION,
     TOKEN_OPTION,
     TRAITS_OPTION,
     VERBOSE_OPTION,
@@ -27,7 +27,7 @@ systems_app: typer.Typer = typer.Typer(help="View system information.")
 @systems_app.command("waypoints")
 @handle_errors
 def list_waypoints(
-    system_symbol: str = SYSTEM_SYMBOL_ARG,
+    system_symbol: str | None = SYSTEM_SYMBOL_OPTION,
     traits: list[str] = TRAITS_OPTION,
     json_output: bool = typer.Option(
         False, "--json", help="Output raw JSON instead of the default summary."
@@ -43,6 +43,8 @@ def list_waypoints(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
+    if system_symbol is None:
+        system_symbol = get_default_system(t)
     waypoints = systems.list_waypoints(t, system_symbol, traits)
     waypoints.sort(key=lambda w: w.symbol.root)
 
@@ -61,8 +63,8 @@ def list_waypoints(
 @systems_app.command("shipyard")
 @handle_errors
 def get_shipyard_cli(
-    system_symbol: str = SYSTEM_SYMBOL_ARG,
     waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
+    system_symbol: str | None = SYSTEM_SYMBOL_OPTION,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
@@ -74,6 +76,8 @@ def get_shipyard_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
+    if system_symbol is None:
+        system_symbol = get_default_system(t)
     resolved_wp_symbol = resolve_waypoint_id(t, system_symbol, waypoint_symbol)
     shipyard = systems.get_shipyard(t, system_symbol, resolved_wp_symbol)
     print(json.dumps(shipyard.model_dump(mode="json"), indent=2))
@@ -82,8 +86,8 @@ def get_shipyard_cli(
 @systems_app.command("market")
 @handle_errors
 def get_market_cli(
-    system_symbol: str = SYSTEM_SYMBOL_ARG,
     waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
+    system_symbol: str | None = SYSTEM_SYMBOL_OPTION,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
@@ -95,6 +99,8 @@ def get_market_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
+    if system_symbol is None:
+        system_symbol = get_default_system(t)
     resolved_wp_symbol = resolve_waypoint_id(t, system_symbol, waypoint_symbol)
     market = systems.get_market(t, system_symbol, resolved_wp_symbol)
     if market is None:
@@ -106,7 +112,7 @@ def get_market_cli(
 @systems_app.command("list-goods")
 @handle_errors
 def systems_list_goods_cli(
-    system_symbol: str = SYSTEM_SYMBOL_ARG,
+    system_symbol: str | None = SYSTEM_SYMBOL_OPTION,
     by_good: bool = typer.Option(
         False, "--by-good", help="Show goods-centric view"
     ),
@@ -121,6 +127,8 @@ def systems_list_goods_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
+    if system_symbol is None:
+        system_symbol = get_default_system(t)
     data = systems.list_system_goods(t, system_symbol)
 
     def _sym(obj: Any) -> str:

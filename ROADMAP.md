@@ -6,13 +6,7 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ## Sprint 2: QOL & Waypoint Playability
 
-The goal of this sprint is to implement the "default to HQ system" feature and replicate the ship "playability" features for **waypoints**. This will allow users to omit system symbols and use 0-based indexes for waypoints (e.g., `py-st systems market 0`).
-
-* **Implement "Default to HQ System" Feature:**
-    * Create a `get_default_system(token: str) -> str` function in `src/py_st/cli/_helpers.py` that parses the HQ system from cached agent info.
-    * Change `SYSTEM_SYMBOL_ARG` to `SYSTEM_SYMBOL_OPTION` (optional `--system` flag) in `src/py_st/cli/options.py`.
-    * Update all commands in `src/py_st/cli/systems_cmd.py` to use the new optional `--system` flag and call `get_default_system` if it's omitted.
-    * Update commands in `src/py_st/cli/ships_cmd.py` (e.g., `Maps`, `purchase`) to also accept the optional `--system` flag.
+The goal of this sprint is to replicate the ship "playability" features for **waypoints**. This will allow users to omit system symbols and use 0-based indexes for waypoints (e.g., `py-st systems market 0`).
 
 * **Implement Waypoint Index Lookup:**
     * Create a `resolve_waypoint_id(token: str, system: str, wp_id_arg: str) -> str` helper in `cli/_helpers.py`.
@@ -79,6 +73,11 @@ These items improve code quality and performance but are not tied to a specific 
 ## ✅ Done
 
 * **Sprint 2: Waypoint Playability**
+    * ✅ **Implement "Default to HQ System" Feature:**
+        * ✅ Created `get_default_system` helper to parse HQ system from cached agent info.
+        * ✅ Changed `SYSTEM_SYMBOL_ARG` to `SYSTEM_SYMBOL_OPTION` in `options.py`.
+        * ✅ Updated all commands in `systems_cmd.py` to use the optional `--system` flag.
+        * ✅ Updated `ships navigate` and `ships purchase` to accept the optional `--system` flag for waypoint resolution.
     * ✅ **Improve `systems waypoints` command:** `waypoints` now defaults to an indexed "pretty-print" list and uses `--json` for raw output.
     * ✅ **Implement Waypoint Index Lookup:** Added `resolve_waypoint_id` to `cli/_helpers.py` and updated `systems market/shipyard` commands to accept 0-based indexes.
 

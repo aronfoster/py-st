@@ -7,7 +7,12 @@ import typer
 
 from py_st._generated.models import ShipNavFlightMode
 from py_st.cli._errors import handle_errors
-from py_st.cli._helpers import format_ship_status, resolve_ship_id
+from py_st.cli._helpers import (
+    format_ship_status,
+    get_default_system,
+    resolve_ship_id,
+    resolve_waypoint_id,
+)
 
 from ..services import ships
 from .options import (
@@ -18,6 +23,7 @@ from .options import (
     REFUEL_UNITS_OPTION,
     SHIP_SYMBOL_ARG,
     SHIP_TYPE_ARG,
+    SYSTEM_SYMBOL_OPTION,
     TOKEN_OPTION,
     VERBOSE_OPTION,
     WAYPOINT_SYMBOL_ARG,
@@ -62,6 +68,7 @@ def list_ships(
 def navigate_ship_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
     waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
+    system_symbol: str | None = SYSTEM_SYMBOL_OPTION,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
@@ -73,9 +80,19 @@ def navigate_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    resolved_symbol = resolve_ship_id(t, ship_symbol)
-    result = ships.navigate_ship(t, resolved_symbol, waypoint_symbol)
-    print(f"🚀 Ship {resolved_symbol} is navigating to {waypoint_symbol}.")
+    resolved_ship_symbol = resolve_ship_id(t, ship_symbol)
+    if system_symbol is None:
+        system_symbol = get_default_system(t)
+    resolved_waypoint_symbol = resolve_waypoint_id(
+        t, system_symbol, waypoint_symbol
+    )
+    result = ships.navigate_ship(
+        t, resolved_ship_symbol, resolved_waypoint_symbol
+    )
+    print(
+        f"🚀 Ship {resolved_ship_symbol} is navigating to "
+        f"{resolved_waypoint_symbol}."
+    )
     print(json.dumps(result.model_dump(mode="json"), indent=2))
 
 
@@ -294,6 +311,7 @@ def sell_cargo_cli(
 def purchase_ship_cli(
     waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
     ship_type: str = SHIP_TYPE_ARG,
+    system_symbol: str | None = SYSTEM_SYMBOL_OPTION,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
@@ -305,8 +323,13 @@ def purchase_ship_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
+    if system_symbol is None:
+        system_symbol = get_default_system(t)
+    resolved_waypoint_symbol = resolve_waypoint_id(
+        t, system_symbol, waypoint_symbol
+    )
     agent, ship, transaction = ships.purchase_ship(
-        t, ship_type, waypoint_symbol
+        t, ship_type, resolved_waypoint_symbol
     )
     print(f"🛒 Purchased ship {ship.symbol} of type {ship_type}.")
     output = {
