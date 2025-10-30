@@ -38,6 +38,7 @@ def test_list_ships(
     mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
 ) -> None:
     """Test list_ships returns a list of Ship objects."""
+    # Arrange
     mock_load_cache.return_value = {}
 
     ship1_data = ShipFactory.build_minimal()
@@ -51,8 +52,10 @@ def test_list_ships(
     mock_client_class.return_value = mock_client
     mock_client.ships.get_ships.return_value = [ship1, ship2]
 
+    # Act
     result = ships.list_ships("fake_token")
 
+    # Assert
     assert isinstance(result, list)
     assert len(result) == 2
     assert all(isinstance(s, Ship) for s in result)
@@ -465,6 +468,7 @@ def test_list_ships_cache_hit(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
     """Test list_ships returns cached data when cache is fresh."""
+    # Arrange
     now = datetime.now(UTC)
     cache_time = now - CACHE_STALENESS_THRESHOLD / 2
 
@@ -481,21 +485,18 @@ def test_list_ships_cache_hit(
         }
     }
 
-    # Call the function
+    # Act
     result = ships.list_ships("fake_token")
 
-    # Assertions
+    # Assert
     assert isinstance(result, list)
     assert len(result) == 2
     assert all(isinstance(s, Ship) for s in result)
     assert result[0].symbol == "SHIP-1"
     assert result[1].symbol == "SHIP-2"
 
-    # Verify cache was loaded but not saved
     mock_load_cache.assert_called_once()
     mock_save_cache.assert_not_called()
-
-    # Verify client was NOT called (cache hit)
     mock_client_class.assert_not_called()
 
 
@@ -506,6 +507,7 @@ def test_list_ships_cache_miss_stale(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
     """Test list_ships fetches fresh data when cache is stale."""
+    # Arrange
     now = datetime.now(UTC)
     cache_time = now - CACHE_STALENESS_THRESHOLD * 2
 
@@ -519,7 +521,6 @@ def test_list_ships_cache_miss_stale(
         }
     }
 
-    # Create fresh data from API
     new_ship1_data = ShipFactory.build_minimal()
     new_ship2_data = ShipFactory.build_minimal()
     new_ship2_data["symbol"] = "NEW-SHIP-2"
@@ -527,25 +528,21 @@ def test_list_ships_cache_miss_stale(
     new_ship1 = Ship.model_validate(new_ship1_data)
     new_ship2 = Ship.model_validate(new_ship2_data)
 
-    # Configure mock client
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
     mock_client.ships.get_ships.return_value = [new_ship1, new_ship2]
 
-    # Call the function
+    # Act
     result = ships.list_ships("fake_token")
 
-    # Assertions - should return NEW data, not old cached data
+    # Assert
     assert isinstance(result, list)
     assert len(result) == 2
     assert result[0].symbol == "SHIP-1"
     assert result[1].symbol == "NEW-SHIP-2"
 
-    # Verify cache was loaded and saved
     mock_load_cache.assert_called_once()
     mock_save_cache.assert_called_once()
-
-    # Verify client WAS called (cache miss due to staleness)
     mock_client.ships.get_ships.assert_called_once()
 
 
@@ -556,10 +553,9 @@ def test_list_ships_cache_miss_not_found(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
     """Test list_ships fetches data when cache entry doesn't exist."""
-    # Return empty cache
+    # Arrange
     mock_load_cache.return_value = {}
 
-    # Create fresh data from API
     ship1_data = ShipFactory.build_minimal()
     ship2_data = ShipFactory.build_minimal()
     ship2_data["symbol"] = "SHIP-2"
@@ -567,25 +563,21 @@ def test_list_ships_cache_miss_not_found(
     ship1 = Ship.model_validate(ship1_data)
     ship2 = Ship.model_validate(ship2_data)
 
-    # Configure mock client
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
     mock_client.ships.get_ships.return_value = [ship1, ship2]
 
-    # Call the function
+    # Act
     result = ships.list_ships("fake_token")
 
-    # Assertions
+    # Assert
     assert isinstance(result, list)
     assert len(result) == 2
     assert result[0].symbol == "SHIP-1"
     assert result[1].symbol == "SHIP-2"
 
-    # Verify cache was loaded and saved
     mock_load_cache.assert_called_once()
     mock_save_cache.assert_called_once()
-
-    # Verify client WAS called (cache miss - not found)
     mock_client.ships.get_ships.assert_called_once()
 
 
@@ -596,12 +588,12 @@ def test_list_ships_cache_invalid_data(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
     """Test list_ships handles invalid cached data gracefully."""
+    # Arrange
     now = datetime.now(UTC)
     cache_time = now - CACHE_STALENESS_THRESHOLD / 2
 
     invalid_ship_data = {
         "symbol": "SHIP-1",
-        # Missing required fields like "registration", "nav", etc.
     }
 
     mock_load_cache.return_value = {
@@ -611,7 +603,6 @@ def test_list_ships_cache_invalid_data(
         }
     }
 
-    # Create fresh data from API
     ship1_data = ShipFactory.build_minimal()
     ship2_data = ShipFactory.build_minimal()
     ship2_data["symbol"] = "SHIP-2"
@@ -619,23 +610,19 @@ def test_list_ships_cache_invalid_data(
     ship1 = Ship.model_validate(ship1_data)
     ship2 = Ship.model_validate(ship2_data)
 
-    # Configure mock client
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
     mock_client.ships.get_ships.return_value = [ship1, ship2]
 
-    # Call the function
+    # Act
     result = ships.list_ships("fake_token")
 
-    # Assertions - should fetch from API due to invalid cached data
+    # Assert
     assert isinstance(result, list)
     assert len(result) == 2
     assert result[0].symbol == "SHIP-1"
     assert result[1].symbol == "SHIP-2"
 
-    # Verify cache was loaded and saved
     mock_load_cache.assert_called_once()
     mock_save_cache.assert_called_once()
-
-    # Verify client WAS called (cache miss due to invalid data)
     mock_client.ships.get_ships.assert_called_once()
