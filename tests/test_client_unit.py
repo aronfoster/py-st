@@ -152,6 +152,7 @@ def test_get_waypoints_in_system_parses_response() -> None:
 
 def test_purchase_cargo_parses_response() -> None:
     """Test purchase_cargo endpoint parses response correctly."""
+    # Arrange
     agent_json = AgentFactory.build_minimal()
     agent_json["credits"] = 8500  # Simulate decreased credits after purchase
 
@@ -187,18 +188,22 @@ def test_purchase_cargo_parses_response() -> None:
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
     st = SpaceTradersClient(token="T", client=fake_client)
+
+    # Act
     result_agent, result_cargo, result_transaction = st.ships.purchase_cargo(
         "SHIP-1", "SHIP_PARTS", 8
     )
 
-    assert isinstance(result_agent, Agent)
-    assert result_agent.credits == 8500
-    assert result_cargo.units == 8
-    assert result_cargo.capacity == 40
+    # Assert
+    assert isinstance(result_agent, Agent), "Should return Agent object"
+    assert result_agent.credits == 8500, "Agent credits should be updated"
+    assert result_cargo.units == 8, "Cargo units should match purchase"
+    assert result_cargo.capacity == 40, "Cargo capacity should be present"
 
 
 def test_sell_cargo_parses_response() -> None:
     """Test sell_cargo endpoint parses response correctly."""
+    # Arrange
     agent_json = AgentFactory.build_minimal()
     agent_json["credits"] = 11500  # Simulate increased credits after sale
 
@@ -234,11 +239,14 @@ def test_sell_cargo_parses_response() -> None:
         transport=transport, base_url="https://api.spacetraders.io/v2"
     )
     st = SpaceTradersClient(token="T", client=fake_client)
+
+    # Act
     result_agent, result_cargo, result_transaction = st.ships.sell_cargo(
         "SHIP-1", "IRON_ORE", 10
     )
 
-    assert isinstance(result_agent, Agent)
-    assert result_agent.credits == 11500
-    assert result_cargo.units == 2
-    assert result_cargo.capacity == 40
+    # Assert
+    assert isinstance(result_agent, Agent), "Should return Agent object"
+    assert result_agent.credits == 11500, "Agent credits should be updated"
+    assert result_cargo.units == 2, "Cargo units should be decreased"
+    assert result_cargo.capacity == 40, "Cargo capacity should be present"
