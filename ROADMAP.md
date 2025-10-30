@@ -4,6 +4,12 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ---
 
+## Bug
+
+* I forgot to have ship status marked stale in cache during change events like orbit, dock, transit. Should always be stale during transit. Should update prety-print ship status to show current fuel / max fuel.
+
+---
+
 ## Sprint 3: Cargo & Contracts
 
 The goal of this sprint is to add the core gameplay loop of buying and delivering cargo for contracts. We will refactor all index lookups to use unambiguous prefixes (e.g., `s-0`, `w-0`).
