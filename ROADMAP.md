@@ -19,6 +19,11 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
     * ✅ Modify `ships` commands to accept a 0-based index (e.g., `0`) in addition to the full ship symbol.
         * ✅ Implemented `cli/_helpers.py` with `resolve_ship_id` and updated all commands in `ships_cmd.py`.
 
+* **Improve `ships list` command:**
+    * ✅ `py-st ships list` now reads from cache.
+    * ✅ Replaced default JSON dump with a "pretty-print" format showing 0-based index, symbol, role, and status.
+    * ✅ Added a `--json` flag to retain the old JSON output behavior.
+
 ---
 
 ## 🚀 Playability & CLI Enhancements
@@ -32,7 +37,6 @@ The top priority is making the CLI "smart" by leveraging cached data.
     * Create new CLI commands to quickly query the cached data, addressing the "which market bought iron?" problem. Examples:
         * `py-st systems markets --buys IRON_ORE`
         * `py-st systems markets --sells FUEL`
-        * `py-st ships list` (should now be fast, reading from cache)
 
 * **Improve CLI Argument Ergonomics:**
     * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help.
