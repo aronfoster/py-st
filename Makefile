@@ -67,8 +67,8 @@ build-model-aliases: tools/gen_model_aliases.py ## Generate model aliases
 	./tools/gen_model_aliases.py
 
 clear-cache: ## Remove the local JSON cache
-    @rm -f src/.cache/data.json
-    @echo "Cache cleared."
+	@rm -f src/.cache/data.json
+	@echo "Cache cleared."
 
 # ==============================================================================
 # Help
