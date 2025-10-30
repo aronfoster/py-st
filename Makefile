@@ -1,6 +1,6 @@
 ## Makefile for py-st project
 
-.PHONY: all lint type test ci fetch-spec regen-spec clean-spec build-model-aliases help prepare-tools
+.PHONY: all lint type test ci fetch-spec regen-spec clean-spec build-model-aliases help prepare-tools clear-cache
 .DEFAULT_GOAL := help
 
 # ==============================================================================
@@ -65,6 +65,10 @@ clean-spec: ## Clean up the temporary spec files
 
 build-model-aliases: tools/gen_model_aliases.py ## Generate model aliases
 	./tools/gen_model_aliases.py
+
+clear-cache: ## Remove the local JSON cache
+    @rm -f src/.cache/data.json
+    @echo "Cache cleared."
 
 # ==============================================================================
 # Help
