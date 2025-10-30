@@ -34,7 +34,13 @@ SHIP_TYPE_ARG = typer.Argument(..., help="The type of ship to purchase.")
 
 # Systems-specific
 SYSTEM_SYMBOL_ARG = typer.Argument(..., help="The system to scan.")
-WAYPOINT_SYMBOL_ARG = typer.Argument(..., help="The waypoint to use.")
+WAYPOINT_SYMBOL_ARG = typer.Argument(
+    ...,
+    help=(
+        "The waypoint's full symbol or 0-based index "
+        "(relative to its system)."
+    ),
+)
 TRAITS_OPTION = typer.Option(
     None, "--trait", help="Filter waypoints by trait."
 )
