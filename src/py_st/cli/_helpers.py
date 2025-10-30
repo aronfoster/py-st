@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import typer
 
 from py_st._generated.models import Ship, ShipNavStatus
-from py_st.services import ships, systems
+from py_st.services import agent, ships, systems
 
 
 def resolve_ship_id(token: str, ship_id_arg: str) -> str:
@@ -133,3 +133,33 @@ def format_ship_status(ship: Ship) -> str:
         return f"IN_TRANSIT to {destination} ({time_str})"
     else:
         return f"{status.value}"
+
+
+def get_default_system(token: str) -> str:
+    """
+    Get the default system symbol from the agent's headquarters.
+
+    Args:
+        token: The API authentication token.
+
+    Returns:
+        The system symbol (e.g., "X1-ABC") extracted from the agent's
+        headquarters waypoint.
+
+    Raises:
+        typer.Exit: If the system symbol cannot be parsed from the
+        agent headquarters.
+    """
+    try:
+        agent_info = agent.get_agent_info(token)
+        hq_symbol_str: str = agent_info.headquarters
+        system_symbol = hq_symbol_str.rsplit("-", 1)[0]
+        return system_symbol
+    except (ValueError, IndexError) as e:
+        typer.secho(
+            f"Error: Could not parse system symbol from agent "
+            f"headquarters: {e}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1) from e

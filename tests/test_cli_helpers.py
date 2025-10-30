@@ -6,13 +6,14 @@ from unittest.mock import patch
 import pytest
 import typer
 
-from py_st._generated.models import Ship, ShipNavStatus, Waypoint
+from py_st._generated.models import Agent, Ship, ShipNavStatus, Waypoint
 from py_st.cli._helpers import (
     _format_time_remaining,
     format_ship_status,
+    get_default_system,
     resolve_waypoint_id,
 )
-from tests.factories import ShipFactory, WaypointFactory
+from tests.factories import AgentFactory, ShipFactory, WaypointFactory
 
 
 def test_format_time_remaining_arrived() -> None:
@@ -246,3 +247,39 @@ def test_resolve_waypoint_id_out_of_bounds() -> None:
     mock_list_waypoints.assert_called_once_with(
         token, system_symbol, traits=None
     )
+
+
+def test_get_default_system() -> None:
+    """Test get_default_system parses system from standard HQ symbol."""
+    # Arrange
+    agent_data = AgentFactory.build_minimal()
+    agent_data["headquarters"] = "X1-TEST-A1"
+    mock_agent = Agent.model_validate(agent_data)
+
+    # Act
+    with patch("py_st.cli._helpers.agent.get_agent_info") as mock_get_agent:
+        mock_get_agent.return_value = mock_agent
+        result = get_default_system("fake_token")
+
+    # Assert
+    assert (
+        result == "X1-TEST"
+    ), "Should correctly parse the system from a standard HQ waypoint symbol"
+
+
+def test_get_default_system_complex_symbol() -> None:
+    """Test get_default_system parses system with multiple hyphens."""
+    # Arrange
+    agent_data = AgentFactory.build_minimal()
+    agent_data["headquarters"] = "X1-LONG-SYSTEM-NAME-A123"
+    mock_agent = Agent.model_validate(agent_data)
+
+    # Act
+    with patch("py_st.cli._helpers.agent.get_agent_info") as mock_get_agent:
+        mock_get_agent.return_value = mock_agent
+        result = get_default_system("fake_token")
+
+    # Assert
+    assert (
+        result == "X1-LONG-SYSTEM-NAME"
+    ), "Should correctly parse a system with multiple hyphens"
