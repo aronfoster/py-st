@@ -413,9 +413,8 @@ def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
     Returns real TradeGood objects grouped by waypoint, plus a reverse
     index.
     """
-    client = SpaceTradersClient(token=token)
-    waypoints: list[Waypoint] = client.systems.list_waypoints_all(
-        system_symbol
+    waypoints: list[Waypoint] = _fetch_and_cache_waypoints(
+        token, system_symbol
     )
     waypoints = [wp for wp in waypoints if _has_marketplace(wp)]
 
@@ -425,7 +424,7 @@ def list_system_goods(token: str, system_symbol: str) -> SystemGoods:
 
     for wp in waypoints:
         wp_sym = wp.symbol.root
-        mkt: Market = client.systems.get_market(system_symbol, wp_sym)
+        mkt: Market = get_market(token, system_symbol, wp_sym)
 
         imports = list(mkt.imports or [])
         exports = list(mkt.exports or [])
