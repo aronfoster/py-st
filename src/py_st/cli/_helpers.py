@@ -17,7 +17,8 @@ def resolve_ship_id(token: str, ship_id_arg: str) -> str:
 
     Args:
         token: The API authentication token.
-        ship_id_arg: Either a full ship symbol or a 0-based index.
+        ship_id_arg: Either a full ship symbol or a prefixed 0-based index
+            (e.g., 's-0', 'S-1').
 
     Returns:
         The full ship symbol.
@@ -25,10 +26,14 @@ def resolve_ship_id(token: str, ship_id_arg: str) -> str:
     Raises:
         typer.Exit: If the index is out of bounds.
     """
-    if not ship_id_arg.isdigit():
+    # Check for index prefix (s- or S-)
+    if ship_id_arg.lower().startswith("s-"):
+        index_str = ship_id_arg[2:]
+        if not index_str.isdigit():
+            return ship_id_arg
+        index = int(index_str)
+    else:
         return ship_id_arg
-
-    index = int(ship_id_arg)
 
     all_ships = ships.list_ships(token)
     all_ships.sort(key=lambda s: s.symbol)
@@ -54,7 +59,8 @@ def resolve_waypoint_id(token: str, system_symbol: str, wp_id_arg: str) -> str:
     Args:
         token: The API authentication token.
         system_symbol: The system symbol (e.g., "X1-ABC").
-        wp_id_arg: Either a full waypoint symbol or a 0-based index.
+        wp_id_arg: Either a full waypoint symbol or a prefixed 0-based index
+            (e.g., 'w-0', 'W-1').
 
     Returns:
         The full waypoint symbol.
@@ -62,10 +68,14 @@ def resolve_waypoint_id(token: str, system_symbol: str, wp_id_arg: str) -> str:
     Raises:
         typer.Exit: If the index is out of bounds.
     """
-    if not wp_id_arg.isdigit():
+    # Check for index prefix (w- or W-)
+    if wp_id_arg.lower().startswith("w-"):
+        index_str = wp_id_arg[2:]
+        if not index_str.isdigit():
+            return wp_id_arg
+        index = int(index_str)
+    else:
         return wp_id_arg
-
-    index = int(wp_id_arg)
 
     all_waypoints = systems.list_waypoints(token, system_symbol, traits=None)
     all_waypoints.sort(key=lambda w: w.symbol.root)

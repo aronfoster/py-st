@@ -17,12 +17,6 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 The goal of this sprint is to add the core gameplay loop of buying and delivering cargo for contracts. We will refactor all index lookups to use unambiguous prefixes (e.g., `s-0`, `w-0`).
 
-* **Refactor Index Helpers to Use Prefixes:**
-    * Modify `cli/_helpers.py` to change `resolve_ship_id` to look for a prefix (e.g., `s-0`) instead of just digits.
-    * Modify `cli/_helpers.py` to change `resolve_waypoint_id` to look for a prefix (e.g., `w-0`).
-    * Update help text in `cli/options.py` to reflect the new `s-0` and `w-0` format.
-    * Update tests in `test_cli_helpers.py` to verify the new prefix logic.
-
 * **Implement Ship Index Lookup for `contracts` Commands:**
     * Update `contracts_cmd.py` (for `negotiate`, `deliver`) to use the (now prefixed) `resolve_ship_id` helper.
 
@@ -87,6 +81,11 @@ These items improve code quality and performance but are not tied to a specific 
     * ✅ Refactored ship list cache to use "dirty" flag instead of time-based staleness. Updated ships list command to display fuel (current/max).
 
 * **Sprint 3: Cargo & Contracts**
+    * ✅ **Refactor Index Helpers to Use Prefixes:**
+        * ✅ Modified `cli/_helpers.py` to change `resolve_ship_id` to look for a prefix (e.g., `s-0`) instead of just digits.
+        * ✅ Modified `cli/_helpers.py` to change `resolve_waypoint_id` to look for a prefix (e.g., `w-0`).
+        * ✅ Updated help text in `cli/options.py` to reflect the new `s-0` and `w-0` format.
+        * ✅ Updated tests in `test_cli_helpers.py` to verify the new prefix logic.
     * ✅ **Implement `purchase-cargo` Command:**
         * ✅ Added `purchase_cargo` to `client/endpoints/ships.py` (POST /my/ships/{shipSymbol}/purchase).
         * ✅ Added `purchase_cargo` function to `services/ships.py`.

@@ -11,6 +11,7 @@ from py_st.cli._helpers import (
     _format_time_remaining,
     format_ship_status,
     get_default_system,
+    resolve_ship_id,
     resolve_waypoint_id,
 )
 from tests.factories import AgentFactory, ShipFactory, WaypointFactory
@@ -176,17 +177,34 @@ def test_resolve_waypoint_id_passthrough() -> None:
     result = resolve_waypoint_id(token, system_symbol, wp_id_arg)
 
     # Assert
-    assert (
-        result == "X1-ABC-A1"
-    ), "Should return full waypoint symbol unchanged when input is not a digit"
+    assert result == "X1-ABC-A1", (
+        "Should return full waypoint symbol unchanged when input is "
+        "not prefixed"
+    )
 
 
-def test_resolve_waypoint_id_index_lookup() -> None:
-    """Test resolve_waypoint_id resolves index to waypoint symbol."""
+def test_resolve_waypoint_id_plain_digit_passthrough() -> None:
+    """Test resolve_waypoint_id treats plain digits as symbols."""
     # Arrange
     token = "test-token"
     system_symbol = "X1-ABC"
     wp_id_arg = "0"
+
+    # Act
+    result = resolve_waypoint_id(token, system_symbol, wp_id_arg)
+
+    # Assert
+    assert (
+        result == "0"
+    ), "Should pass through plain digit as symbol, not resolve as index"
+
+
+def test_resolve_waypoint_id_index_lookup() -> None:
+    """Test resolve_waypoint_id resolves prefixed index to waypoint symbol."""
+    # Arrange
+    token = "test-token"
+    system_symbol = "X1-ABC"
+    wp_id_arg = "w-0"
 
     # Create mock waypoints (unsorted order)
     wp_data_1 = WaypointFactory.build_minimal(
@@ -214,18 +232,53 @@ def test_resolve_waypoint_id_index_lookup() -> None:
     # Assert
     assert (
         result == "X1-ABC-A1"
-    ), "Should resolve index 0 to first waypoint after sorting by symbol"
+    ), "Should resolve w-0 to first waypoint after sorting by symbol"
+    mock_list_waypoints.assert_called_once_with(
+        token, system_symbol, traits=None
+    )
+
+
+def test_resolve_waypoint_id_uppercase_prefix() -> None:
+    """Test resolve_waypoint_id handles uppercase W- prefix."""
+    # Arrange
+    token = "test-token"
+    system_symbol = "X1-ABC"
+    wp_id_arg = "W-1"
+
+    # Create mock waypoints
+    wp_data_1 = WaypointFactory.build_minimal(
+        symbol="X1-ABC-A1", system_symbol="X1-ABC"
+    )
+    wp_data_2 = WaypointFactory.build_minimal(
+        symbol="X1-ABC-B2", system_symbol="X1-ABC"
+    )
+    mock_waypoints = [
+        Waypoint.model_validate(wp_data_1),
+        Waypoint.model_validate(wp_data_2),
+    ]
+
+    # Act
+    with patch(
+        "py_st.cli._helpers.systems.list_waypoints"
+    ) as mock_list_waypoints:
+        mock_list_waypoints.return_value = mock_waypoints
+        result = resolve_waypoint_id(token, system_symbol, wp_id_arg)
+
+    # Assert
+    assert (
+        result == "X1-ABC-B2"
+    ), "Should resolve uppercase W-1 to second waypoint after sorting"
     mock_list_waypoints.assert_called_once_with(
         token, system_symbol, traits=None
     )
 
 
 def test_resolve_waypoint_id_out_of_bounds() -> None:
-    """Test resolve_waypoint_id raises Exit for invalid index."""
+    """Test resolve_waypoint_id raises Exit for invalid prefixed index."""
     # Arrange
     token = "test-token"
     system_symbol = "X1-ABC"
-    wp_id_arg = "99"
+    wp_id_arg = "w-99"
 
     # Create mock waypoints
     wp_data = WaypointFactory.build_minimal(
@@ -247,6 +300,149 @@ def test_resolve_waypoint_id_out_of_bounds() -> None:
     mock_list_waypoints.assert_called_once_with(
         token, system_symbol, traits=None
     )
+
+
+def test_resolve_waypoint_id_invalid_prefix_format() -> None:
+    """Test resolve_waypoint_id treats w-abc as a symbol (not an index)."""
+    # Arrange
+    token = "test-token"
+    system_symbol = "X1-ABC"
+    wp_id_arg = "w-abc"
+
+    # Act
+    result = resolve_waypoint_id(token, system_symbol, wp_id_arg)
+
+    # Assert
+    assert (
+        result == "w-abc"
+    ), "Should pass through w-abc as symbol since it's not w-<digits>"
+
+
+def test_resolve_ship_id_passthrough() -> None:
+    """Test resolve_ship_id returns full symbol unchanged."""
+    # Arrange
+    token = "test-token"
+    ship_id_arg = "MY-SHIP-1"
+
+    # Act
+    result = resolve_ship_id(token, ship_id_arg)
+
+    # Assert
+    assert (
+        result == "MY-SHIP-1"
+    ), "Should return full ship symbol unchanged when input is not prefixed"
+
+
+def test_resolve_ship_id_plain_digit_passthrough() -> None:
+    """Test resolve_ship_id treats plain digits as symbols."""
+    # Arrange
+    token = "test-token"
+    ship_id_arg = "0"
+
+    # Act
+    result = resolve_ship_id(token, ship_id_arg)
+
+    # Assert
+    assert (
+        result == "0"
+    ), "Should pass through plain digit as symbol, not resolve as index"
+
+
+def test_resolve_ship_id_index_lookup() -> None:
+    """Test resolve_ship_id resolves prefixed index to ship symbol."""
+    # Arrange
+    token = "test-token"
+    ship_id_arg = "s-0"
+
+    # Create mock ships (unsorted order)
+    ship_data_1 = ShipFactory.build_minimal()
+    ship_data_1["symbol"] = "MY-SHIP-C"
+    ship_data_2 = ShipFactory.build_minimal()
+    ship_data_2["symbol"] = "MY-SHIP-A"
+    ship_data_3 = ShipFactory.build_minimal()
+    ship_data_3["symbol"] = "MY-SHIP-B"
+    mock_ships = [
+        Ship.model_validate(ship_data_1),
+        Ship.model_validate(ship_data_2),
+        Ship.model_validate(ship_data_3),
+    ]
+
+    # Act
+    with patch("py_st.cli._helpers.ships.list_ships") as mock_list_ships:
+        mock_list_ships.return_value = mock_ships
+        result = resolve_ship_id(token, ship_id_arg)
+
+    # Assert
+    assert (
+        result == "MY-SHIP-A"
+    ), "Should resolve s-0 to first ship after sorting by symbol"
+    mock_list_ships.assert_called_once_with(token)
+
+
+def test_resolve_ship_id_uppercase_prefix() -> None:
+    """Test resolve_ship_id handles uppercase S- prefix."""
+    # Arrange
+    token = "test-token"
+    ship_id_arg = "S-1"
+
+    # Create mock ships
+    ship_data_1 = ShipFactory.build_minimal()
+    ship_data_1["symbol"] = "MY-SHIP-A"
+    ship_data_2 = ShipFactory.build_minimal()
+    ship_data_2["symbol"] = "MY-SHIP-B"
+    mock_ships = [
+        Ship.model_validate(ship_data_1),
+        Ship.model_validate(ship_data_2),
+    ]
+
+    # Act
+    with patch("py_st.cli._helpers.ships.list_ships") as mock_list_ships:
+        mock_list_ships.return_value = mock_ships
+        result = resolve_ship_id(token, ship_id_arg)
+
+    # Assert
+    assert (
+        result == "MY-SHIP-B"
+    ), "Should resolve uppercase S-1 to second ship after sorting"
+    mock_list_ships.assert_called_once_with(token)
+
+
+def test_resolve_ship_id_out_of_bounds() -> None:
+    """Test resolve_ship_id raises Exit for invalid prefixed index."""
+    # Arrange
+    token = "test-token"
+    ship_id_arg = "s-99"
+
+    # Create mock ships
+    ship_data = ShipFactory.build_minimal()
+    ship_data["symbol"] = "MY-SHIP-A"
+    mock_ships = [Ship.model_validate(ship_data)]
+
+    # Act & Assert
+    with patch("py_st.cli._helpers.ships.list_ships") as mock_list_ships:
+        mock_list_ships.return_value = mock_ships
+        with pytest.raises(typer.Exit) as exc_info:
+            resolve_ship_id(token, ship_id_arg)
+
+    assert (
+        exc_info.value.exit_code == 1
+    ), "Should exit with code 1 for invalid index"
+    mock_list_ships.assert_called_once_with(token)
+
+
+def test_resolve_ship_id_invalid_prefix_format() -> None:
+    """Test resolve_ship_id treats s-abc as a symbol (not an index)."""
+    # Arrange
+    token = "test-token"
+    ship_id_arg = "s-abc"
+
+    # Act
+    result = resolve_ship_id(token, ship_id_arg)
+
+    # Assert
+    assert (
+        result == "s-abc"
+    ), "Should pass through s-abc as symbol since it's not s-<digits>"
 
 
 def test_get_default_system() -> None:

@@ -14,7 +14,7 @@ SHOW_OPTION = typer.Option(True, help="Show current agent info.")
 
 # Contract-specific
 SHIP_SYMBOL_ARG = typer.Argument(
-    ..., help="The ship's full symbol or 0-based index."
+    ..., help="The ship's full symbol or s-0 based index (e.g., 's-0', 'S-1')."
 )
 DELIVER_TRADE_SYMBOL_ARG = typer.Argument(
     ..., help="The symbol of the trade good to deliver."
@@ -48,8 +48,8 @@ SYSTEM_SYMBOL_OPTION = typer.Option(
 WAYPOINT_SYMBOL_ARG = typer.Argument(
     ...,
     help=(
-        "The waypoint's full symbol or 0-based index "
-        "(relative to its system)."
+        "The waypoint's full symbol or w-0 based index "
+        "(e.g., 'w-0', 'W-1')."
     ),
 )
 TRAITS_OPTION = typer.Option(
