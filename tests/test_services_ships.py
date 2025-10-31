@@ -64,10 +64,22 @@ def test_list_ships(
     mock_client.ships.get_ships.assert_called_once()
 
 
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
 @patch("py_st.services.ships.SpaceTradersClient")
-def test_navigate_ship(mock_client_class: Any) -> None:
-    """Test navigate_ship calls client with correct arguments."""
+def test_navigate_ship(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test navigate_ship calls client and marks cache dirty."""
     # Arrange
+    mock_load_cache.return_value = {
+        "ship_list": {
+            "last_updated": "2024-01-01T00:00:00Z",
+            "is_dirty": False,
+            "data": [],
+        }
+    }
+
     ship_data = ShipFactory.build_minimal()
     nav_data = ship_data["nav"]
     nav = ShipNav.model_validate(nav_data)
@@ -88,6 +100,15 @@ def test_navigate_ship(mock_client_class: Any) -> None:
     mock_client.ships.navigate_ship.assert_called_once_with(
         "SHIP-1", "X1-ABC-2"
     )
+
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    assert (
+        saved_cache["ship_list"]["is_dirty"] is True
+    ), "Should mark ship list cache as dirty"
+    assert (
+        saved_cache["ship_list"]["last_updated"] == "2024-01-01T00:00:00Z"
+    ), "Should not update timestamp"
 
 
 @patch("py_st.services.ships.SpaceTradersClient")
@@ -406,10 +427,22 @@ def test_sell_cargo(mock_client_class: Any) -> None:
     )
 
 
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
 @patch("py_st.services.ships.SpaceTradersClient")
-def test_purchase_cargo(mock_client_class: Any) -> None:
-    """Test purchase_cargo calls client with correct arguments."""
+def test_purchase_cargo(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test purchase_cargo calls client and marks cache dirty."""
     # Arrange
+    mock_load_cache.return_value = {
+        "ship_list": {
+            "last_updated": "2024-01-01T00:00:00Z",
+            "is_dirty": False,
+            "data": [],
+        }
+    }
+
     agent_data = AgentFactory.build_minimal()
     agent = Agent.model_validate(agent_data)
 
@@ -439,6 +472,15 @@ def test_purchase_cargo(mock_client_class: Any) -> None:
     mock_client.ships.purchase_cargo.assert_called_once_with(
         "SHIP-1", "SHIP_PARTS", 8
     )
+
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    assert (
+        saved_cache["ship_list"]["is_dirty"] is True
+    ), "Should mark ship list cache as dirty"
+    assert (
+        saved_cache["ship_list"]["last_updated"] == "2024-01-01T00:00:00Z"
+    ), "Should not update timestamp"
 
 
 @patch("py_st.services.ships.SpaceTradersClient")
@@ -620,10 +662,22 @@ def test_purchase_cargo_with_different_ships(mock_client_class: Any) -> None:
     ), "Should handle different ship symbols"
 
 
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
 @patch("py_st.services.ships.SpaceTradersClient")
-def test_purchase_ship(mock_client_class: Any) -> None:
-    """Test purchase_ship calls client with correct arguments."""
+def test_purchase_ship(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test purchase_ship calls client and marks cache dirty."""
     # Arrange
+    mock_load_cache.return_value = {
+        "ship_list": {
+            "last_updated": "2024-01-01T00:00:00Z",
+            "is_dirty": False,
+            "data": [],
+        }
+    }
+
     agent_data = AgentFactory.build_minimal()
     agent = Agent.model_validate(agent_data)
 
@@ -652,6 +706,15 @@ def test_purchase_ship(mock_client_class: Any) -> None:
     mock_client.ships.purchase_ship.assert_called_once_with(
         "SHIP_MINING_DRONE", "X1-ABC-1"
     )
+
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    assert (
+        saved_cache["ship_list"]["is_dirty"] is True
+    ), "Should mark ship list cache as dirty"
+    assert (
+        saved_cache["ship_list"]["last_updated"] == "2024-01-01T00:00:00Z"
+    ), "Should not update timestamp"
 
 
 # ===== Cache Tests =====
@@ -893,3 +956,31 @@ def test_list_ships_cache_invalid_data(
     mock_load_cache.assert_called_once()
     mock_save_cache.assert_called_once()
     mock_client.ships.get_ships.assert_called_once()
+
+
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
+@patch("py_st.services.ships.SpaceTradersClient")
+def test_mark_ship_list_dirty_no_cache(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test ship-mutating operations skip dirty-flag when cache missing."""
+    # Arrange
+    mock_load_cache.return_value = {}
+
+    ship_data = ShipFactory.build_minimal()
+    nav_data = ship_data["nav"]
+    nav = ShipNav.model_validate(nav_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.navigate_ship.return_value = nav
+
+    # Act
+    result = ships.navigate_ship("fake_token", "SHIP-1", "X1-ABC-2")
+
+    # Assert
+    assert isinstance(result, ShipNav), "Should return ShipNav object"
+
+    mock_load_cache.assert_called_once()
+    mock_save_cache.assert_not_called()
