@@ -19,7 +19,6 @@ from py_st._generated.models import (
 from py_st._manual_models import RefineResult
 from py_st.client import APIError
 from py_st.services import ships
-from py_st.services.ships import CACHE_STALENESS_THRESHOLD
 from tests.factories import (
     AgentFactory,
     ExtractionFactory,
@@ -664,10 +663,9 @@ def test_purchase_ship(mock_client_class: Any) -> None:
 def test_list_ships_cache_hit(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
-    """Test list_ships returns cached data when cache is fresh."""
+    """Test list_ships returns cached data when cache is clean."""
     # Arrange
     now = datetime.now(UTC)
-    cache_time = now - CACHE_STALENESS_THRESHOLD / 2
 
     ship1_data = ShipFactory.build_minimal()
     ship2_data = ShipFactory.build_minimal()
@@ -677,7 +675,8 @@ def test_list_ships_cache_hit(
 
     mock_load_cache.return_value = {
         "ship_list": {
-            "last_updated": cache_time.isoformat(),
+            "last_updated": now.isoformat(),
+            "is_dirty": False,
             "data": cached_ships,
         }
     }
@@ -702,20 +701,20 @@ def test_list_ships_cache_hit(
 @patch("py_st.services.ships.SpaceTradersClient")
 @patch("py_st.services.ships.cache.save_cache")
 @patch("py_st.services.ships.cache.load_cache")
-def test_list_ships_cache_miss_stale(
+def test_list_ships_cache_miss_dirty(
     mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
 ) -> None:
-    """Test list_ships fetches fresh data when cache is stale."""
+    """Test list_ships fetches fresh data when cache is dirty."""
     # Arrange
     now = datetime.now(UTC)
-    cache_time = now - CACHE_STALENESS_THRESHOLD * 2
 
     old_ship_data = ShipFactory.build_minimal()
     old_ship_data["symbol"] = "OLD-SHIP"
 
     mock_load_cache.return_value = {
         "ship_list": {
-            "last_updated": cache_time.isoformat(),
+            "last_updated": now.isoformat(),
+            "is_dirty": True,
             "data": [old_ship_data],
         }
     }
@@ -747,6 +746,67 @@ def test_list_ships_cache_miss_stale(
     mock_load_cache.assert_called_once()
     mock_save_cache.assert_called_once()
     mock_client.ships.get_ships.assert_called_once()
+
+    # Verify the saved cache has is_dirty set to False
+    saved_cache = mock_save_cache.call_args[0][0]
+    assert (
+        saved_cache["ship_list"]["is_dirty"] is False
+    ), "Saved cache should have is_dirty set to False"
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
+def test_list_ships_cache_miss_no_dirty_flag(
+    mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
+) -> None:
+    """Test list_ships treats missing is_dirty flag as dirty."""
+    # Arrange
+    now = datetime.now(UTC)
+
+    old_ship_data = ShipFactory.build_minimal()
+    old_ship_data["symbol"] = "OLD-SHIP"
+
+    mock_load_cache.return_value = {
+        "ship_list": {
+            "last_updated": now.isoformat(),
+            "data": [old_ship_data],
+        }
+    }
+
+    new_ship1_data = ShipFactory.build_minimal()
+    new_ship2_data = ShipFactory.build_minimal()
+    new_ship2_data["symbol"] = "NEW-SHIP-2"
+
+    new_ship1 = Ship.model_validate(new_ship1_data)
+    new_ship2 = Ship.model_validate(new_ship2_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.get_ships.return_value = [new_ship1, new_ship2]
+
+    # Act
+    result = ships.list_ships("fake_token")
+
+    # Assert
+    assert isinstance(result, list), "Should return list of ships"
+    assert len(result) == 2, "Should return 2 fresh ships"
+    assert (
+        result[0].symbol == "SHIP-1"
+    ), "Should fetch new data when is_dirty is missing"
+    assert (
+        result[1].symbol == "NEW-SHIP-2"
+    ), "Should fetch new data when is_dirty is missing"
+
+    mock_load_cache.assert_called_once()
+    mock_save_cache.assert_called_once()
+    mock_client.ships.get_ships.assert_called_once()
+
+    # Verify the saved cache has is_dirty set to False
+    saved_cache = mock_save_cache.call_args[0][0]
+    assert (
+        saved_cache["ship_list"]["is_dirty"] is False
+    ), "Saved cache should have is_dirty set to False"
 
 
 @patch("py_st.services.ships.SpaceTradersClient")
@@ -793,7 +853,6 @@ def test_list_ships_cache_invalid_data(
     """Test list_ships handles invalid cached data gracefully."""
     # Arrange
     now = datetime.now(UTC)
-    cache_time = now - CACHE_STALENESS_THRESHOLD / 2
 
     invalid_ship_data = {
         "symbol": "SHIP-1",
@@ -801,7 +860,8 @@ def test_list_ships_cache_invalid_data(
 
     mock_load_cache.return_value = {
         "ship_list": {
-            "last_updated": cache_time.isoformat(),
+            "last_updated": now.isoformat(),
+            "is_dirty": False,
             "data": [invalid_ship_data],
         }
     }
