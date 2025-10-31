@@ -28,6 +28,21 @@ from py_st.client import APIError, SpaceTradersClient
 SHIP_LIST_CACHE_KEY = "ship_list"
 
 
+def _mark_ship_list_dirty() -> None:
+    """
+    Marks the ship list cache as dirty without updating timestamps.
+
+    If the cache entry doesn't exist, does nothing (missing cache
+    is already treated as dirty by list_ships).
+    """
+    full_cache = cache.load_cache()
+
+    cached_entry = full_cache.get(SHIP_LIST_CACHE_KEY)
+    if cached_entry is not None and isinstance(cached_entry, dict):
+        cached_entry["is_dirty"] = True
+        cache.save_cache(full_cache)
+
+
 def list_ships(token: str) -> list[Ship]:
     """
     Fetches all ships from the API with caching.
@@ -83,6 +98,7 @@ def navigate_ship(
     """
     client = SpaceTradersClient(token=token)
     result = client.ships.navigate_ship(ship_symbol, waypoint_symbol)
+    _mark_ship_list_dirty()
     return result
 
 
@@ -99,6 +115,7 @@ def orbit_ship(token: str, ship_symbol: str) -> ShipNav:
     """
     client = SpaceTradersClient(token=token)
     result = client.ships.orbit_ship(ship_symbol)
+    _mark_ship_list_dirty()
     return result
 
 
@@ -115,6 +132,7 @@ def dock_ship(token: str, ship_symbol: str) -> ShipNav:
     """
     client = SpaceTradersClient(token=token)
     result = client.ships.dock_ship(ship_symbol)
+    _mark_ship_list_dirty()
     return result
 
 
@@ -185,6 +203,7 @@ def refuel_ship(
     """
     client = SpaceTradersClient(token=token)
     agent, fuel, transaction = client.ships.refuel_ship(ship_symbol, units)
+    _mark_ship_list_dirty()
     return agent, fuel, transaction
 
 
@@ -205,6 +224,7 @@ def jettison_cargo(
     """
     client = SpaceTradersClient(token=token)
     cargo = client.ships.jettison_cargo(ship_symbol, trade_symbol, units)
+    _mark_ship_list_dirty()
     return cargo
 
 
@@ -224,6 +244,7 @@ def set_flight_mode(
     """
     client = SpaceTradersClient(token=token)
     nav = client.ships.set_flight_mode(ship_symbol, flight_mode)
+    _mark_ship_list_dirty()
     return nav
 
 
@@ -242,7 +263,9 @@ def refine_materials(
         RefineResult object containing produced/consumed items and cargo.
     """
     client = SpaceTradersClient(token=token)
-    return client.ships.refine_materials(ship_symbol, produce)
+    result = client.ships.refine_materials(ship_symbol, produce)
+    _mark_ship_list_dirty()
+    return result
 
 
 def sell_cargo(
@@ -261,7 +284,9 @@ def sell_cargo(
         Tuple of (Agent, ShipCargo, MarketTransaction) with updated state.
     """
     client = SpaceTradersClient(token=token)
-    return client.ships.sell_cargo(ship_symbol, trade_symbol, units)
+    result = client.ships.sell_cargo(ship_symbol, trade_symbol, units)
+    _mark_ship_list_dirty()
+    return result
 
 
 def purchase_cargo(
@@ -280,7 +305,9 @@ def purchase_cargo(
         Tuple of (Agent, ShipCargo, MarketTransaction) with updated state.
     """
     client = SpaceTradersClient(token=token)
-    return client.ships.purchase_cargo(ship_symbol, trade_symbol, units)
+    result = client.ships.purchase_cargo(ship_symbol, trade_symbol, units)
+    _mark_ship_list_dirty()
+    return result
 
 
 def purchase_ship(
@@ -301,4 +328,5 @@ def purchase_ship(
     agent, ship, transaction = client.ships.purchase_ship(
         ship_type, waypoint_symbol
     )
+    _mark_ship_list_dirty()
     return agent, ship, transaction
