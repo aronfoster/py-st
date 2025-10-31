@@ -1,6 +1,6 @@
 # Roadmap
 
-The immediate goal is to improve the "playability" of the CLI by implementing a comprehensive cache. This will reduce the need to copy-paste IDs, remember waypoint symbols, and manually look up market data.
+The immediate goal is to improve the "playability" of the CLI. Much work has already been done but some improvements and refactoring remain.
 
 ---
 
@@ -13,48 +13,21 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ---
 
-## Sprint 3: Cargo & Contracts
-
-The goal of this sprint is to add the core gameplay loop of buying and delivering cargo for contracts. We will refactor all index lookups to use unambiguous prefixes (e.g., `s-0`, `w-0`).
-
-* **Implement Ship Index Lookup for `contracts` Commands:**
-    * Update `contracts_cmd.py` (for `negotiate`, `deliver`) to use the (now prefixed) `resolve_ship_id` helper.
-
-* **Write Unit Tests for `contracts.py`:**
-    * Add a new test file (`tests/test_services_contracts.py`).
-    * Write tests for all public functions in `services/contracts.py`, mocking the `SpaceTradersClient`.
-
-* **Implement `contracts` Caching & Indexing:**
-    * Implement time-based caching for `services/contracts.list_contracts`.
-    * Implement "pretty-print" for the `contracts list` command, showing an index (e.g., `[c-0]`).
-    * Create a `resolve_contract_id` helper that looks for a prefix (e.g., `c-0`).
-    * Update contract commands (`accept`, `deliver`, `fulfill`) to use the new `resolve_contract_id` helper.
-
----
-
-## Sprint 4: Market Queries & Ergonomics
+## Sprint 5: Ergonomics and Tech Debt
 
 * **Improve CLI Argument Ergonomics:**
     * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help text.
 
----
-
-## 🧹 Refactoring & Tech Debt
-
-These items improve code quality and performance but are not tied to a specific feature sprint.
-
 * **Refactor "Smart Merge" Caching Logic:**
     * The `get_market` and `get_shipyard` functions in `services/systems.py` share nearly identical "smart merge" caching logic.
     * Refactor this duplicated code into a single, generic helper function to keep the services module clean.
- 
+
 * **Document Cache Structure:**
     * Find an appropriate location in the codebase to explain cache schema, field purpose/usage (e.g. `last_updated`), etc.
 
 ---
 
 ## 🔭 Long-Term Goals
-
-(These items are carried over from the previous roadmap)
 
 * Develop a script to run a basic ship automation loop.
 * Investigate `openapi-python-client` or rolling my own method to turn `SpaceTraders.json` spec automatically into client prototypes.
@@ -64,7 +37,7 @@ These items improve code quality and performance but are not tied to a specific 
     * Research and select a GUI framework (e.g., PySide6, Tkinter).
     * Design a basic UI to display universe/fleet data and trigger actions.
     * Implement the GUI, ensuring it runs in a separate thread from the automation logic.
- 
+
 ---
 
 ## ✅ Done
