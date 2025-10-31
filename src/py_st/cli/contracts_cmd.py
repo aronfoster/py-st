@@ -88,15 +88,11 @@ def _print_contract_compact(
     acc = "✓" if contract.accepted else "✗"
     ful = "✓" if contract.fulfilled else "✗"
     due_rel = format_relative_due(contract.terms.deadline)
-    on_acc = format_short_money(contract.terms.payment.onAccepted)
-    on_ful = format_short_money(contract.terms.payment.onFulfilled)
-    fac = contract.factionSymbol[:2].upper()
     deliver = _format_deliverables(contract, system_symbol, max_len=60)
 
     print(
         f"c-{idx:<3} {id6}  {type_abbr:<4}  {acc}/{ful}  "
-        f"{due_rel:<16}  A {on_acc}; F {on_ful}  "
-        f"Fac {fac}  {deliver}"
+        f"{due_rel:<16}  {deliver}"
     )
 
 
@@ -115,8 +111,8 @@ def _print_contract_stacked(
     deliver = _format_deliverables(contract, system_symbol, max_len=1000)
 
     print(
-        f"[c-{idx}] {id6} {type_abbr} {acc}/{ful} due {due_rel} | "
-        f"Pay: A {on_acc}; F {on_ful} | Fac {fac}"
+        f"[c-{idx}] {id6} {type_abbr} A: {acc}/F: {ful} | "
+        f"due {due_rel} | Pay: A {on_acc}; F {on_ful} | Fac {fac}"
     )
     print(f"       {deliver}")
 
@@ -151,6 +147,10 @@ def list_contracts(
         print(json.dumps(contracts_list, indent=2))
     else:
         system_symbol = get_default_system(t)
+
+        if not stacked and contracts_list_data:
+            print("IDX   ID6    T     A/F   DUE(REL)         DELIVER")
+
         for i, contract in enumerate(contracts_list_data):
             if stacked:
                 _print_contract_stacked(i, contract, system_symbol)

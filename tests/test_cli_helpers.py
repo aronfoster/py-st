@@ -702,9 +702,7 @@ def test_format_relative_due_future_days_and_hours() -> None:
     result = format_relative_due(deadline, now)
 
     # Assert
-    assert (
-        result == "in 6d 3h"
-    ), "Should show days and hours for future deadline"
+    assert result == "6d 3h", "Should show days and hours for future deadline"
 
 
 def test_format_relative_due_future_hours_and_minutes() -> None:
@@ -718,7 +716,7 @@ def test_format_relative_due_future_hours_and_minutes() -> None:
 
     # Assert
     assert (
-        result == "in 1h 12m"
+        result == "1h 12m"
     ), "Should show hours and minutes for future deadline"
 
 
@@ -732,7 +730,7 @@ def test_format_relative_due_future_minutes_and_seconds() -> None:
     result = format_relative_due(deadline, now)
 
     # Assert
-    assert result == "in 1m 30s", "Should include seconds when under 2 minutes"
+    assert result == "1m 30s", "Should include seconds when under 2 minutes"
 
 
 def test_format_relative_due_future_only_seconds() -> None:
@@ -745,7 +743,7 @@ def test_format_relative_due_future_only_seconds() -> None:
     result = format_relative_due(deadline, now)
 
     # Assert
-    assert result == "in 45s", "Should show only seconds for very near future"
+    assert result == "45s", "Should show only seconds for very near future"
 
 
 def test_format_relative_due_overdue() -> None:
