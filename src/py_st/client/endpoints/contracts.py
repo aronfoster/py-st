@@ -10,9 +10,10 @@ class ContractsEndpoint:
     def __init__(self, transport: HttpTransport) -> None:
         self._transport = transport
 
+    # TODO: Handle pagination
     def get_contracts(self) -> list[Contract]:
         """
-        Fetches a paginated list of all your contracts.
+        Fetches a list of your first 20 contracts.
         """
         data = self._transport.request_json("GET", "/my/contracts")
         return [Contract.model_validate(c) for c in data]
