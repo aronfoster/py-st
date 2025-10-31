@@ -161,3 +161,84 @@ def systems_list_goods_cli(
             sells = ", ".join(_sym(g) for g in mg.sells) or "—"
             buys = ", ".join(_sym(g) for g in mg.buys) or "—"
             print(f"- {wp}\n    sells: {sells}\n    buys : {buys}")
+
+
+@systems_app.command("markets")
+@handle_errors
+def systems_markets_cli(
+    system_symbol: str | None = SYSTEM_SYMBOL_OPTION,
+    buys: str | None = typer.Option(
+        None, "--buys", help="Filter to waypoints buying this good"
+    ),
+    sells: str | None = typer.Option(
+        None, "--sells", help="Filter to waypoints selling this good"
+    ),
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit JSON instead of pretty text"
+    ),
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    List market goods across all waypoints in a system.
+
+    Supports filtering by goods being bought (--buys) or sold (--sells).
+    Trade symbols are matched case-insensitively.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+    if system_symbol is None:
+        system_symbol = get_default_system(t)
+
+    data = systems.list_system_goods(t, system_symbol)
+
+    def _sym(obj: Any) -> str:
+        s = getattr(obj, "symbol", obj)
+        return s.value if hasattr(s, "value") else str(s)
+
+    def _normalize_symbol(sym: str) -> str:
+        return sym.upper().replace("-", "_")
+
+    filtered_waypoints: dict[str, Any] = {}
+    if buys or sells:
+        filter_symbol = _normalize_symbol(buys or sells or "")
+        for wp, mg in data.by_waypoint.items():
+            if buys:
+                wp_buys = [_normalize_symbol(_sym(g)) for g in mg.buys]
+                if filter_symbol in wp_buys:
+                    filtered_waypoints[wp] = mg
+            elif sells:
+                wp_sells = [_normalize_symbol(_sym(g)) for g in mg.sells]
+                if filter_symbol in wp_sells:
+                    filtered_waypoints[wp] = mg
+    else:
+        filtered_waypoints = data.by_waypoint
+
+    if json_out:
+        out = {
+            wp: {
+                "sells": [_sym(g) for g in mg.sells],
+                "buys": [_sym(g) for g in mg.buys],
+            }
+            for wp, mg in filtered_waypoints.items()
+        }
+        print(json.dumps(out, indent=2))
+    else:
+        filter_desc = ""
+        if buys:
+            filter_desc = f" (buying {buys.upper()})"
+        elif sells:
+            filter_desc = f" (selling {sells.upper()})"
+        print(f"System {system_symbol} — Markets{filter_desc}")
+        if not filtered_waypoints:
+            print("No matching waypoints found.")
+        else:
+            for i, (wp, mg) in enumerate(sorted(filtered_waypoints.items())):
+                sells_str = ", ".join(_sym(g) for g in mg.sells) or "—"
+                buys_str = ", ".join(_sym(g) for g in mg.buys) or "—"
+                print(f"[{i}] {wp}")
+                print(f"    sells: {sells_str}")
+                print(f"    buys : {buys_str}")
