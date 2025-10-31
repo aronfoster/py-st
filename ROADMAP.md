@@ -60,6 +60,9 @@ These items improve code quality and performance but are not tied to a specific 
 
 * **Update `list_system_goods`:**
     * Modify `list_system_goods` to use the cached `get_market` function. This will make it much faster as it will no longer make N-1 API calls.
+ 
+* **Document Cache Structure:**
+    * Find an appropriate location in the codebase to explain cache schema, field purpose/usage (e.g. `last_updated`), etc.
 
 ---
 
