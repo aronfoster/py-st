@@ -34,11 +34,6 @@ The goal of this sprint is to add the core gameplay loop of buying and deliverin
 
 ## Sprint 4: Market Queries & Ergonomics
 
-* **Add CLI Commands to Query Cache:**
-    * Create new CLI commands to query cached system data. Examples:
-        * `py-st systems markets --buys IRON_ORE`
-        * `py-st systems markets --sells FUEL`
-
 * **Improve CLI Argument Ergonomics:**
     * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help text.
 
@@ -51,9 +46,6 @@ These items improve code quality and performance but are not tied to a specific 
 * **Refactor "Smart Merge" Caching Logic:**
     * The `get_market` and `get_shipyard` functions in `services/systems.py` share nearly identical "smart merge" caching logic.
     * Refactor this duplicated code into a single, generic helper function to keep the services module clean.
-
-* **Update `list_system_goods`:**
-    * Modify `list_system_goods` to use the cached `get_market` function. This will make it much faster as it will no longer make N-1 API calls.
  
 * **Document Cache Structure:**
     * Find an appropriate location in the codebase to explain cache schema, field purpose/usage (e.g. `last_updated`), etc.
@@ -76,6 +68,17 @@ These items improve code quality and performance but are not tied to a specific 
 ---
 
 ## ✅ Done
+
+* **Sprint 4: Market Queries & Ergonomics**
+    * ✅ **Add CLI Commands to Query Cache:**
+        * ✅ Added `py-st systems markets` command with `--buys` and `--sells` filtering
+        * ✅ Supports case-insensitive trade symbol matching
+        * ✅ Supports `--json` output and human-readable indexed display
+        * ✅ Uses cached data via refactored `list_system_goods`
+    * ✅ **Update `list_system_goods`:**
+        * ✅ Modified `list_system_goods` to use the cached `get_market` and `_fetch_and_cache_waypoints` functions
+        * ✅ Now leverages "smart merge" caching strategy for markets
+        * ✅ Updated all service tests to mock caching functions
 
 * **Bugs**
     * ✅ Refactored ship list cache to use "dirty" flag instead of time-based staleness. Updated ships list command to display fuel (current/max).
