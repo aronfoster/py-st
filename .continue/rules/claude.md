@@ -5,7 +5,7 @@ This is a Python 3.11+ application.
   * Code is in `src/py_st`
   * Data structures (Pydantic models) are auto-generated in `src/py_st/_generated/models`
   * Tests are in `tests` and use pytest.
-  * Use `.venv/bin/python` to run python in your context
+  * Use `/usr/local/bin/python3` to run python in your context
 
 ## Key Modules
 
@@ -68,9 +68,13 @@ Before running any tests or CI checks, ensure all dependencies are installed, in
 
 ## 2. Important: Verification Process
 
-Before making ANY changes:
+**All CI checks must pass cleanly before committing:**
 
-1.  Run `make ci` to establish a baseline. Note any pre-existing errors.
-2.  You will many pre-existing `mypy` errors due to the nature of your configuration.
-3.  Focus on ensuring your changes do not introduce NEW errors beyond the baseline.
-4.  Formatting (`make check`) and tests (`make test`) are the critical checks.
+1.  Run `make ci` before committing any changes.
+2.  All checks should pass with **zero errors**:
+    - `make fmt` - Auto-formats code with ruff and black
+    - `make check` - Verifies formatting (ruff, black)
+    - `make type` - Runs mypy type checking (should have zero errors)
+    - `make test` - Runs pytest (all tests should pass)
+3.  If you see any mypy "import-not-found" errors, ensure you've run `python3 -m pip install -e .` to install all dependencies.
+4.  The Makefile uses `python3 -m mypy` (not bare `mypy`) to ensure mypy uses the correct Python environment.
