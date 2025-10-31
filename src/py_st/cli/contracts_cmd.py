@@ -109,11 +109,9 @@ def _print_contract_stacked(
     fac = contract.factionSymbol[:2].upper()
     deliver = _format_deliverables(contract, system_symbol, max_len=1000)
 
-    due_prefix = "in " if not due_rel.startswith("-") else ""
     print(
         f"[c-{idx}] {id6} {type_abbr} A: {acc}/F: {ful} | "
-        f"due {due_prefix}{due_rel} | Pay: A {on_acc}; F {on_ful} | "
-        f"Fac {fac}"
+        f"due {due_rel} | Pay: A {on_acc}; F {on_ful} | Fac {fac}"
     )
     print(f"       {deliver}")
 
