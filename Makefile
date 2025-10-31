@@ -24,7 +24,7 @@ type: ## Run static type checking
 	mypy .
 
 test: ## Run tests
-	pytest -q
+	PYTHONPATH=src python3 -m pytest -q
 
 ci: fmt check type test ## Run all checks for continuous integration
 

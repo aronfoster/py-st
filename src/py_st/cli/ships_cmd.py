@@ -62,7 +62,11 @@ def list_ships(
         for i, ship in enumerate(ships_list_data):
             status_str = format_ship_status(ship)
             role_str = ship.registration.role.value
-            print(f"[{i}] {ship.symbol:<20} " f"{role_str:<12} {status_str}")
+            fuel_str = f"(Fuel: {ship.fuel.current}/{ship.fuel.capacity})"
+            print(
+                f"[{i}] {ship.symbol:<20} "
+                f"{role_str:<12} {fuel_str} {status_str}"
+            )
 
 
 @ships_app.command("navigate")

@@ -6,10 +6,6 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 ## Bugs
 
-**HIGH PRIORITY**
-
-* I forgot to have ship status marked stale in cache during change events like orbit, dock, transit. Should always be stale during transit. Should update prety-print ship status to show current fuel / max fuel.
-
 **Low Priority**
 
 * ShipsEndpoint.get_ships and ContractsEndpoint.get_contracts could use pagination. Can we just make pagination it default for all requests? Or do we need to define which ones should be paginated explicitly?
@@ -83,6 +79,9 @@ These items improve code quality and performance but are not tied to a specific 
 ---
 
 ## ✅ Done
+
+* **Bugs**
+    * ✅ Refactored ship list cache to use "dirty" flag instead of time-based staleness. Updated ships list command to display fuel (current/max).
 
 * **Sprint 3: Cargo & Contracts**
     * ✅ **Implement `purchase-cargo` Command:**
