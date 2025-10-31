@@ -868,7 +868,7 @@ def test_get_waypoint_index_no_cache_entry() -> None:
     waypoint_symbol = "X1-ABC-A1"
     system_symbol = "X1-ABC"
 
-    mock_cache = {}
+    mock_cache: dict[str, object] = {}
 
     # Act
     with patch("py_st.cli._helpers.cache.load_cache") as mock_load:
