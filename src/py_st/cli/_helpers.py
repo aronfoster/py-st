@@ -249,8 +249,7 @@ def format_relative_due(
         now: Current time (defaults to UTC now).
 
     Returns:
-        Formatted string like "in 6d 3h", "overdue by 1h 12m",
-        or "-2h 5m" for negative deadlines.
+        Formatted string like "in 6d 3h" or "-1h 12m" for overdue.
     """
     if now is None:
         now = datetime.now(UTC)
@@ -284,7 +283,7 @@ def format_relative_due(
     time_str = " ".join(parts[:2])
 
     if is_overdue:
-        return f"overdue by {time_str}"
+        return f"-{time_str}"
     return f"in {time_str}"
 
 
@@ -300,7 +299,7 @@ def format_short_money(amount: int) -> str:
     """
     if amount < 1000:
         return str(amount)
-    elif amount < 100_000 or amount < 1_000_000:
+    elif amount < 1_000_000:
         k_value = round(amount / 1000)
         return f"{k_value}k"
     else:

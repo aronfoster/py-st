@@ -29,16 +29,6 @@ from .options import (
 contracts_app: typer.Typer = typer.Typer(help="Manage contracts.")
 
 
-def _get_type_abbrev(contract_type: str) -> str:
-    """Get a short type abbreviation."""
-    type_map = {
-        "PROCUREMENT": "PROC",
-        "TRANSPORT": "TRAN",
-        "SHUTTLE": "SHUT",
-    }
-    return type_map.get(contract_type, contract_type[:4].upper())
-
-
 def _format_deliverables(
     contract: Contract, system_symbol: str, max_len: int = 60
 ) -> str:
@@ -93,7 +83,7 @@ def _print_contract_compact(
 ) -> None:
     """Print contract in compact single-line format."""
     id6 = contract.id[:6]
-    type_abbr = _get_type_abbrev(contract.type.value)
+    type_abbr = contract.type.value[:4].upper()
     acc = "✓" if contract.accepted else "✗"
     ful = "✓" if contract.fulfilled else "✗"
     due_rel = format_relative_due(contract.terms.deadline)
@@ -114,7 +104,7 @@ def _print_contract_stacked(
 ) -> None:
     """Print contract in stacked two-line format."""
     id6 = contract.id[:6]
-    type_abbr = _get_type_abbrev(contract.type.value)
+    type_abbr = contract.type.value[:4].upper()
     acc = "✓" if contract.accepted else "✗"
     ful = "✓" if contract.fulfilled else "✗"
     due_rel = format_relative_due(contract.terms.deadline)

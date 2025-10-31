@@ -758,9 +758,7 @@ def test_format_relative_due_overdue() -> None:
     result = format_relative_due(deadline, now)
 
     # Assert
-    assert (
-        result == "overdue by 1h 12m"
-    ), "Should show overdue with hours and minutes"
+    assert result == "-1h 12m", "Should show overdue with minus sign"
 
 
 def test_format_relative_due_overdue_days() -> None:
@@ -773,9 +771,7 @@ def test_format_relative_due_overdue_days() -> None:
     result = format_relative_due(deadline, now)
 
     # Assert
-    assert (
-        result == "overdue by 6d 2h"
-    ), "Should show overdue with days and hours"
+    assert result == "-6d 2h", "Should show overdue with minus sign"
 
 
 def test_format_short_money_under_1k() -> None:
@@ -845,7 +841,7 @@ def test_get_waypoint_index_not_found() -> None:
     waypoint_symbol = "X1-ABC-Z99"
     system_symbol = "X1-ABC"
 
-    mock_cache = {
+    mock_cache: dict[str, dict[str, object]] = {
         "waypoints_X1-ABC": {
             "last_updated": "2025-01-01T00:00:00Z",
             "data": [
