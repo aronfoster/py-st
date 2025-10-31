@@ -21,7 +21,7 @@ check:
 	}
 
 type: ## Run static type checking
-	mypy .
+	python3 -m mypy .
 
 test: ## Run tests
 	PYTHONPATH=src python3 -m pytest -q
