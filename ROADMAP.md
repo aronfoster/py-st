@@ -10,10 +10,9 @@ The immediate goal is to improve the "playability" of the CLI by implementing a 
 
 * I forgot to have ship status marked stale in cache during change events like orbit, dock, transit. Should always be stale during transit. Should update prety-print ship status to show current fuel / max fuel.
 
-**Low Priority (add TODOs to the codebase and remove these from the ROADMAP)**
+**Low Priority**
 
-* ShipsEndpoint.get_ships claims to return a paginated list yet never requests additional pages, so anything past the API’s default limit (20 ships) is dropped. We're a long time away from playing enough to get 20 ships so this should be noted but not prioritized unless its an easy fix.
-* ContractsEndpoint.get_contracts suffers from the same omission, exposing at most the first 20 contracts. Again, not going to have 20 contracts for the foreseeable future.
+* ShipsEndpoint.get_ships and ContractsEndpoint.get_contracts could use pagination. Can we just make pagination it default for all requests? Or do we need to define which ones should be paginated explicitly?
 * SystemsEndpoint.list_waypoints_all accepts a traits filter but should no longer do so. It is not currently used.
 
 ---
