@@ -6,6 +6,7 @@ import logging
 import typer
 
 from py_st.cli._errors import handle_errors
+from py_st.cli._helpers import resolve_contract_id
 
 from ..services import contracts
 from .options import (
@@ -26,6 +27,9 @@ contracts_app: typer.Typer = typer.Typer(help="Manage contracts.")
 def list_contracts(
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
+    json_output: bool = typer.Option(
+        False, "--json", help="Output raw JSON instead of summary."
+    ),
 ) -> None:
     """
     List all of your contracts.
@@ -36,8 +40,30 @@ def list_contracts(
     )
     t = _get_token(token)
     contracts_list_data = contracts.list_contracts(t)
-    contracts_list = [c.model_dump(mode="json") for c in contracts_list_data]
-    print(json.dumps(contracts_list, indent=2))
+    contracts_list_data.sort(key=lambda c: c.id)
+
+    if json_output:
+        contracts_list = [
+            c.model_dump(mode="json") for c in contracts_list_data
+        ]
+        print(json.dumps(contracts_list, indent=2))
+    else:
+        for i, contract in enumerate(contracts_list_data):
+            type_str = contract.type.value
+            accepted_str = "Yes" if contract.accepted else "No"
+            fulfilled_str = "Yes" if contract.fulfilled else "No"
+            deadline_str = (
+                contract.deadlineToAccept.isoformat()
+                if contract.deadlineToAccept
+                else contract.expiration.isoformat()
+            )
+            print(
+                f"[c-{i}] {contract.id:<25} "
+                f"type:{type_str:<12} "
+                f"accepted:{accepted_str:<3} "
+                f"fulfilled:{fulfilled_str:<3} "
+                f"deadline:{deadline_str}"
+            )
 
 
 @contracts_app.command("negotiate")
@@ -78,8 +104,9 @@ def deliver_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
+    resolved_contract_id = resolve_contract_id(t, contract_id)
     contract, cargo = contracts.deliver_contract(
-        t, contract_id, ship_symbol, trade_symbol, units
+        t, resolved_contract_id, ship_symbol, trade_symbol, units
     )
     print("📦 Cargo delivered!")
     output_data = {
@@ -104,7 +131,8 @@ def fulfill_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    agent, contract = contracts.fulfill_contract(t, contract_id)
+    resolved_contract_id = resolve_contract_id(t, contract_id)
+    agent, contract = contracts.fulfill_contract(t, resolved_contract_id)
     print("🎉 Contract fulfilled!")
     output_data = {
         "agent": agent.model_dump(mode="json"),
@@ -128,8 +156,9 @@ def accept_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    agent, contract = contracts.accept_contract(t, contract_id)
-    print(f"✅ Contract {contract_id} accepted!")
+    resolved_contract_id = resolve_contract_id(t, contract_id)
+    agent, contract = contracts.accept_contract(t, resolved_contract_id)
+    print(f"✅ Contract {resolved_contract_id} accepted!")
     output_data = {
         "agent": agent.model_dump(mode="json"),
         "contract": contract.model_dump(mode="json"),
