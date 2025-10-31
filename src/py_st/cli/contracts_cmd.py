@@ -112,7 +112,7 @@ def _print_contract_stacked(
 
     print(
         f"[c-{idx}] {id6} {type_abbr} A: {acc}/F: {ful} | "
-        f"due {due_rel} | Pay: A {on_acc}; F {on_ful} | Fac {fac}"
+        f"due in {due_rel} | Pay: A {on_acc}; F {on_ful} | Fac {fac}"
     )
     print(f"       {deliver}")
 
