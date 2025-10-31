@@ -267,18 +267,15 @@ def format_relative_due(
     parts = []
     if days > 0:
         parts.append(f"{days}d")
-        if hours > 0:
-            parts.append(f"{hours}h")
-    elif hours > 0:
+    if hours > 0:
         parts.append(f"{hours}h")
-        if minutes > 0:
-            parts.append(f"{minutes}m")
-    elif minutes > 0:
+    if minutes > 0:
         parts.append(f"{minutes}m")
-        if seconds > 0:
-            parts.append(f"{seconds}s")
-    else:
+    if seconds > 0:
         parts.append(f"{seconds}s")
+
+    if not parts:
+        parts.append("0s")
 
     time_str = " ".join(parts[:2])
 
