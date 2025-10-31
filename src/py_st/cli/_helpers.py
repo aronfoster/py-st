@@ -8,7 +8,47 @@ from datetime import UTC, datetime
 import typer
 
 from py_st._generated.models import Ship, ShipNavStatus
-from py_st.services import agent, ships, systems
+from py_st.services import agent, contracts, ships, systems
+
+
+def resolve_contract_id(token: str, contract_id_arg: str) -> str:
+    """
+    Resolves a contract identifier to a full contract ID.
+
+    Args:
+        token: The API authentication token.
+        contract_id_arg: Either a full contract ID or a prefixed 0-based
+            index (e.g., 'c-0', 'C-1').
+
+    Returns:
+        The full contract ID.
+
+    Raises:
+        typer.Exit: If the index is out of bounds.
+    """
+    if contract_id_arg.lower().startswith("c-"):
+        index_str = contract_id_arg[2:]
+        if not index_str.isdigit():
+            return contract_id_arg
+        index = int(index_str)
+    else:
+        return contract_id_arg
+
+    all_contracts = contracts.list_contracts(token)
+    all_contracts.sort(key=lambda c: c.id)
+
+    if 0 <= index < len(all_contracts):
+        resolved: str = str(all_contracts[index].id)
+        logging.info("Resolved contract index %d to ID: %s", index, resolved)
+        return resolved
+
+    typer.secho(
+        f"Error: Invalid contract index '{contract_id_arg}'. "
+        f"Valid indexes are 0 to {len(all_contracts) - 1}.",
+        fg=typer.colors.RED,
+        err=True,
+    )
+    raise typer.Exit(code=1)
 
 
 def resolve_ship_id(token: str, ship_id_arg: str) -> str:
@@ -26,7 +66,6 @@ def resolve_ship_id(token: str, ship_id_arg: str) -> str:
     Raises:
         typer.Exit: If the index is out of bounds.
     """
-    # Check for index prefix (s- or S-)
     if ship_id_arg.lower().startswith("s-"):
         index_str = ship_id_arg[2:]
         if not index_str.isdigit():

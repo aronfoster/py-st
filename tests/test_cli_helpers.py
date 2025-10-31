@@ -6,15 +6,27 @@ from unittest.mock import patch
 import pytest
 import typer
 
-from py_st._generated.models import Agent, Ship, ShipNavStatus, Waypoint
+from py_st._generated.models import (
+    Agent,
+    Contract,
+    Ship,
+    ShipNavStatus,
+    Waypoint,
+)
 from py_st.cli._helpers import (
     _format_time_remaining,
     format_ship_status,
     get_default_system,
+    resolve_contract_id,
     resolve_ship_id,
     resolve_waypoint_id,
 )
-from tests.factories import AgentFactory, ShipFactory, WaypointFactory
+from tests.factories import (
+    AgentFactory,
+    ContractFactory,
+    ShipFactory,
+    WaypointFactory,
+)
 
 
 def test_format_time_remaining_arrived() -> None:
@@ -545,3 +557,133 @@ def test_get_default_system_malformed_symbol() -> None:
     assert (
         exc_info.value.exit_code == 1
     ), "Should exit with code 1 when headquarters has no hyphens"
+
+
+def test_resolve_contract_id_passthrough() -> None:
+    """Test resolve_contract_id returns full ID unchanged."""
+    # Arrange
+    token = "test-token"
+    contract_id_arg = "my-contract-123"
+
+    # Act
+    result = resolve_contract_id(token, contract_id_arg)
+
+    # Assert
+    assert (
+        result == "my-contract-123"
+    ), "Should return full contract ID unchanged when input is not prefixed"
+
+
+def test_resolve_contract_id_plain_digit_passthrough() -> None:
+    """Test resolve_contract_id treats plain digits as IDs."""
+    # Arrange
+    token = "test-token"
+    contract_id_arg = "0"
+
+    # Act
+    result = resolve_contract_id(token, contract_id_arg)
+
+    # Assert
+    assert (
+        result == "0"
+    ), "Should pass through plain digit as ID, not resolve as index"
+
+
+def test_resolve_contract_id_index_lookup() -> None:
+    """Test resolve_contract_id resolves prefixed index to contract ID."""
+    # Arrange
+    token = "test-token"
+    contract_id_arg = "c-0"
+
+    contract_data_1 = ContractFactory.build_minimal()
+    contract_data_1["id"] = "contract-c"
+    contract_data_2 = ContractFactory.build_minimal()
+    contract_data_2["id"] = "contract-a"
+    contract_data_3 = ContractFactory.build_minimal()
+    contract_data_3["id"] = "contract-b"
+    mock_contracts = [
+        Contract.model_validate(contract_data_1),
+        Contract.model_validate(contract_data_2),
+        Contract.model_validate(contract_data_3),
+    ]
+
+    # Act
+    with patch(
+        "py_st.cli._helpers.contracts.list_contracts"
+    ) as mock_list_contracts:
+        mock_list_contracts.return_value = mock_contracts
+        result = resolve_contract_id(token, contract_id_arg)
+
+    # Assert
+    assert (
+        result == "contract-a"
+    ), "Should resolve c-0 to first contract after sorting by id"
+    mock_list_contracts.assert_called_once_with(token)
+
+
+def test_resolve_contract_id_uppercase_prefix() -> None:
+    """Test resolve_contract_id handles uppercase C- prefix."""
+    # Arrange
+    token = "test-token"
+    contract_id_arg = "C-1"
+
+    contract_data_1 = ContractFactory.build_minimal()
+    contract_data_1["id"] = "contract-a"
+    contract_data_2 = ContractFactory.build_minimal()
+    contract_data_2["id"] = "contract-b"
+    mock_contracts = [
+        Contract.model_validate(contract_data_1),
+        Contract.model_validate(contract_data_2),
+    ]
+
+    # Act
+    with patch(
+        "py_st.cli._helpers.contracts.list_contracts"
+    ) as mock_list_contracts:
+        mock_list_contracts.return_value = mock_contracts
+        result = resolve_contract_id(token, contract_id_arg)
+
+    # Assert
+    assert (
+        result == "contract-b"
+    ), "Should resolve uppercase C-1 to second contract after sorting"
+    mock_list_contracts.assert_called_once_with(token)
+
+
+def test_resolve_contract_id_out_of_bounds() -> None:
+    """Test resolve_contract_id raises Exit for invalid prefixed index."""
+    # Arrange
+    token = "test-token"
+    contract_id_arg = "c-99"
+
+    contract_data = ContractFactory.build_minimal()
+    contract_data["id"] = "contract-a"
+    mock_contracts = [Contract.model_validate(contract_data)]
+
+    # Act & Assert
+    with patch(
+        "py_st.cli._helpers.contracts.list_contracts"
+    ) as mock_list_contracts:
+        mock_list_contracts.return_value = mock_contracts
+        with pytest.raises(typer.Exit) as exc_info:
+            resolve_contract_id(token, contract_id_arg)
+
+    assert (
+        exc_info.value.exit_code == 1
+    ), "Should exit with code 1 for invalid index"
+    mock_list_contracts.assert_called_once_with(token)
+
+
+def test_resolve_contract_id_invalid_prefix_format() -> None:
+    """Test resolve_contract_id treats c-abc as an ID (not an index)."""
+    # Arrange
+    token = "test-token"
+    contract_id_arg = "c-abc"
+
+    # Act
+    result = resolve_contract_id(token, contract_id_arg)
+
+    # Assert
+    assert (
+        result == "c-abc"
+    ), "Should pass through c-abc as ID since it's not c-<digits>"
