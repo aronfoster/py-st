@@ -87,8 +87,6 @@ def _print_contract_compact(
     acc = "✓" if contract.accepted else "✗"
     ful = "✓" if contract.fulfilled else "✗"
     due_rel = format_relative_due(contract.terms.deadline)
-    if due_rel.startswith("in "):
-        due_rel = due_rel[3:]
     deliver = _format_deliverables(contract, system_symbol, max_len=60)
 
     print(
@@ -111,9 +109,11 @@ def _print_contract_stacked(
     fac = contract.factionSymbol[:2].upper()
     deliver = _format_deliverables(contract, system_symbol, max_len=1000)
 
+    due_prefix = "in " if not due_rel.startswith("-") else ""
     print(
         f"[c-{idx}] {id6} {type_abbr} A: {acc}/F: {ful} | "
-        f"due {due_rel} | Pay: A {on_acc}; F {on_ful} | Fac {fac}"
+        f"due {due_prefix}{due_rel} | Pay: A {on_acc}; F {on_ful} | "
+        f"Fac {fac}"
     )
     print(f"       {deliver}")
 
