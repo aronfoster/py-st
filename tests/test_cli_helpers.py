@@ -15,8 +15,11 @@ from py_st._generated.models import (
 )
 from py_st.cli._helpers import (
     _format_time_remaining,
+    format_relative_due,
     format_ship_status,
+    format_short_money,
     get_default_system,
+    get_waypoint_index,
     resolve_contract_id,
     resolve_ship_id,
     resolve_waypoint_id,
@@ -687,3 +690,211 @@ def test_resolve_contract_id_invalid_prefix_format() -> None:
     assert (
         result == "c-abc"
     ), "Should pass through c-abc as ID since it's not c-<digits>"
+
+
+def test_format_relative_due_future_days_and_hours() -> None:
+    """Test format_relative_due with future deadline in days and hours."""
+    # Arrange
+    now = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+    deadline = datetime(2025, 1, 7, 15, 30, 45, tzinfo=UTC)
+
+    # Act
+    result = format_relative_due(deadline, now)
+
+    # Assert
+    assert (
+        result == "in 6d 3h"
+    ), "Should show days and hours for future deadline"
+
+
+def test_format_relative_due_future_hours_and_minutes() -> None:
+    """Test format_relative_due with future deadline in hours and minutes."""
+    # Arrange
+    now = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+    deadline = datetime(2025, 1, 1, 13, 12, 30, tzinfo=UTC)
+
+    # Act
+    result = format_relative_due(deadline, now)
+
+    # Assert
+    assert (
+        result == "in 1h 12m"
+    ), "Should show hours and minutes for future deadline"
+
+
+def test_format_relative_due_future_minutes_and_seconds() -> None:
+    """Test format_relative_due with future deadline under 2 minutes."""
+    # Arrange
+    now = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+    deadline = datetime(2025, 1, 1, 12, 1, 30, tzinfo=UTC)
+
+    # Act
+    result = format_relative_due(deadline, now)
+
+    # Assert
+    assert result == "in 1m 30s", "Should include seconds when under 2 minutes"
+
+
+def test_format_relative_due_future_only_seconds() -> None:
+    """Test format_relative_due with future deadline in only seconds."""
+    # Arrange
+    now = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+    deadline = datetime(2025, 1, 1, 12, 0, 45, tzinfo=UTC)
+
+    # Act
+    result = format_relative_due(deadline, now)
+
+    # Assert
+    assert result == "in 45s", "Should show only seconds for very near future"
+
+
+def test_format_relative_due_overdue() -> None:
+    """Test format_relative_due with overdue deadline."""
+    # Arrange
+    now = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+    deadline = datetime(2025, 1, 1, 10, 48, 0, tzinfo=UTC)
+
+    # Act
+    result = format_relative_due(deadline, now)
+
+    # Assert
+    assert (
+        result == "overdue by 1h 12m"
+    ), "Should show overdue with hours and minutes"
+
+
+def test_format_relative_due_overdue_days() -> None:
+    """Test format_relative_due with overdue deadline in days."""
+    # Arrange
+    now = datetime(2025, 1, 7, 12, 0, 0, tzinfo=UTC)
+    deadline = datetime(2025, 1, 1, 10, 0, 0, tzinfo=UTC)
+
+    # Act
+    result = format_relative_due(deadline, now)
+
+    # Assert
+    assert (
+        result == "overdue by 6d 2h"
+    ), "Should show overdue with days and hours"
+
+
+def test_format_short_money_under_1k() -> None:
+    """Test format_short_money for amounts under 1000."""
+    # Arrange & Act & Assert
+    assert format_short_money(0) == "0", "Should format 0 as '0'"
+    assert format_short_money(100) == "100", "Should format 100 as '100'"
+    assert format_short_money(999) == "999", "Should format 999 as '999'"
+
+
+def test_format_short_money_thousands() -> None:
+    """Test format_short_money for thousands."""
+    # Arrange & Act & Assert
+    assert format_short_money(1000) == "1k", "Should format 1000 as '1k'"
+    assert format_short_money(32304) == "32k", "Should format 32304 as '32k'"
+    assert format_short_money(79088) == "79k", "Should format 79088 as '79k'"
+    assert format_short_money(500) == "500", "Should format 500 as '500'"
+    assert format_short_money(1500) == "2k", "Should round 1500 to '2k'"
+
+
+def test_format_short_money_millions() -> None:
+    """Test format_short_money for millions."""
+    # Arrange & Act & Assert
+    assert (
+        format_short_money(1_000_000) == "1.00M"
+    ), "Should format 1M as '1.00M'"
+    assert (
+        format_short_money(1_250_000) == "1.25M"
+    ), "Should format 1.25M as '1.25M'"
+    assert (
+        format_short_money(10_000_000) == "10.0M"
+    ), "Should format 10M as '10.0M'"
+    assert (
+        format_short_money(15_500_000) == "15.5M"
+    ), "Should format 15.5M as '15.5M'"
+
+
+def test_get_waypoint_index_found() -> None:
+    """Test get_waypoint_index returns index when waypoint is cached."""
+    # Arrange
+    waypoint_symbol = "X1-ABC-B2"
+    system_symbol = "X1-ABC"
+
+    mock_cache = {
+        "waypoints_X1-ABC": {
+            "last_updated": "2025-01-01T00:00:00Z",
+            "data": [
+                {"symbol": "X1-ABC-C3"},
+                {"symbol": "X1-ABC-A1"},
+                {"symbol": "X1-ABC-B2"},
+            ],
+        }
+    }
+
+    # Act
+    with patch("py_st.cli._helpers.cache.load_cache") as mock_load:
+        mock_load.return_value = mock_cache
+        result = get_waypoint_index(waypoint_symbol, system_symbol)
+
+    # Assert
+    assert result == "w-1", "Should return w-1 for X1-ABC-B2 after sorting"
+
+
+def test_get_waypoint_index_not_found() -> None:
+    """Test get_waypoint_index returns None when waypoint not cached."""
+    # Arrange
+    waypoint_symbol = "X1-ABC-Z99"
+    system_symbol = "X1-ABC"
+
+    mock_cache = {
+        "waypoints_X1-ABC": {
+            "last_updated": "2025-01-01T00:00:00Z",
+            "data": [
+                {"symbol": "X1-ABC-A1"},
+                {"symbol": "X1-ABC-B2"},
+            ],
+        }
+    }
+
+    # Act
+    with patch("py_st.cli._helpers.cache.load_cache") as mock_load:
+        mock_load.return_value = mock_cache
+        result = get_waypoint_index(waypoint_symbol, system_symbol)
+
+    # Assert
+    assert (
+        result is None
+    ), "Should return None when waypoint not found in cache"
+
+
+def test_get_waypoint_index_no_cache_entry() -> None:
+    """Test get_waypoint_index returns None when cache entry missing."""
+    # Arrange
+    waypoint_symbol = "X1-ABC-A1"
+    system_symbol = "X1-ABC"
+
+    mock_cache = {}
+
+    # Act
+    with patch("py_st.cli._helpers.cache.load_cache") as mock_load:
+        mock_load.return_value = mock_cache
+        result = get_waypoint_index(waypoint_symbol, system_symbol)
+
+    # Assert
+    assert result is None, "Should return None when cache entry doesn't exist"
+
+
+def test_get_waypoint_index_invalid_cache_structure() -> None:
+    """Test get_waypoint_index returns None for invalid cache structure."""
+    # Arrange
+    waypoint_symbol = "X1-ABC-A1"
+    system_symbol = "X1-ABC"
+
+    mock_cache = {"waypoints_X1-ABC": "invalid_data"}
+
+    # Act
+    with patch("py_st.cli._helpers.cache.load_cache") as mock_load:
+        mock_load.return_value = mock_cache
+        result = get_waypoint_index(waypoint_symbol, system_symbol)
+
+    # Assert
+    assert result is None, "Should return None when cache structure is invalid"

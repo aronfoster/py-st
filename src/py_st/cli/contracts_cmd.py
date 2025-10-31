@@ -5,8 +5,15 @@ import logging
 
 import typer
 
+from py_st._generated.models import Contract
 from py_st.cli._errors import handle_errors
-from py_st.cli._helpers import resolve_contract_id
+from py_st.cli._helpers import (
+    format_relative_due,
+    format_short_money,
+    get_default_system,
+    get_waypoint_index,
+    resolve_contract_id,
+)
 
 from ..services import contracts
 from .options import (
@@ -22,6 +29,107 @@ from .options import (
 contracts_app: typer.Typer = typer.Typer(help="Manage contracts.")
 
 
+def _get_type_abbrev(contract_type: str) -> str:
+    """Get a short type abbreviation."""
+    type_map = {
+        "PROCUREMENT": "PROC",
+        "TRANSPORT": "TRAN",
+        "SHUTTLE": "SHUT",
+    }
+    return type_map.get(contract_type, contract_type[:4].upper())
+
+
+def _format_deliverables(
+    contract: Contract, system_symbol: str, max_len: int = 60
+) -> str:
+    """
+    Format deliverables for display.
+
+    Args:
+        contract: The contract object.
+        system_symbol: Current system symbol for waypoint index lookup.
+        max_len: Maximum length before truncation.
+
+    Returns:
+        Formatted deliverables string.
+    """
+    if not contract.terms.deliver:
+        return "No deliverables"
+
+    parts = []
+    for deliv in contract.terms.deliver:
+        dest = deliv.destinationSymbol
+        wp_idx = get_waypoint_index(dest, system_symbol)
+        wp_suffix = f" [{wp_idx}]" if wp_idx else ""
+
+        part = (
+            f"{deliv.tradeSymbol} {deliv.unitsFulfilled}/"
+            f"{deliv.unitsRequired} → {dest}{wp_suffix}"
+        )
+        parts.append(part)
+
+    full_str = ", ".join(parts)
+
+    if len(full_str) > max_len:
+        visible_parts = []
+        current_len = 0
+        remaining = 0
+
+        for part in parts:
+            if current_len + len(part) + 2 <= max_len - 10:
+                visible_parts.append(part)
+                current_len += len(part) + 2
+            else:
+                remaining += 1
+
+        if remaining > 0:
+            return f"{', '.join(visible_parts)} … (+{remaining})"
+
+    return full_str
+
+
+def _print_contract_compact(
+    idx: int, contract: Contract, system_symbol: str
+) -> None:
+    """Print contract in compact single-line format."""
+    id6 = contract.id[:6]
+    type_abbr = _get_type_abbrev(contract.type.value)
+    acc = "✓" if contract.accepted else "✗"
+    ful = "✓" if contract.fulfilled else "✗"
+    due_rel = format_relative_due(contract.terms.deadline)
+    on_acc = format_short_money(contract.terms.payment.onAccepted)
+    on_ful = format_short_money(contract.terms.payment.onFulfilled)
+    fac = contract.factionSymbol[:2].upper()
+    deliver = _format_deliverables(contract, system_symbol, max_len=60)
+
+    print(
+        f"c-{idx:<3} {id6}  {type_abbr:<4}  {acc}/{ful}  "
+        f"{due_rel:<16}  A {on_acc}; F {on_ful}  "
+        f"Fac {fac}  {deliver}"
+    )
+
+
+def _print_contract_stacked(
+    idx: int, contract: Contract, system_symbol: str
+) -> None:
+    """Print contract in stacked two-line format."""
+    id6 = contract.id[:6]
+    type_abbr = _get_type_abbrev(contract.type.value)
+    acc = "✓" if contract.accepted else "✗"
+    ful = "✓" if contract.fulfilled else "✗"
+    due_rel = format_relative_due(contract.terms.deadline)
+    on_acc = format_short_money(contract.terms.payment.onAccepted)
+    on_ful = format_short_money(contract.terms.payment.onFulfilled)
+    fac = contract.factionSymbol[:2].upper()
+    deliver = _format_deliverables(contract, system_symbol, max_len=1000)
+
+    print(
+        f"[c-{idx}] {id6} {type_abbr} {acc}/{ful} due {due_rel} | "
+        f"Pay: A {on_acc}; F {on_ful} | Fac {fac}"
+    )
+    print(f"       {deliver}")
+
+
 @contracts_app.command("list")
 @handle_errors
 def list_contracts(
@@ -29,6 +137,9 @@ def list_contracts(
     verbose: bool = VERBOSE_OPTION,
     json_output: bool = typer.Option(
         False, "--json", help="Output raw JSON instead of summary."
+    ),
+    stacked: bool = typer.Option(
+        False, "--stacked", help="Use two-line stacked format."
     ),
 ) -> None:
     """
@@ -48,22 +159,12 @@ def list_contracts(
         ]
         print(json.dumps(contracts_list, indent=2))
     else:
+        system_symbol = get_default_system(t)
         for i, contract in enumerate(contracts_list_data):
-            type_str = contract.type.value
-            accepted_str = "Yes" if contract.accepted else "No"
-            fulfilled_str = "Yes" if contract.fulfilled else "No"
-            deadline_str = (
-                contract.deadlineToAccept.isoformat()
-                if contract.deadlineToAccept
-                else contract.expiration.isoformat()
-            )
-            print(
-                f"[c-{i}] {contract.id:<25} "
-                f"type:{type_str:<12} "
-                f"accepted:{accepted_str:<3} "
-                f"fulfilled:{fulfilled_str:<3} "
-                f"deadline:{deadline_str}"
-            )
+            if stacked:
+                _print_contract_stacked(i, contract, system_symbol)
+            else:
+                _print_contract_compact(i, contract, system_symbol)
 
 
 @contracts_app.command("negotiate")

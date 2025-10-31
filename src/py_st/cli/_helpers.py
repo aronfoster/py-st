@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 import typer
 
+from py_st import cache
 from py_st._generated.models import Ship, ShipNavStatus
 from py_st.services import agent, contracts, ships, systems
 
@@ -235,3 +236,108 @@ def get_default_system(token: str) -> str:
             err=True,
         )
         raise typer.Exit(code=1) from e
+
+
+def format_relative_due(
+    deadline: datetime, now: datetime | None = None
+) -> str:
+    """
+    Format a deadline as a relative time string.
+
+    Args:
+        deadline: The deadline datetime (aware).
+        now: Current time (defaults to UTC now).
+
+    Returns:
+        Formatted string like "in 6d 3h", "overdue by 1h 12m",
+        or "-2h 5m" for negative deadlines.
+    """
+    if now is None:
+        now = datetime.now(UTC)
+
+    delta = deadline - now
+    total_seconds = int(delta.total_seconds())
+    is_overdue = total_seconds < 0
+    abs_seconds = abs(total_seconds)
+
+    days = abs_seconds // 86400
+    hours = (abs_seconds % 86400) // 3600
+    minutes = (abs_seconds % 3600) // 60
+    seconds = abs_seconds % 60
+
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+        if hours > 0:
+            parts.append(f"{hours}h")
+    elif hours > 0:
+        parts.append(f"{hours}h")
+        if minutes > 0:
+            parts.append(f"{minutes}m")
+    elif minutes > 0:
+        parts.append(f"{minutes}m")
+        if seconds > 0:
+            parts.append(f"{seconds}s")
+    else:
+        parts.append(f"{seconds}s")
+
+    time_str = " ".join(parts[:2])
+
+    if is_overdue:
+        return f"overdue by {time_str}"
+    return f"in {time_str}"
+
+
+def format_short_money(amount: int) -> str:
+    """
+    Format money in short form (e.g., 32k, 1.25M).
+
+    Args:
+        amount: The amount in credits.
+
+    Returns:
+        Formatted string like "32k", "1.25M", etc.
+    """
+    if amount < 1000:
+        return str(amount)
+    elif amount < 100_000 or amount < 1_000_000:
+        k_value = round(amount / 1000)
+        return f"{k_value}k"
+    else:
+        m_value = amount / 1_000_000
+        if m_value >= 10:
+            return f"{m_value:.1f}M"
+        else:
+            return f"{m_value:.2f}M"
+
+
+def get_waypoint_index(waypoint_symbol: str, system_symbol: str) -> str | None:
+    """
+    Get the waypoint index for a given waypoint symbol if cached.
+
+    Args:
+        waypoint_symbol: Full waypoint symbol (e.g., "X1-VF50-C37").
+        system_symbol: System symbol (e.g., "X1-VF50").
+
+    Returns:
+        Index string like "w-12" if found in cache, None otherwise.
+    """
+    cache_key = f"waypoints_{system_symbol}"
+    full_cache = cache.load_cache()
+
+    cached_entry = full_cache.get(cache_key)
+    if cached_entry is None or not isinstance(cached_entry, dict):
+        return None
+
+    cached_data = cached_entry.get("data")
+    if not isinstance(cached_data, list):
+        return None
+
+    waypoint_symbols = [wp.get("symbol") for wp in cached_data]
+    waypoint_symbols.sort()
+
+    try:
+        idx = waypoint_symbols.index(waypoint_symbol)
+        return f"w-{idx}"
+    except (ValueError, AttributeError):
+        return None

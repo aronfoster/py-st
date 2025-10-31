@@ -84,6 +84,14 @@ These items improve code quality and performance but are not tied to a specific 
     * ✅ Refactored ship list cache to use "dirty" flag instead of time-based staleness. Updated ships list command to display fuel (current/max).
 
 * **Sprint 3: Cargo & Contracts**
+    * ✅ **Compact Contracts List Enhancement:**
+        * ✅ Enhanced `contracts list` command with compact, informative default output
+        * ✅ Added relative due date display (e.g., "in 6d 3h", "overdue by 1h 12m")
+        * ✅ Added short-form payment display (e.g., "32k", "1.25M")
+        * ✅ Added 2-character faction abbreviation
+        * ✅ Added waypoint index display for deliverable destinations (e.g., "[w-12]")
+        * ✅ Implemented `--stacked` flag for two-line detailed format
+        * ✅ Added comprehensive tests for all formatting helpers
     * ✅ **Refactor Index Helpers to Use Prefixes:**
         * ✅ Modified `cli/_helpers.py` to change `resolve_ship_id` to look for a prefix (e.g., `s-0`) instead of just digits.
         * ✅ Modified `cli/_helpers.py` to change `resolve_waypoint_id` to look for a prefix (e.g., `w-0`).
