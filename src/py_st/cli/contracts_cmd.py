@@ -13,6 +13,7 @@ from py_st.cli._helpers import (
     get_default_system,
     get_waypoint_index,
     resolve_contract_id,
+    resolve_ship_id,
 )
 
 from ..services import contracts
@@ -172,7 +173,8 @@ def negotiate_contract_cli(
         format="%(levelname)s %(name)s: %(message)s",
     )
     t = _get_token(token)
-    new_contract = contracts.negotiate_contract(t, ship_symbol)
+    resolved_ship_symbol = resolve_ship_id(t, ship_symbol)
+    new_contract = contracts.negotiate_contract(t, resolved_ship_symbol)
     print("🎉 New contract negotiated!")
     print(json.dumps(new_contract.model_dump(mode="json"), indent=2))
 
@@ -196,8 +198,9 @@ def deliver_contract_cli(
     )
     t = _get_token(token)
     resolved_contract_id = resolve_contract_id(t, contract_id)
+    resolved_ship_symbol = resolve_ship_id(t, ship_symbol)
     contract, cargo = contracts.deliver_contract(
-        t, resolved_contract_id, ship_symbol, trade_symbol, units
+        t, resolved_contract_id, resolved_ship_symbol, trade_symbol, units
     )
     print("📦 Cargo delivered!")
     output_data = {
