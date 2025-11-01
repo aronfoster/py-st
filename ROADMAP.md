@@ -8,7 +8,7 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
 
 **HIGH PRIOTIRY**
 
-* Cache calls should use a "need clean" boolean, default true.
+* Cache calls should use a "need clean" boolean, default true. All acche objects will have a dirty flag and all calls to the cache will have a "need clean" if they reference fields that are dynamic (per serve reset; e.g. money, fuel, prices)
 * `systems market w-41` doesn't get market prices or values if it finds it in the cache (without market prices)
 * In Transit ship cache dirty is broken somehow:
 
@@ -66,7 +66,7 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
     * Refactor this duplicated code into a single, generic helper function to keep the services module clean.
 
 * **Document Cache Structure:**
-    * Find an appropriate location in the codebase to explain cache schema, field purpose/usage (e.g. `last_updated`), etc.
+    * Update `cache/SCHEMA.md` with schema info. Normalize keys and naming (need to explore options and pick one). Should we add a helper function to get the key name for a given function?
 
 ---
 
