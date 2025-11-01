@@ -10,10 +10,21 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
 
 * ShipsEndpoint.get_ships and ContractsEndpoint.get_contracts could use pagination. Can we just make pagination it default for all requests? Or do we need to define which ones should be paginated explicitly?
 * SystemsEndpoint.list_waypoints_all accepts a traits filter but should no longer do so. It is not currently used.
+* pretty-print contracts headers don't always line up with rows. Figure out the right number of spaces programatically
 
 ---
 
 ## Sprint 5: Ergonomics and Tech Debt
+
+* Formatting/UX: unify CLI formatting (columns, relative time, short money, id6, 2-char faction), consistent flags, stable sort.
+
+* Resolvers: centralize s-, w-, c- logic to one helper so every command benefits.
+
+* Errors & msgs: friendlier exceptions + concise failure summaries.
+
+* Systems/markets polish: reuse cached waypoints/markets; fast filters.
+
+* Small refactors: split oversized service files by concern (navigation, cargo, market), keep functions short.
 
 * **Improve CLI Argument Ergonomics:**
     * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help text.
@@ -27,8 +38,9 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
 
 ---
 
-## 🔭 Long-Term Goals
+## 🔭 Long-Term Goals (not ordered)
 
+* Survey caching
 * Develop a script to run a basic ship automation loop.
 * Investigate `openapi-python-client` or rolling my own method to turn `SpaceTraders.json` spec automatically into client prototypes.
 * Currently using agent tokens, which expire every week. Explore Register by API with an account token, then automatically create a new agent if none exist.
@@ -37,6 +49,13 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
     * Research and select a GUI framework (e.g., PySide6, Tkinter).
     * Design a basic UI to display universe/fleet data and trigger actions.
     * Implement the GUI, ensuring it runs in a separate thread from the automation logic.
+
+---
+
+## To Explore
+
+* General clean code and refactoring ideas
+*
 
 ---
 
