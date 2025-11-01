@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from py_st._generated.models import Contract, ShipCargo
+from py_st._generated.models import Contract, ShipCargo, TradeSymbol
 from py_st.cli.contracts_cmd import (
     deliver_contract_cli,
     negotiate_contract_cli,
@@ -79,7 +79,7 @@ def test_deliver_contract_cli_resolves_both_indices() -> None:
     token = "test-token"
     contract_id_arg = "c-0"
     ship_symbol_arg = "s-1"
-    trade_symbol = "IRON_ORE"
+    trade_symbol = TradeSymbol.IRON_ORE
     units = 10
 
     resolved_contract = "contract-abc123"
@@ -122,7 +122,7 @@ def test_deliver_contract_cli_resolves_both_indices() -> None:
     mock_resolve_contract.assert_called_once_with(token, contract_id_arg)
     mock_resolve_ship.assert_called_once_with(token, ship_symbol_arg)
     mock_deliver.assert_called_once_with(
-        token, resolved_contract, resolved_ship, trade_symbol, units
+        token, resolved_contract, resolved_ship, trade_symbol.value, units
     )
 
 
@@ -132,7 +132,7 @@ def test_deliver_contract_cli_accepts_full_symbols() -> None:
     token = "test-token"
     contract_id = "contract-full-id"
     ship_symbol = "MY-SHIP-FULL"
-    trade_symbol = "IRON_ORE"
+    trade_symbol = TradeSymbol.IRON_ORE
     units = 10
 
     contract_data = ContractFactory.build_minimal()
@@ -172,5 +172,5 @@ def test_deliver_contract_cli_accepts_full_symbols() -> None:
     mock_resolve_contract.assert_called_once_with(token, contract_id)
     mock_resolve_ship.assert_called_once_with(token, ship_symbol)
     mock_deliver.assert_called_once_with(
-        token, contract_id, ship_symbol, trade_symbol, units
+        token, contract_id, ship_symbol, trade_symbol.value, units
     )

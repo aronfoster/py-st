@@ -5,7 +5,7 @@ import logging
 
 import typer
 
-from py_st._generated.models import Contract
+from py_st._generated.models import Contract, TradeSymbol
 from py_st.cli._errors import handle_errors
 from py_st.cli._helpers import (
     format_relative_due,
@@ -184,7 +184,7 @@ def negotiate_contract_cli(
 def deliver_contract_cli(
     contract_id: str = CONTRACT_ID_ARG,
     ship_symbol: str = SHIP_SYMBOL_ARG,
-    trade_symbol: str = DELIVER_TRADE_SYMBOL_ARG,
+    trade_symbol: TradeSymbol = DELIVER_TRADE_SYMBOL_ARG,
     units: int = DELIVER_UNITS_ARG,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
@@ -200,7 +200,11 @@ def deliver_contract_cli(
     resolved_contract_id = resolve_contract_id(t, contract_id)
     resolved_ship_symbol = resolve_ship_id(t, ship_symbol)
     contract, cargo = contracts.deliver_contract(
-        t, resolved_contract_id, resolved_ship_symbol, trade_symbol, units
+        t,
+        resolved_contract_id,
+        resolved_ship_symbol,
+        trade_symbol.value,
+        units,
     )
     print("📦 Cargo delivered!")
     output_data = {

@@ -26,9 +26,6 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
 
 * Small refactors: split oversized service files by concern (navigation, cargo, market), keep functions short.
 
-* **Improve CLI Argument Ergonomics:**
-    * Update CLI commands to use `Enum` types for arguments where possible (e.g., `ShipNavFlightMode` for the `ships flight-mode` command) so `typer` can provide automatic validation and help text.
-
 * **Refactor "Smart Merge" Caching Logic:**
     * The `get_market` and `get_shipyard` functions in `services/systems.py` share nearly identical "smart merge" caching logic.
     * Refactor this duplicated code into a single, generic helper function to keep the services module clean.
@@ -60,6 +57,18 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
 ---
 
 ## ✅ Done
+
+* **Sprint 5: Ergonomics and Tech Debt**
+    * ✅ **Improve CLI Argument Ergonomics:**
+        * ✅ Updated CLI commands to use `Enum` types for arguments across ships, contracts, and systems commands
+        * ✅ `ships flight-mode` now accepts `ShipNavFlightMode` enum (CRUISE, BURN, DRIFT, STEALTH)
+        * ✅ `ships refine` produce argument now uses `TradeSymbol` enum
+        * ✅ `ships purchase` ship_type argument now uses `ShipType` enum
+        * ✅ `contracts deliver` trade_symbol argument now uses `TradeSymbol` enum
+        * ✅ `ships sell/purchase-cargo/jettison` trade_symbol arguments now use `TradeSymbol` enum
+        * ✅ `systems waypoints --trait` filter now uses `WaypointTraitSymbol` enum
+        * ✅ Typer now provides automatic validation and displays enum choices in help text
+        * ✅ Added comprehensive CLI parsing tests for enum validation
 
 * **Sprint 4: Market Queries & Ergonomics**
     * ✅ **Add CLI Commands to Query Cache:**

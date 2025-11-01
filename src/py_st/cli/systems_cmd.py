@@ -8,6 +8,7 @@ from typing import Any
 
 import typer
 
+from py_st._generated.models import WaypointTraitSymbol
 from py_st.cli._errors import handle_errors
 from py_st.cli._helpers import get_default_system, resolve_waypoint_id
 
@@ -28,7 +29,7 @@ systems_app: typer.Typer = typer.Typer(help="View system information.")
 @handle_errors
 def list_waypoints(
     system_symbol: str | None = SYSTEM_SYMBOL_OPTION,
-    traits: list[str] = TRAITS_OPTION,
+    traits: list[WaypointTraitSymbol] = TRAITS_OPTION,
     json_output: bool = typer.Option(
         False, "--json", help="Output raw JSON instead of the default summary."
     ),
@@ -45,7 +46,8 @@ def list_waypoints(
     t = _get_token(token)
     if system_symbol is None:
         system_symbol = get_default_system(t)
-    waypoints = systems.list_waypoints(t, system_symbol, traits)
+    trait_values = [t.value for t in traits] if traits else []
+    waypoints = systems.list_waypoints(t, system_symbol, trait_values)
     waypoints.sort(key=lambda w: w.symbol.root)
 
     if json_output:
