@@ -14,15 +14,18 @@ SHOW_OPTION = typer.Option(True, help="Show current agent info.")
 
 # Contract-specific
 SHIP_SYMBOL_ARG = typer.Argument(
-    ..., help="The ship's full symbol or s-0 based index (e.g., 's-0', 'S-1')."
+    ...,
+    help=(
+        "The ship's full symbol or s-0 based index " "(e.g., 's-0', 'S-1')."
+    ),
 )
 DELIVER_TRADE_SYMBOL_ARG = typer.Argument(
-    ..., help="The symbol of the trade good to deliver."
+    ..., help="The trade symbol of the good to deliver."
 )
 DELIVER_UNITS_ARG = typer.Argument(..., help="The number of units to deliver.")
 CONTRACT_ID_ARG = typer.Argument(..., help="The ID of the contract to accept.")
 PURCHASE_TRADE_SYMBOL_ARG = typer.Argument(
-    ..., help="The symbol of the good to purchase."
+    ..., help="The trade symbol of the good to purchase."
 )
 PURCHASE_UNITS_ARG = typer.Argument(
     ..., help="The number of units to purchase."
@@ -35,7 +38,9 @@ REFUEL_UNITS_OPTION = typer.Option(
 FLIGHT_MODE_ARG = typer.Argument(
     ..., help="The flight mode to set for the ship."
 )
-PRODUCE_ARG = typer.Argument(..., help="The good to produce from refining.")
+PRODUCE_ARG = typer.Argument(
+    ..., help="The trade symbol of the good to produce from refining."
+)
 SHIP_TYPE_ARG = typer.Argument(..., help="The type of ship to purchase.")
 
 # Systems-specific
@@ -53,7 +58,7 @@ WAYPOINT_SYMBOL_ARG = typer.Argument(
     ),
 )
 TRAITS_OPTION = typer.Option(
-    None, "--trait", help="Filter waypoints by trait."
+    None, "--trait", help="Filter waypoints by trait symbol."
 )
 
 

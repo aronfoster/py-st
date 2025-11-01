@@ -5,7 +5,11 @@ import logging
 
 import typer
 
-from py_st._generated.models import ShipNavFlightMode
+from py_st._generated.models import (
+    ShipNavFlightMode,
+    ShipType,
+    TradeSymbol,
+)
 from py_st.cli._errors import handle_errors
 from py_st.cli._helpers import (
     format_ship_status,
@@ -243,7 +247,7 @@ def set_flight_mode_cli(
 @handle_errors
 def jettison_cargo_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
-    trade_symbol: str = DELIVER_TRADE_SYMBOL_ARG,
+    trade_symbol: TradeSymbol = DELIVER_TRADE_SYMBOL_ARG,
     units: int = DELIVER_UNITS_ARG,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
@@ -257,7 +261,7 @@ def jettison_cargo_cli(
     )
     t = _get_token(token)
     resolved_symbol = resolve_ship_id(t, ship_symbol)
-    cargo = ships.jettison_cargo(t, resolved_symbol, trade_symbol, units)
+    cargo = ships.jettison_cargo(t, resolved_symbol, trade_symbol.value, units)
     print("🗑️ Cargo jettisoned!")
     print(json.dumps(cargo.model_dump(mode="json"), indent=2))
 
@@ -266,7 +270,7 @@ def jettison_cargo_cli(
 @handle_errors
 def refine_materials_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
-    produce: str = PRODUCE_ARG,
+    produce: TradeSymbol = PRODUCE_ARG,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
@@ -279,14 +283,14 @@ def refine_materials_cli(
     )
     t = _get_token(token)
     resolved_symbol = resolve_ship_id(t, ship_symbol)
-    ships.refine_materials(t, resolved_symbol, produce)
+    ships.refine_materials(t, resolved_symbol, produce.value)
 
 
 @ships_app.command("sell")
 @handle_errors
 def sell_cargo_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
-    trade_symbol: str = DELIVER_TRADE_SYMBOL_ARG,
+    trade_symbol: TradeSymbol = DELIVER_TRADE_SYMBOL_ARG,
     units: int = DELIVER_UNITS_ARG,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
@@ -301,7 +305,7 @@ def sell_cargo_cli(
     t = _get_token(token)
     resolved_symbol = resolve_ship_id(t, ship_symbol)
     agent, cargo, transaction = ships.sell_cargo(
-        t, resolved_symbol, trade_symbol, units
+        t, resolved_symbol, trade_symbol.value, units
     )
     print("💱 Sale complete!")
     output = {
@@ -316,7 +320,7 @@ def sell_cargo_cli(
 @handle_errors
 def purchase_cargo_cli(
     ship_symbol: str = SHIP_SYMBOL_ARG,
-    trade_symbol: str = PURCHASE_TRADE_SYMBOL_ARG,
+    trade_symbol: TradeSymbol = PURCHASE_TRADE_SYMBOL_ARG,
     units: int = PURCHASE_UNITS_ARG,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
@@ -331,7 +335,7 @@ def purchase_cargo_cli(
     t = _get_token(token)
     resolved_symbol = resolve_ship_id(t, ship_symbol)
     agent, cargo, transaction = ships.purchase_cargo(
-        t, resolved_symbol, trade_symbol, units
+        t, resolved_symbol, trade_symbol.value, units
     )
     print("🛒 Purchase complete!")
     output = {
@@ -346,7 +350,7 @@ def purchase_cargo_cli(
 @handle_errors
 def purchase_ship_cli(
     waypoint_symbol: str = WAYPOINT_SYMBOL_ARG,
-    ship_type: str = SHIP_TYPE_ARG,
+    ship_type: ShipType = SHIP_TYPE_ARG,
     system_symbol: str | None = SYSTEM_SYMBOL_OPTION,
     token: str | None = TOKEN_OPTION,
     verbose: bool = VERBOSE_OPTION,
@@ -365,9 +369,9 @@ def purchase_ship_cli(
         t, system_symbol, waypoint_symbol
     )
     agent, ship, transaction = ships.purchase_ship(
-        t, ship_type, resolved_waypoint_symbol
+        t, ship_type.value, resolved_waypoint_symbol
     )
-    print(f"🛒 Purchased ship {ship.symbol} of type {ship_type}.")
+    print(f"🛒 Purchased ship {ship.symbol} of type {ship_type.value}.")
     output = {
         "agent": agent.model_dump(mode="json"),
         "ship": ship.model_dump(mode="json"),
