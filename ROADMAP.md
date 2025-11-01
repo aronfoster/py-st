@@ -18,7 +18,14 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
     [10] X1-VF50-B16  (ASTEROID          ) Traits: MINERAL_DEPOSITS, MICRO_GRAVITY_ANOMALIES, RADIOACTIVE
     ```
     The vertical alignment breaks for ones-tens-hundreds index changes. The spaces are inside parenthesis instead of outside. Can we shorten the trait names? That might require manual conversion.
+* In Transit ship cache dirty is broken somehow:
 
+    ```
+    py_st ships list
+    [0] SOURCE_CODE-1        COMMAND      (Fuel: 283/400) IN_TRANSIT to X1-VF50-E42 (Arrived)
+    [1] SOURCE_CODE-2        SATELLITE    (Fuel: 0/0) DOCKED at X1-VF50-H50
+    ```
+    This should have triggered another API call (every `ship list` with an IN_TRANSIT ship is dirty).
 
 ---
 
