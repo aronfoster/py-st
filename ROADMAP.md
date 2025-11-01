@@ -74,6 +74,7 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
 
 * Survey caching
 * Develop a script to run a basic ship automation loop.
+  * first loop: get contract. accept contract. find marketplace that sells product. orbit. navigate. dock. refuel. buy product. orbit. navigate to delivery point. dock. refuel. deliver. complete.
 * Investigate `openapi-python-client` or rolling my own method to turn `SpaceTraders.json` spec automatically into client prototypes.
 * Currently using agent tokens, which expire every week. Explore Register by API with an account token, then automatically create a new agent if none exist.
 * Improve web requests (rate limiting, async, etc.).
