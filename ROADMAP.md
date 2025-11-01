@@ -8,6 +8,7 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
 
 **HIGH PRIOTIRY**
 
+* Cache calls should use a "need clean" boolean, default true.
 * `systems market w-41` doesn't get market prices or values if it finds it in the cache (without market prices)
 * In Transit ship cache dirty is broken somehow:
 
