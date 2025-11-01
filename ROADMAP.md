@@ -11,6 +11,14 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
 * ShipsEndpoint.get_ships and ContractsEndpoint.get_contracts could use pagination. Can we just make pagination it default for all requests? Or do we need to define which ones should be paginated explicitly?
 * SystemsEndpoint.list_waypoints_all accepts a traits filter but should no longer do so. It is not currently used.
 * pretty-print contracts headers don't always line up with rows. Figure out the right number of spaces programatically
+* `systems waypoints` has some display quirks:
+
+    ```
+    [9] X1-VF50-B15  (ASTEROID          ) Traits: COMMON_METAL_DEPOSITS
+    [10] X1-VF50-B16  (ASTEROID          ) Traits: MINERAL_DEPOSITS, MICRO_GRAVITY_ANOMALIES, RADIOACTIVE
+    ```
+    The vertical alignment breaks for ones-tens-hundreds index changes. The spaces are inside parenthesis instead of outside. Can we shorten the trait names? That might require manual conversion.
+
 
 ---
 
