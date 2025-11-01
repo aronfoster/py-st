@@ -6,6 +6,25 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
 
 ## Bugs
 
+**HIGH PRIOTIRY**
+
+* `systems market w-41` doesn't get market prices or values if it finds it in the cache (without market prices)
+* In Transit ship cache dirty is broken somehow:
+
+    ```
+    py_st ships list
+    [0] SOURCE_CODE-1        COMMAND      (Fuel: 283/400) IN_TRANSIT to X1-VF50-E42 (Arrived)
+    [1] SOURCE_CODE-2        SATELLITE    (Fuel: 0/0) DOCKED at X1-VF50-H50
+    ```
+    This should have triggered another API call (every `ships list` with an IN_TRANSIT ship is dirty? Or maybe once the lowest transit time has expired!).
+* Why did this hit the `my/ships` API? Ship cache dirty from transit, not cleaned by `ships list`? But doesn't matter for getting the ship id/name.
+    ```
+    py_st contracts deliver c-1 s-0 POLYNUCLEOTIDES 14
+    INFO root: Resolved contract index 1 to ID: cmhfj5rc2dqvgui6xzct6tmrs
+    INFO httpx: HTTP Request: GET https://api.spacetraders.io/v2/my/ships "HTTP/1.1 200 OK"
+    INFO root: Resolved ship index 0 to symbol: SOURCE_CODE-1
+    ```
+
 **Low Priority**
 
 * ShipsEndpoint.get_ships and ContractsEndpoint.get_contracts could use pagination. Can we just make pagination it default for all requests? Or do we need to define which ones should be paginated explicitly?
@@ -18,14 +37,14 @@ The immediate goal is to improve the "playability" of the CLI. Much work has alr
     [10] X1-VF50-B16  (ASTEROID          ) Traits: MINERAL_DEPOSITS, MICRO_GRAVITY_ANOMALIES, RADIOACTIVE
     ```
     The vertical alignment breaks for ones-tens-hundreds index changes. The spaces are inside parenthesis instead of outside. Can we shorten the trait names? That might require manual conversion.
-* In Transit ship cache dirty is broken somehow:
+* contract-id help is incorrect. Not just "accept", and should mention shortcut :
+    ```
+    Deliver cargo to a contract.
 
+╭─ Arguments ────────────────────────────────────────────────────────────────────────────────────╮
+│ *    contract_id       TEXT                                The ID of the contract to accept.   │
+│                                                            [required]                          │
     ```
-    py_st ships list
-    [0] SOURCE_CODE-1        COMMAND      (Fuel: 283/400) IN_TRANSIT to X1-VF50-E42 (Arrived)
-    [1] SOURCE_CODE-2        SATELLITE    (Fuel: 0/0) DOCKED at X1-VF50-H50
-    ```
-    This should have triggered another API call (every `ship list` with an IN_TRANSIT ship is dirty).
 
 ---
 
