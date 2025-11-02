@@ -99,12 +99,15 @@ def list_ships(token: str, need_clean: bool = True) -> list[Ship]:
 
     is_dirty = bool(cached_entry.get("is_dirty", True))
 
+    # If we don't need clean cache, return cached ships immediately
     if not need_clean:
         return ships
 
+    # Need clean cache, so if dirty, refresh
     if is_dirty:
         return _fetch_and_cache_ships(token)
 
+    # Check if any IN_TRANSIT ships have arrived since last fetch
     now_utc = datetime.now(UTC)
     arrival_passed = any(
         ship.nav.status.value == "IN_TRANSIT"

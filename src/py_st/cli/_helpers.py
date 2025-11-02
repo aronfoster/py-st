@@ -75,7 +75,7 @@ def resolve_ship_id(token: str, ship_id_arg: str) -> str:
     else:
         return ship_id_arg
 
-    all_ships = ships.list_ships(token)
+    all_ships = ships.list_ships(token, need_clean=False)
     all_ships.sort(key=lambda s: s.symbol)
 
     if 0 <= index < len(all_ships):

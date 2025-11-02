@@ -391,7 +391,7 @@ def test_resolve_ship_id_index_lookup() -> None:
     assert (
         result == "MY-SHIP-A"
     ), "Should resolve s-0 to first ship after sorting by symbol"
-    mock_list_ships.assert_called_once_with(token)
+    mock_list_ships.assert_called_once_with(token, need_clean=False)
 
 
 def test_resolve_ship_id_uppercase_prefix() -> None:
@@ -419,7 +419,7 @@ def test_resolve_ship_id_uppercase_prefix() -> None:
     assert (
         result == "MY-SHIP-B"
     ), "Should resolve uppercase S-1 to second ship after sorting"
-    mock_list_ships.assert_called_once_with(token)
+    mock_list_ships.assert_called_once_with(token, need_clean=False)
 
 
 def test_resolve_ship_id_out_of_bounds() -> None:
@@ -442,7 +442,7 @@ def test_resolve_ship_id_out_of_bounds() -> None:
     assert (
         exc_info.value.exit_code == 1
     ), "Should exit with code 1 for invalid index"
-    mock_list_ships.assert_called_once_with(token)
+    mock_list_ships.assert_called_once_with(token, need_clean=False)
 
 
 def test_resolve_ship_id_invalid_prefix_format() -> None:
