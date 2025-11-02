@@ -806,7 +806,7 @@ def test_list_ships_cache_miss_dirty(
         result[1].symbol == "NEW-SHIP-2"
     ), "Should have new data, not old cached data"
 
-    mock_load_cache.assert_called_once()
+    assert mock_load_cache.call_count == 2, "Should load cache twice"
     mock_save_cache.assert_called_once()
     mock_client.ships.get_ships.assert_called_once()
 
@@ -861,7 +861,7 @@ def test_list_ships_cache_miss_no_dirty_flag(
         result[1].symbol == "NEW-SHIP-2"
     ), "Should fetch new data when is_dirty is missing"
 
-    mock_load_cache.assert_called_once()
+    assert mock_load_cache.call_count == 2, "Should load cache twice"
     mock_save_cache.assert_called_once()
     mock_client.ships.get_ships.assert_called_once()
 
@@ -902,7 +902,7 @@ def test_list_ships_cache_miss_not_found(
     assert result[0].symbol == "SHIP-1", "First ship symbol should match"
     assert result[1].symbol == "SHIP-2", "Second ship symbol should match"
 
-    mock_load_cache.assert_called_once()
+    assert mock_load_cache.call_count == 2, "Should load cache twice"
     mock_save_cache.assert_called_once()
     mock_client.ships.get_ships.assert_called_once()
 
@@ -953,7 +953,7 @@ def test_list_ships_cache_invalid_data(
         result[1].symbol == "SHIP-2"
     ), "Should return valid data from API, not invalid cache"
 
-    mock_load_cache.assert_called_once()
+    assert mock_load_cache.call_count == 2, "Should load cache twice"
     mock_save_cache.assert_called_once()
     mock_client.ships.get_ships.assert_called_once()
 
