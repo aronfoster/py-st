@@ -11,8 +11,7 @@ from pydantic import ValidationError
 from py_st import cache
 from py_st._generated.models import Agent, Contract, ShipCargo
 from py_st.client import SpaceTradersClient
-
-CONTRACT_LIST_CACHE_KEY = "contract_list"
+from py_st.services.cache_keys import key_for_contract_list
 
 
 def _mark_contract_list_dirty() -> None:
@@ -24,7 +23,7 @@ def _mark_contract_list_dirty() -> None:
     """
     full_cache = cache.load_cache()
 
-    cached_entry = full_cache.get(CONTRACT_LIST_CACHE_KEY)
+    cached_entry = full_cache.get(key_for_contract_list())
     if cached_entry is not None and isinstance(cached_entry, dict):
         cached_entry["is_dirty"] = True
         cache.save_cache(full_cache)
@@ -40,7 +39,7 @@ def list_contracts(token: str) -> list[Contract]:
     """
     full_cache = cache.load_cache()
 
-    cached_entry = full_cache.get(CONTRACT_LIST_CACHE_KEY)
+    cached_entry = full_cache.get(key_for_contract_list())
     if cached_entry is not None and isinstance(cached_entry, dict):
         try:
             is_dirty = cached_entry.get("is_dirty", True)
@@ -65,7 +64,7 @@ def list_contracts(token: str) -> list[Contract]:
         "is_dirty": False,
         "data": [contract.model_dump(mode="json") for contract in contracts],
     }
-    full_cache[CONTRACT_LIST_CACHE_KEY] = new_entry
+    full_cache[key_for_contract_list()] = new_entry
     cache.save_cache(full_cache)
 
     return contracts

@@ -24,9 +24,7 @@ from py_st._generated.models import (
 )
 from py_st._manual_models import RefineResult
 from py_st.client import APIError, SpaceTradersClient
-
-# Cache configuration for ship list
-SHIP_LIST_CACHE_KEY = "ship_list"
+from py_st.services.cache_keys import key_for_ship_list
 
 
 def _mark_ship_list_dirty() -> None:
@@ -38,7 +36,7 @@ def _mark_ship_list_dirty() -> None:
     """
     full_cache = cache.load_cache()
 
-    cached_entry = full_cache.get(SHIP_LIST_CACHE_KEY)
+    cached_entry = full_cache.get(key_for_ship_list())
     if cached_entry is not None and isinstance(cached_entry, dict):
         cached_entry["is_dirty"] = True
         cache.save_cache(full_cache)
@@ -63,7 +61,7 @@ def _fetch_and_cache_ships(token: str) -> list[Ship]:
     }
 
     full_cache = cache.load_cache()
-    full_cache[SHIP_LIST_CACHE_KEY] = new_entry
+    full_cache[key_for_ship_list()] = new_entry
     cache.save_cache(full_cache)
 
     return ships
@@ -86,7 +84,7 @@ def list_ships(token: str, need_clean: bool = True) -> list[Ship]:
     Returns:
         List of Ship objects.
     """
-    cached_entry = cache.load_cache().get(SHIP_LIST_CACHE_KEY)
+    cached_entry = cache.load_cache().get(key_for_ship_list())
 
     if not cached_entry or not isinstance(cached_entry, dict):
         return _fetch_and_cache_ships(token)

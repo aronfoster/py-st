@@ -10,9 +10,9 @@ from pydantic import ValidationError
 from py_st import cache
 from py_st._generated.models import Agent
 from py_st.client import SpaceTradersClient
+from py_st.services.cache_keys import key_for_agent
 
 # Cache configuration for agent info
-AGENT_CACHE_KEY = "agent_info"
 CACHE_STALENESS_THRESHOLD = timedelta(hours=1)
 
 
@@ -28,7 +28,7 @@ def get_agent_info(token: str) -> Agent:
     full_cache = cache.load_cache()
 
     # Check for cached entry
-    cached_entry = full_cache.get(AGENT_CACHE_KEY)
+    cached_entry = full_cache.get(key_for_agent())
     if cached_entry is not None and isinstance(cached_entry, dict):
         try:
             # Try to parse timestamp
@@ -65,7 +65,7 @@ def get_agent_info(token: str) -> Agent:
         "last_updated": now_iso,
         "data": agent.model_dump(mode="json"),
     }
-    full_cache[AGENT_CACHE_KEY] = new_entry
+    full_cache[key_for_agent()] = new_entry
     cache.save_cache(full_cache)
 
     return agent
