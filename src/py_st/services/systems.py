@@ -15,6 +15,7 @@ from py_st._generated.models import (
 )
 from py_st.cache import load_cache, save_cache
 from py_st.client import SpaceTradersClient
+from py_st.services.cache_merge import smart_merge_cache
 
 
 @dataclass
@@ -221,17 +222,11 @@ def get_shipyard(
     # Try to get cached entry
     cached_entry = full_cache.get(cache_key)
     cached_shipyard: Shipyard | None = None
-    ships_timestamp: datetime | None = None
 
     if cached_entry:
         try:
             # Parse cached shipyard data
             cached_shipyard = Shipyard.model_validate(cached_entry["data"])
-
-            # Parse ships timestamp (may be None)
-            ships_updated_str = cached_entry.get("ships_updated")
-            if ships_updated_str:
-                ships_timestamp = datetime.fromisoformat(ships_updated_str)
         except Exception as e:
             # Log validation error and proceed as cache miss
             logging.warning(
@@ -240,7 +235,6 @@ def get_shipyard(
                 e,
             )
             cached_shipyard = None
-            ships_timestamp = None
 
     # Case 1: Return from cache (no API call)
     if cached_shipyard is not None and not force_refresh:
@@ -255,42 +249,20 @@ def get_shipyard(
         system_symbol, waypoint_symbol
     )
 
-    new_entry_data: dict[str, object]
-    new_timestamp: str | None
-
-    # Sub-Case 2a: API returned new purchasable ships
-    # (fresh_shipyard.ships is not None)
-    if fresh_shipyard.ships is not None:
-        # This is the new "best" data
-        new_entry_data = fresh_shipyard.model_dump(mode="json")
-        new_timestamp = datetime.now(UTC).isoformat()
-        return_shipyard = fresh_shipyard
-
-    # Sub-Case 2b: API returned NO purchasable ships
-    # (fresh_shipyard.ships is None)
-    else:
-        # We must preserve old ship list if it exists
-        if cached_shipyard is not None and cached_shipyard.ships is not None:
-            # Merge: Update static fields from fresh_shipyard, keep old ships
-            cached_shipyard.shipTypes = fresh_shipyard.shipTypes
-            # ships, transactions, and modificationsFee remain unchanged
-
-            new_entry_data = cached_shipyard.model_dump(mode="json")
-            # Keep the original ship list timestamp
-            new_timestamp = (
-                ships_timestamp.isoformat() if ships_timestamp else None
-            )
-            return_shipyard = cached_shipyard
-        else:
-            # No old ship list to preserve, use the new (shipless) data
-            new_entry_data = fresh_shipyard.model_dump(mode="json")
-            new_timestamp = None
-            return_shipyard = fresh_shipyard
+    # Use smart merge helper to handle cache preservation logic
+    return_shipyard, new_timestamp = smart_merge_cache(
+        Shipyard,
+        cached_entry,
+        fresh_shipyard,
+        "ships",
+        "ships_updated",
+        ["shipTypes"],
+    )
 
     # Save and return
     full_cache[cache_key] = {
         "ships_updated": new_timestamp,
-        "data": new_entry_data,
+        "data": return_shipyard.model_dump(mode="json"),
     }
     save_cache(full_cache)
 
@@ -328,17 +300,11 @@ def get_market(
     # Try to get cached entry
     cached_entry = full_cache.get(cache_key)
     cached_market: Market | None = None
-    prices_timestamp: datetime | None = None
 
     if cached_entry:
         try:
             # Parse cached market data
             cached_market = Market.model_validate(cached_entry["data"])
-
-            # Parse prices timestamp (may be None)
-            prices_updated_str = cached_entry.get("prices_updated")
-            if prices_updated_str:
-                prices_timestamp = datetime.fromisoformat(prices_updated_str)
         except Exception as e:
             # Log validation error and proceed as cache miss
             logging.warning(
@@ -347,7 +313,6 @@ def get_market(
                 e,
             )
             cached_market = None
-            prices_timestamp = None
 
     # Case 1: Return from cache (no API call)
     if cached_market is not None and not force_refresh:
@@ -362,43 +327,20 @@ def get_market(
         system_symbol, waypoint_symbol
     )
 
-    new_entry_data: dict[str, object]
-    new_timestamp: str | None
-
-    # Sub-Case 2a: API returned new prices
-    # (fresh_market.tradeGoods is not None)
-    if fresh_market.tradeGoods is not None:
-        # This is the new "best" data
-        new_entry_data = fresh_market.model_dump(mode="json")
-        new_timestamp = datetime.now(UTC).isoformat()
-        return_market = fresh_market
-
-    # Sub-Case 2b: API returned NO prices (fresh_market.tradeGoods is None)
-    else:
-        # We must preserve old prices if they exist
-        if cached_market is not None and cached_market.tradeGoods is not None:
-            # Merge: Update static fields from fresh_market, keep old prices
-            cached_market.exports = fresh_market.exports
-            cached_market.imports = fresh_market.imports
-            cached_market.exchange = fresh_market.exchange
-            # tradeGoods remains unchanged (preserves old prices)
-
-            new_entry_data = cached_market.model_dump(mode="json")
-            # Keep the original price timestamp
-            new_timestamp = (
-                prices_timestamp.isoformat() if prices_timestamp else None
-            )
-            return_market = cached_market
-        else:
-            # No old prices to preserve, use the new (priceless) data
-            new_entry_data = fresh_market.model_dump(mode="json")
-            new_timestamp = None
-            return_market = fresh_market
+    # Use smart merge helper to handle cache preservation logic
+    return_market, new_timestamp = smart_merge_cache(
+        Market,
+        cached_entry,
+        fresh_market,
+        "tradeGoods",
+        "prices_updated",
+        ["exports", "imports", "exchange"],
+    )
 
     # Save and return
     full_cache[cache_key] = {
         "prices_updated": new_timestamp,
-        "data": new_entry_data,
+        "data": return_market.model_dump(mode="json"),
     }
     save_cache(full_cache)
 

@@ -21,10 +21,6 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 ## Sprint 5: Ergonomics & Cache Refactor
 
 ### Core Work
-
-* **Smart Merge Refactor**
-
-  * Consolidate duplicate “smart merge” logic from `get_market` and `get_shipyard` into one helper.
 * **Document Cache Schema**
 
   * Add `cache/SCHEMA.md` describing all cache entry types (`ships`, `waypoints`, `contracts`, `agent`, `markets`, `shipyards`).
@@ -74,10 +70,11 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 ## ✅ Completed
 
+* **Smart Merge Refactor**: Extracted and unified duplicate cache merge logic from `get_market` and `get_shipyard` into reusable `smart_merge_cache()` helper in `src/py_st/services/cache_merge.py`. Added comprehensive tests in `tests/test_cache_merge.py`.
 * CLI Enum conversion across all modules.
 * Market cache and `systems markets` improvements.
 * Compact `contracts list` display with relative due, payments, faction, and waypoint index.
-* Ships and contracts cache refactor to “dirty” pattern.
+* Ships and contracts cache refactor to "dirty" pattern.
 * Waypoint indexing and pretty-print display.
 * Initial cache implementation and testing harness.
 * Infrastructure: added `make clear-cache` target.
