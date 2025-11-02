@@ -42,6 +42,25 @@ PRODUCE_ARG = typer.Argument(
     ..., help="The trade symbol of the good to produce from refining."
 )
 SHIP_TYPE_ARG = typer.Argument(..., help="The type of ship to purchase.")
+FROM_SHIP_ARG = typer.Argument(
+    ...,
+    help=(
+        "Source ship's full symbol or s-0 based index " "(e.g., 's-0', 'S-1')."
+    ),
+)
+TO_SHIP_ARG = typer.Argument(
+    ...,
+    help=(
+        "Destination ship's full symbol or s-0 based index "
+        "(e.g., 's-0', 'S-1')."
+    ),
+)
+TRANSFER_TRADE_SYMBOL_ARG = typer.Argument(
+    ..., help="The trade symbol of the good to transfer."
+)
+TRANSFER_UNITS_ARG = typer.Argument(
+    ..., help="The number of units to transfer."
+)
 
 # Systems-specific
 SYSTEM_SYMBOL_OPTION = typer.Option(

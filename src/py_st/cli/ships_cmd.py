@@ -23,6 +23,7 @@ from .options import (
     DELIVER_TRADE_SYMBOL_ARG,
     DELIVER_UNITS_ARG,
     FLIGHT_MODE_ARG,
+    FROM_SHIP_ARG,
     PRODUCE_ARG,
     PURCHASE_TRADE_SYMBOL_ARG,
     PURCHASE_UNITS_ARG,
@@ -30,7 +31,10 @@ from .options import (
     SHIP_SYMBOL_ARG,
     SHIP_TYPE_ARG,
     SYSTEM_SYMBOL_OPTION,
+    TO_SHIP_ARG,
     TOKEN_OPTION,
+    TRANSFER_TRADE_SYMBOL_ARG,
+    TRANSFER_UNITS_ARG,
     VERBOSE_OPTION,
     WAYPOINT_SYMBOL_ARG,
     _get_token,
@@ -378,3 +382,57 @@ def purchase_ship_cli(
         "transaction": transaction.model_dump(mode="json"),
     }
     print(json.dumps(output, indent=2))
+
+
+@ships_app.command("transfer-cargo")
+@handle_errors
+def transfer_cargo_cli(
+    from_ship: str = FROM_SHIP_ARG,
+    to_ship: str = TO_SHIP_ARG,
+    trade_symbol: TradeSymbol = TRANSFER_TRADE_SYMBOL_ARG,
+    units: int = TRANSFER_UNITS_ARG,
+    token: str | None = TOKEN_OPTION,
+    verbose: bool = VERBOSE_OPTION,
+) -> None:
+    """
+    Transfer cargo between two of your ships.
+    """
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    t = _get_token(token)
+
+    if units <= 0:
+        typer.secho(
+            "Error: Units must be positive.", fg=typer.colors.RED, err=True
+        )
+        raise typer.Exit(code=1)
+
+    from_symbol = resolve_ship_id(t, from_ship)
+    to_symbol = resolve_ship_id(t, to_ship)
+
+    if from_symbol == to_symbol:
+        typer.secho(
+            "Error: Source and destination must differ.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    cargo = ships.transfer_cargo(
+        t, from_symbol, to_symbol, trade_symbol, units
+    )
+
+    transferred_item = next(
+        (item for item in cargo.inventory if item.symbol == trade_symbol),
+        None,
+    )
+    remaining_units = transferred_item.units if transferred_item else 0
+
+    print(
+        f"Transferred {units} units of {trade_symbol.value} from "
+        f"{from_symbol} to {to_symbol}. "
+        f"Source ship now has {remaining_units} units of "
+        f"{trade_symbol.value}."
+    )
