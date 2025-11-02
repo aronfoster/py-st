@@ -59,7 +59,7 @@ def list_waypoints(
             traits_str = ", ".join(t.symbol.value for t in w.traits) or "N/A"
             print(
                 f"[{i:>{max_idx_width}}] {w.symbol.root:<12} "
-                f"({w.type.value:<19}) Traits: {traits_str}"
+                f"{w.type.value:<19} Traits: {traits_str}"
             )
 
 
