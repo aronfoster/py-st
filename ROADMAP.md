@@ -13,6 +13,7 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 * Implement pagination in `get_ships` and `get_contracts`.
 * Drop unused `traits` filter in `SystemsEndpoint.list_waypoints_all`.
 * Correct help text for contract-id arguments to mention all relevant commands and shortcut syntax.
+* Add `--force-update` or some similar flag to `systems waypoints` to force a cache refresh. Do other command line commands need this?
 
 ---
 
