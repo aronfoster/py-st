@@ -12,8 +12,6 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 * Implement pagination in `get_ships` and `get_contracts`.
 * Drop unused `traits` filter in `SystemsEndpoint.list_waypoints_all`.
-* Align pretty-print contract headers and rows dynamically.
-* Fix misaligned indexes and parentheses in `systems waypoints`.
 * Correct help text for contract-id arguments to mention all relevant commands and shortcut syntax.
 
 ---
@@ -61,11 +59,15 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
   * Research frameworks (PySide6, Tkinter, etc.).
   * Prototype a live UI for universe/fleet visualization and simple command triggers.
   * Run GUI in its own thread, independent of automation logic.
+* **Trait name abbreviation**
+
+  * Consider abbreviating long trait names in `systems waypoints` output for more compact display.
 
 ---
 
 ## ✅ Completed
 
+* **CLI Table Alignment**: Fixed column alignment in `contracts list` and `systems waypoints` to handle mixed-digit indexes correctly. Contract columns (IDX, ID6, T, A/F, DUE(REL), DELIVER) now align properly when indexes expand from single to double digits. Waypoint indexes are right-aligned within brackets with fixed-width type fields ensuring "Traits:" column aligns vertically across all rows. Added comprehensive alignment tests.
 * **Document and Normalize Cache Schema**: Created `cache/SCHEMA.md` documenting all cache entry types (agent, ships, contracts, waypoints, markets, shipyards) with JSON structures, refresh policies, and invalidation triggers. Added `src/py_st/services/cache_keys.py` with helper functions for consistent cache key generation. Refactored all services to use centralized key helpers. Added comprehensive tests including drift check to prevent documentation-code divergence.
 * **Transfer Cargo Command**: Added `ships transfer-cargo` CLI command supporting ship index shortcuts (`s-0`, `s-1`) or full symbols. Includes client endpoint, service wrapper with cache invalidation, validation for same-ship and positive units, and comprehensive tests.
 * **Smart Merge Refactor**: Extracted and unified duplicate cache merge logic from `get_market` and `get_shipyard` into reusable `smart_merge_cache()` helper in `src/py_st/services/cache_merge.py`. Added comprehensive tests in `tests/test_cache_merge.py`.
