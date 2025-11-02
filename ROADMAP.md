@@ -49,7 +49,7 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 ## 🔭 Long-Term Goals
 
 * **Additional Functions**
-  * Transfer Cargo, Install Module, Install Mount, Siphon Resources, Get Agent Events
+  * Transfer Cargo, Install Module, Install Mount, Siphon Resources, Register New Agent, Get Agent Events
 
 * **Automation Loop**
 
