@@ -20,6 +20,7 @@ from py_st._generated.models import (
     ShipNavFlightMode,
     ShipyardTransaction,
     Survey,
+    TradeSymbol,
 )
 from py_st._manual_models import RefineResult
 from py_st.client import APIError, SpaceTradersClient
@@ -369,3 +370,31 @@ def purchase_ship(
     )
     _mark_ship_list_dirty()
     return agent, ship, transaction
+
+
+def transfer_cargo(
+    token: str,
+    from_ship: str,
+    to_ship: str,
+    trade_symbol: TradeSymbol,
+    units: int,
+) -> ShipCargo:
+    """
+    Transfers cargo between two ships.
+
+    Args:
+        token: The API authentication token.
+        from_ship: The symbol of the ship transferring cargo.
+        to_ship: The symbol of the ship receiving cargo.
+        trade_symbol: The trade good symbol to transfer.
+        units: The number of units to transfer.
+
+    Returns:
+        ShipCargo object with updated cargo hold for the source ship.
+    """
+    client = SpaceTradersClient(token=token)
+    cargo = client.ships.transfer_cargo(
+        from_ship, to_ship, trade_symbol.value, units
+    )
+    _mark_ship_list_dirty()
+    return cargo

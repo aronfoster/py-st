@@ -45,7 +45,7 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 ## 🔭 Long-Term Goals
 
 * **Additional Functions**
-  * Transfer Cargo, Install Module, Install Mount, Siphon Resources, Register New Agent, Get Agent Events
+  * Install Module, Install Mount, Siphon Resources, Register New Agent, Get Agent Events
 
 * **Automation Loop**
 
@@ -70,6 +70,7 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 ## ✅ Completed
 
+* **Transfer Cargo Command**: Added `ships transfer-cargo` CLI command supporting ship index shortcuts (`s-0`, `s-1`) or full symbols. Includes client endpoint, service wrapper with cache invalidation, validation for same-ship and positive units, and comprehensive tests.
 * **Smart Merge Refactor**: Extracted and unified duplicate cache merge logic from `get_market` and `get_shipyard` into reusable `smart_merge_cache()` helper in `src/py_st/services/cache_merge.py`. Added comprehensive tests in `tests/test_cache_merge.py`.
 * CLI Enum conversion across all modules.
 * Market cache and `systems markets` improvements.

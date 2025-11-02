@@ -15,6 +15,7 @@ from py_st._generated.models import (
     ShipNavFlightMode,
     ShipyardTransaction,
     Survey,
+    TradeSymbol,
 )
 from py_st._manual_models import RefineResult
 from py_st.client import APIError
@@ -1137,3 +1138,49 @@ def test_list_ships_dirty_cache_with_need_clean_true(
     ), "Should fetch fresh data when dirty and need_clean=True"
 
     mock_client.ships.get_ships.assert_called_once()
+
+
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
+@patch("py_st.services.ships.SpaceTradersClient")
+def test_transfer_cargo(
+    mock_client_class: Any, mock_load_cache: Any, mock_save_cache: Any
+) -> None:
+    """Test transfer_cargo calls client and marks cache dirty."""
+    # Arrange
+    mock_load_cache.return_value = {
+        "ship_list": {
+            "last_updated": "2024-01-01T00:00:00Z",
+            "is_dirty": False,
+            "data": [],
+        }
+    }
+
+    ship_data = ShipFactory.build_minimal()
+    cargo_data = ship_data["cargo"]
+    cargo = ShipCargo.model_validate(cargo_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.transfer_cargo.return_value = cargo
+
+    # Act
+    result = ships.transfer_cargo(
+        "fake_token", "SHIP-1", "SHIP-2", TradeSymbol.FUEL, 10
+    )
+
+    # Assert
+    assert isinstance(result, ShipCargo), "Should return ShipCargo object"
+
+    mock_client.ships.transfer_cargo.assert_called_once_with(
+        "SHIP-1", "SHIP-2", "FUEL", 10
+    )
+
+    mock_save_cache.assert_called_once()
+    saved_cache = mock_save_cache.call_args[0][0]
+    assert (
+        saved_cache["ship_list"]["is_dirty"] is True
+    ), "Should mark ship list cache as dirty"
+    assert (
+        saved_cache["ship_list"]["last_updated"] == "2024-01-01T00:00:00Z"
+    ), "Should not update timestamp"

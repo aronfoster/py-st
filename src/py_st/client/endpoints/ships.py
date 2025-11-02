@@ -189,3 +189,24 @@ class ShipsEndpoint:
             Ship.model_validate(data["ship"]),
             ShipyardTransaction.model_validate(data["transaction"]),
         )
+
+    def transfer_cargo(
+        self,
+        from_ship: str,
+        to_ship: str,
+        trade_symbol: str,
+        units: int,
+    ) -> ShipCargo:
+        """
+        Transfer cargo from one ship to another.
+        """
+        url = f"/my/ships/{from_ship}/transfer"
+        payload = {
+            "shipSymbol": to_ship,
+            "tradeSymbol": trade_symbol,
+            "units": units,
+        }
+        data = cast(
+            JSONDict, self._transport.request_json("POST", url, json=payload)
+        )
+        return ShipCargo.model_validate(data["cargo"])
