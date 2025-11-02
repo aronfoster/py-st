@@ -43,13 +43,22 @@ def _mark_ship_list_dirty() -> None:
         cache.save_cache(full_cache)
 
 
-def list_ships(token: str) -> list[Ship]:
+def list_ships(token: str, need_clean: bool = True) -> list[Ship]:
     """
     Fetches all ships from the API with caching.
 
-    Checks the cache first and returns cached data if the
-    "is_dirty" flag is False. Otherwise, fetches from the API
-    and updates the cache.
+    Checks the cache first and returns cached data based on the
+    "is_dirty" flag and need_clean parameter. When need_clean is True,
+    also checks if any IN_TRANSIT ships have arrived and treats that
+    as dirty, forcing a refresh.
+
+    Args:
+        token: The API authentication token.
+        need_clean: If True, require clean/fresh data. If False,
+            allow returning stale cached data.
+
+    Returns:
+        List of Ship objects.
     """
     full_cache = cache.load_cache()
 
@@ -59,6 +68,23 @@ def list_ships(token: str) -> list[Ship]:
             is_dirty = cached_entry.get("is_dirty", True)
 
             if not is_dirty:
+                ships_data = cached_entry["data"]
+                ships = [Ship.model_validate(s) for s in ships_data]
+
+                if need_clean:
+                    now_utc = datetime.now(UTC)
+                    for ship in ships:
+                        if (
+                            ship.nav.status.value == "IN_TRANSIT"
+                            and ship.nav.route.arrival <= now_utc
+                        ):
+                            is_dirty = True
+                            break
+
+                if not is_dirty:
+                    return ships
+
+            elif not need_clean:
                 ships_data = cached_entry["data"]
                 ships = [Ship.model_validate(s) for s in ships_data]
                 return ships

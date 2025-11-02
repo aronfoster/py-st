@@ -1,6 +1,6 @@
 """Unit tests for ship-related functions in services/ships.py."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -984,3 +984,156 @@ def test_mark_ship_list_dirty_no_cache(
 
     mock_load_cache.assert_called_once()
     mock_save_cache.assert_not_called()
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
+def test_list_ships_auto_refresh_on_arrival_past(
+    mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
+) -> None:
+    """Test list_ships auto-refreshes when IN_TRANSIT ship has arrived."""
+    # Arrange
+    now = datetime.now(UTC)
+    past_arrival = now - timedelta(minutes=5)
+
+    ship_data = ShipFactory.build_minimal()
+    ship_data["nav"]["status"] = "IN_TRANSIT"
+    ship_data["nav"]["route"]["arrival"] = past_arrival.isoformat()
+
+    mock_load_cache.return_value = {
+        "ship_list": {
+            "last_updated": (now - timedelta(hours=1)).isoformat(),
+            "is_dirty": False,
+            "data": [ship_data],
+        }
+    }
+
+    fresh_ship_data = ShipFactory.build_minimal()
+    fresh_ship_data["symbol"] = "REFRESHED-SHIP"
+    fresh_ship = Ship.model_validate(fresh_ship_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.get_ships.return_value = [fresh_ship]
+
+    # Act
+    result = ships.list_ships("fake_token", need_clean=True)
+
+    # Assert
+    assert len(result) == 1, "Should return refreshed ship list"
+    assert (
+        result[0].symbol == "REFRESHED-SHIP"
+    ), "Should fetch fresh data when ship has arrived"
+
+    mock_client.ships.get_ships.assert_called_once()
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
+def test_list_ships_no_refresh_when_arrival_future(
+    mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
+) -> None:
+    """Test list_ships returns cached data when arrival is in future."""
+    # Arrange
+    now = datetime.now(UTC)
+    future_arrival = now + timedelta(hours=2)
+
+    ship_data = ShipFactory.build_minimal()
+    ship_data["nav"]["status"] = "IN_TRANSIT"
+    ship_data["nav"]["route"]["arrival"] = future_arrival.isoformat()
+
+    mock_load_cache.return_value = {
+        "ship_list": {
+            "last_updated": (now - timedelta(hours=1)).isoformat(),
+            "is_dirty": False,
+            "data": [ship_data],
+        }
+    }
+
+    # Act
+    result = ships.list_ships("fake_token", need_clean=True)
+
+    # Assert
+    assert len(result) == 1, "Should return cached ship"
+    assert result[0].symbol == "SHIP-1", "Should return cached data"
+    assert (
+        result[0].nav.status.value == "IN_TRANSIT"
+    ), "Ship should still be in transit"
+
+    mock_client_class.assert_not_called()
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
+def test_list_ships_dirty_cache_with_need_clean_false(
+    mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
+) -> None:
+    """Test list_ships returns dirty cached data when need_clean=False."""
+    # Arrange
+    now = datetime.now(UTC)
+
+    ship_data = ShipFactory.build_minimal()
+    ship_data["symbol"] = "CACHED-DIRTY-SHIP"
+
+    mock_load_cache.return_value = {
+        "ship_list": {
+            "last_updated": now.isoformat(),
+            "is_dirty": True,
+            "data": [ship_data],
+        }
+    }
+
+    # Act
+    result = ships.list_ships("fake_token", need_clean=False)
+
+    # Assert
+    assert len(result) == 1, "Should return cached ship"
+    assert (
+        result[0].symbol == "CACHED-DIRTY-SHIP"
+    ), "Should return dirty cached data without fetching"
+
+    mock_client_class.assert_not_called()
+
+
+@patch("py_st.services.ships.SpaceTradersClient")
+@patch("py_st.services.ships.cache.save_cache")
+@patch("py_st.services.ships.cache.load_cache")
+def test_list_ships_dirty_cache_with_need_clean_true(
+    mock_load_cache: Any, mock_save_cache: Any, mock_client_class: Any
+) -> None:
+    """Test list_ships fetches fresh data when dirty and need_clean=True."""
+    # Arrange
+    now = datetime.now(UTC)
+
+    ship_data = ShipFactory.build_minimal()
+    ship_data["symbol"] = "OLD-SHIP"
+
+    mock_load_cache.return_value = {
+        "ship_list": {
+            "last_updated": now.isoformat(),
+            "is_dirty": True,
+            "data": [ship_data],
+        }
+    }
+
+    fresh_ship_data = ShipFactory.build_minimal()
+    fresh_ship_data["symbol"] = "FRESH-SHIP"
+    fresh_ship = Ship.model_validate(fresh_ship_data)
+
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+    mock_client.ships.get_ships.return_value = [fresh_ship]
+
+    # Act
+    result = ships.list_ships("fake_token", need_clean=True)
+
+    # Assert
+    assert len(result) == 1, "Should return fresh ship"
+    assert (
+        result[0].symbol == "FRESH-SHIP"
+    ), "Should fetch fresh data when dirty and need_clean=True"
+
+    mock_client.ships.get_ships.assert_called_once()

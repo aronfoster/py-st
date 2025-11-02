@@ -81,7 +81,9 @@ def get_shipyard_cli(
     if system_symbol is None:
         system_symbol = get_default_system(t)
     resolved_wp_symbol = resolve_waypoint_id(t, system_symbol, waypoint_symbol)
-    shipyard = systems.get_shipyard(t, system_symbol, resolved_wp_symbol)
+    shipyard = systems.get_shipyard(
+        t, system_symbol, resolved_wp_symbol, force_refresh=True
+    )
     print(json.dumps(shipyard.model_dump(mode="json"), indent=2))
 
 
@@ -104,7 +106,9 @@ def get_market_cli(
     if system_symbol is None:
         system_symbol = get_default_system(t)
     resolved_wp_symbol = resolve_waypoint_id(t, system_symbol, waypoint_symbol)
-    market = systems.get_market(t, system_symbol, resolved_wp_symbol)
+    market = systems.get_market(
+        t, system_symbol, resolved_wp_symbol, force_refresh=True
+    )
     if market is None:
         print(json.dumps({"market": None}, indent=2))
     else:
