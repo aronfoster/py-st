@@ -43,29 +43,13 @@ def _mark_ship_list_dirty() -> None:
         cache.save_cache(full_cache)
 
 
-def list_ships(token: str) -> list[Ship]:
+def _fetch_and_cache_ships(token: str) -> list[Ship]:
     """
-    Fetches all ships from the API with caching.
+    Fetches ships from API and updates the cache.
 
-    Checks the cache first and returns cached data if the
-    "is_dirty" flag is False. Otherwise, fetches from the API
-    and updates the cache.
+    Returns:
+        List of Ship objects from the API.
     """
-    full_cache = cache.load_cache()
-
-    cached_entry = full_cache.get(SHIP_LIST_CACHE_KEY)
-    if cached_entry is not None and isinstance(cached_entry, dict):
-        try:
-            is_dirty = cached_entry.get("is_dirty", True)
-
-            if not is_dirty:
-                ships_data = cached_entry["data"]
-                ships = [Ship.model_validate(s) for s in ships_data]
-                return ships
-
-        except (ValueError, ValidationError, KeyError) as e:
-            logging.warning("Invalid cache entry for ship list: %s", e)
-
     client = SpaceTradersClient(token=token)
     ships = client.ships.get_ships()
 
@@ -76,8 +60,60 @@ def list_ships(token: str) -> list[Ship]:
         "is_dirty": False,
         "data": [ship.model_dump(mode="json") for ship in ships],
     }
+
+    full_cache = cache.load_cache()
     full_cache[SHIP_LIST_CACHE_KEY] = new_entry
     cache.save_cache(full_cache)
+
+    return ships
+
+
+def list_ships(token: str, need_clean: bool = True) -> list[Ship]:
+    """
+    Fetches all ships from the API with caching.
+
+    Checks the cache first and returns cached data based on the
+    "is_dirty" flag and need_clean parameter. When need_clean is True,
+    also checks if any IN_TRANSIT ships have arrived and treats that
+    as dirty, forcing a refresh.
+
+    Args:
+        token: The API authentication token.
+        need_clean: If True, require clean/fresh data. If False,
+            allow returning stale cached data.
+
+    Returns:
+        List of Ship objects.
+    """
+    cached_entry = cache.load_cache().get(SHIP_LIST_CACHE_KEY)
+
+    if not cached_entry or not isinstance(cached_entry, dict):
+        return _fetch_and_cache_ships(token)
+
+    try:
+        ships_data = cached_entry["data"]
+        ships = [Ship.model_validate(s) for s in ships_data]
+    except (ValueError, ValidationError, KeyError) as e:
+        logging.warning("Invalid cache entry for ship list: %s", e)
+        return _fetch_and_cache_ships(token)
+
+    is_dirty = bool(cached_entry.get("is_dirty", True))
+
+    if not need_clean:
+        return ships
+
+    if is_dirty:
+        return _fetch_and_cache_ships(token)
+
+    now_utc = datetime.now(UTC)
+    arrival_passed = any(
+        ship.nav.status.value == "IN_TRANSIT"
+        and ship.nav.route.arrival <= now_utc
+        for ship in ships
+    )
+
+    if arrival_passed:
+        return _fetch_and_cache_ships(token)
 
     return ships
 

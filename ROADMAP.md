@@ -12,12 +12,12 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
   * Add `need_clean: bool` to all cache-using functions.
   * All cache entries use a `dirty` flag. Functions that need dynamic fields (e.g., money, fuel, prices) should call with `need_clean=True`.
-* **Market cache returns incomplete data**
+* **Market cache returns incomplete data** ✅ **FIXED**
 
-  * `systems market w-41` sometimes returns cached entries without prices. Fix so markets/shipyards always refresh when `need_clean=True` and the cache lacks prices/ships.
-* **Ship cache in-transit logic**
+  * CLI market/shipyard detail commands now call services with `force_refresh=True` to ensure prices/ships are always shown.
+* **Ship cache in-transit logic** ✅ **FIXED**
 
-  * Ships with `IN_TRANSIT` status are shown as “Arrived” but don’t trigger a refresh. When any cached ship’s arrival time has passed, mark the ship cache dirty (or refetch automatically on `ships list`).
+  * `list_ships()` now auto-refreshes when any cached ship with `IN_TRANSIT` status has `arrival <= now(UTC)` and `need_clean=True`.
 
 ### Low Priority
 
