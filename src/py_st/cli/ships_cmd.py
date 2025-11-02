@@ -23,6 +23,7 @@ from .options import (
     DELIVER_TRADE_SYMBOL_ARG,
     DELIVER_UNITS_ARG,
     FLIGHT_MODE_ARG,
+    FROM_SHIP_ARG,
     PRODUCE_ARG,
     PURCHASE_TRADE_SYMBOL_ARG,
     PURCHASE_UNITS_ARG,
@@ -30,7 +31,10 @@ from .options import (
     SHIP_SYMBOL_ARG,
     SHIP_TYPE_ARG,
     SYSTEM_SYMBOL_OPTION,
+    TO_SHIP_ARG,
     TOKEN_OPTION,
+    TRANSFER_TRADE_SYMBOL_ARG,
+    TRANSFER_UNITS_ARG,
     VERBOSE_OPTION,
     WAYPOINT_SYMBOL_ARG,
     _get_token,
@@ -378,27 +382,6 @@ def purchase_ship_cli(
         "transaction": transaction.model_dump(mode="json"),
     }
     print(json.dumps(output, indent=2))
-
-
-FROM_SHIP_ARG = typer.Argument(
-    ...,
-    help=(
-        "Source ship's full symbol or s-0 based index " "(e.g., 's-0', 'S-1')."
-    ),
-)
-TO_SHIP_ARG = typer.Argument(
-    ...,
-    help=(
-        "Destination ship's full symbol or s-0 based index "
-        "(e.g., 's-0', 'S-1')."
-    ),
-)
-TRANSFER_TRADE_SYMBOL_ARG = typer.Argument(
-    ..., help="The trade symbol of the good to transfer."
-)
-TRANSFER_UNITS_ARG = typer.Argument(
-    ..., help="The number of units to transfer."
-)
 
 
 @ships_app.command("transfer-cargo")
