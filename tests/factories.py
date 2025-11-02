@@ -42,6 +42,10 @@ from py_st._generated.models import (
     WaypointType,
 )
 from py_st._generated.models.Contract import Type as ContractType
+from py_st._generated.models.MarketTradeGood import MarketTradeGood
+from py_st._generated.models.MarketTradeGood import (
+    Type as MarketTradeGoodType,
+)
 from py_st._generated.models.MarketTransaction import Type as TransactionType
 from py_st._generated.models.ShipCrew import Rotation
 from py_st._generated.models.ShipEngine import Symbol as EngineSymbol
@@ -49,6 +53,8 @@ from py_st._generated.models.ShipFrame import Symbol as FrameSymbol
 from py_st._generated.models.ShipReactor import Symbol as ReactorSymbol
 from py_st._generated.models.ShipType import ShipType as ShipTypeEnum
 from py_st._generated.models.Shipyard import ShipType
+from py_st._generated.models.ShipyardShip import Crew, ShipyardShip
+from py_st._generated.models.SupplyLevel import SupplyLevel
 from py_st._generated.models.Survey import Size as SurveySize
 from py_st._manual_models import RefineItem, RefineResult
 
@@ -295,6 +301,37 @@ class TradeGoodFactory:
         return trade_good.model_dump(mode="json")
 
 
+class MarketTradeGoodFactory:
+    @staticmethod
+    def build_minimal(
+        symbol: TradeSymbol = TradeSymbol.IRON_ORE,
+        trade_type: MarketTradeGoodType = MarketTradeGoodType.EXPORT,
+        trade_volume: int = 10,
+        supply: SupplyLevel = SupplyLevel.MODERATE,
+        purchase_price: int = 100,
+        sell_price: int = 90,
+    ) -> dict[str, Any]:
+        """Build a minimal valid MarketTradeGood payload dict.
+
+        Args:
+            symbol: The trade symbol
+            trade_type: The type of trade (EXPORT, IMPORT, EXCHANGE)
+            trade_volume: The trading volume
+            supply: The supply level
+            purchase_price: The purchase price
+            sell_price: The sell price
+        """
+        trade_good = MarketTradeGood(
+            symbol=symbol,
+            type=trade_type,
+            tradeVolume=trade_volume,
+            supply=supply,
+            purchasePrice=purchase_price,
+            sellPrice=sell_price,
+        )
+        return trade_good.model_dump(mode="json")
+
+
 class MarketFactory:
     @staticmethod
     def build_minimal(
@@ -302,6 +339,7 @@ class MarketFactory:
         exports: list[TradeSymbol] | None = None,
         imports: list[TradeSymbol] | None = None,
         exchange: list[TradeSymbol] | None = None,
+        trade_goods: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Build a minimal valid Market payload dict.
 
@@ -310,6 +348,7 @@ class MarketFactory:
             exports: List of trade symbols that are exported
             imports: List of trade symbols that are imported
             exchange: List of trade symbols that are exchanged
+            trade_goods: Optional list of MarketTradeGood dicts (prices)
         """
         export_goods = [
             TradeGood(
@@ -342,9 +381,76 @@ class MarketFactory:
             imports=import_goods,
             exchange=exchange_goods,
             transactions=None,
-            tradeGoods=None,
+            tradeGoods=(
+                [MarketTradeGood.model_validate(tg) for tg in trade_goods]
+                if trade_goods
+                else None
+            ),
         )
         return market.model_dump(mode="json")
+
+
+class ShipyardShipFactory:
+    @staticmethod
+    def build_minimal(
+        ship_type: ShipTypeEnum = ShipTypeEnum.SHIP_MINING_DRONE,
+        name: str = "Mining Drone",
+        description: str = "A mining drone",
+        supply: SupplyLevel = SupplyLevel.MODERATE,
+        purchase_price: int = 50000,
+    ) -> dict[str, Any]:
+        """Build a minimal valid ShipyardShip payload dict.
+
+        Args:
+            ship_type: The type of ship
+            name: The name of the ship
+            description: The description of the ship
+            supply: The supply level
+            purchase_price: The purchase price
+        """
+        ship = ShipyardShip(
+            type=ship_type,
+            name=name,
+            description=description,
+            supply=supply,
+            purchasePrice=purchase_price,
+            frame=ShipFrame(
+                symbol=FrameSymbol.FRAME_DRONE,
+                name="Frame Drone",
+                description="A basic frame",
+                condition=ShipComponentCondition(1.0),
+                integrity=ShipComponentIntegrity(1.0),
+                quality=ShipComponentQuality(1),
+                moduleSlots=1,
+                mountingPoints=1,
+                fuelCapacity=100,
+                requirements=ShipRequirements(power=1, crew=0, slots=0),
+            ),
+            reactor=ShipReactor(
+                symbol=ReactorSymbol.REACTOR_SOLAR_I,
+                name="Solar Reactor I",
+                description="A basic reactor",
+                condition=ShipComponentCondition(1.0),
+                integrity=ShipComponentIntegrity(1.0),
+                quality=ShipComponentQuality(1),
+                powerOutput=3,
+                requirements=ShipRequirements(power=0, crew=0, slots=0),
+            ),
+            engine=ShipEngine(
+                symbol=EngineSymbol.ENGINE_IMPULSE_DRIVE_I,
+                name="Impulse Drive I",
+                description="A basic engine",
+                condition=ShipComponentCondition(1.0),
+                integrity=ShipComponentIntegrity(1.0),
+                quality=ShipComponentQuality(1),
+                speed=2,
+                requirements=ShipRequirements(power=1, crew=0, slots=0),
+            ),
+            modules=[],
+            mounts=[],
+            crew=Crew(required=0, capacity=0),
+        )
+        return ship.model_dump(mode="json")
 
 
 class ShipyardFactory:
@@ -353,6 +459,7 @@ class ShipyardFactory:
         waypoint_symbol: str = "X1-ABC-1",
         ship_types: list[ShipTypeEnum] | None = None,
         modifications_fee: int = 1000,
+        ships: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Build a minimal valid Shipyard payload dict.
 
@@ -360,6 +467,7 @@ class ShipyardFactory:
             waypoint_symbol: The waypoint symbol for this shipyard
             ship_types: List of ship type enums available for purchase
             modifications_fee: The fee for modifications
+            ships: Optional list of ShipyardShip dicts (available ships)
         """
         if ship_types is None:
             ship_types = [
@@ -373,7 +481,11 @@ class ShipyardFactory:
             symbol=waypoint_symbol,
             shipTypes=ship_type_list,
             transactions=None,
-            ships=None,
+            ships=(
+                [ShipyardShip.model_validate(s) for s in ships]
+                if ships
+                else None
+            ),
             modificationsFee=modifications_fee,
         )
         return shipyard.model_dump(mode="json")
