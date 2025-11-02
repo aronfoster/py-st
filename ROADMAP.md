@@ -17,6 +17,45 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 ---
 
+Planned: Agent Bootstrap & Auto-Register Flow
+
+Agent Register Command
+Add py-st agent register to create a new agent explicitly using an account token.
+
+CLI flags: --account-token, [--symbol], [--faction]
+
+Sends POST /v2/register with default symbol/faction and the account token.
+
+Saves returned agent token to .env (SPACETRADERS_AGENT_TOKEN), clears cache (or not if flag set), and prints summary.
+
+Fails cleanly.
+
+No interactive prompts.
+
+Updates ROADMAP.md on completion.
+
+Task 2:
+Automatic Register on 401 (interactive)
+Enhance the HTTP transport to handle 401 Unauthorized from authenticated endpoints.
+
+If running in an interactive TTY and SPACETRADERS_ACCOUNT_TOKEN exists:
+
+Prompt user to register a new agent immediately.
+
+Ask for confirmation once.
+
+Reuse the same registration logic as above, retry the failed request once on success.
+
+Non-interactive or missing account token → show guidance:
+“Authentication failed. Run: py-st agent register --account-token <TOKEN> --symbol <CALLSIGN>”
+
+Prevent infinite retries.
+
+Updates ROADMAP.md on completion.
+
+
+---
+
 ## Sprint 5: Ergonomics & Cache Refactor
 
 ### Core Work
