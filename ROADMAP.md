@@ -22,16 +22,6 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 ### Core Work
 
-* **Need-clean caching**
-
-  * Introduce `need_clean` parameter across `ships`, `systems`, and `contracts` services.
-  * Add central `services/cache/policy.py` with per-type helpers:
-
-    * `ships_requires_fetch`
-    * `market_requires_fetch`
-    * `shipyard_requires_fetch`
-  * `resolve_ship_id` and other resolvers use stale cache (`need_clean=False`) to avoid unnecessary API calls.
-  * CLI listing commands use `need_clean=True` to ensure freshness.
 * **Smart Merge Refactor**
 
   * Consolidate duplicate “smart merge” logic from `get_market` and `get_shipyard` into one helper.
