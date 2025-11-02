@@ -21,10 +21,6 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 ## Sprint 5: Ergonomics & Cache Refactor
 
 ### Core Work
-* **Document Cache Schema**
-
-  * Add `cache/SCHEMA.md` describing all cache entry types (`ships`, `waypoints`, `contracts`, `agent`, `markets`, `shipyards`).
-  * Normalize cache key naming and add helpers (`key_for_ship_list`, `key_for_market`, etc.).
 * **Formatting & UX polish**
 
   * Standardize column widths in CLI tables (programmatic alignment).
@@ -70,6 +66,7 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 ## ✅ Completed
 
+* **Document and Normalize Cache Schema**: Created `cache/SCHEMA.md` documenting all cache entry types (agent, ships, contracts, waypoints, markets, shipyards) with JSON structures, refresh policies, and invalidation triggers. Added `src/py_st/services/cache_keys.py` with helper functions for consistent cache key generation. Refactored all services to use centralized key helpers. Added comprehensive tests including drift check to prevent documentation-code divergence.
 * **Transfer Cargo Command**: Added `ships transfer-cargo` CLI command supporting ship index shortcuts (`s-0`, `s-1`) or full symbols. Includes client endpoint, service wrapper with cache invalidation, validation for same-ship and positive units, and comprehensive tests.
 * **Smart Merge Refactor**: Extracted and unified duplicate cache merge logic from `get_market` and `get_shipyard` into reusable `smart_merge_cache()` helper in `src/py_st/services/cache_merge.py`. Added comprehensive tests in `tests/test_cache_merge.py`.
 * CLI Enum conversion across all modules.

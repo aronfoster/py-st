@@ -15,6 +15,11 @@ from py_st._generated.models import (
 )
 from py_st.cache import load_cache, save_cache
 from py_st.client import SpaceTradersClient
+from py_st.services.cache_keys import (
+    key_for_market,
+    key_for_shipyard,
+    key_for_waypoints,
+)
 from py_st.services.cache_merge import smart_merge_cache
 
 
@@ -81,10 +86,8 @@ def _fetch_and_cache_waypoints(
     Returns:
         List of all Waypoint models for the system
     """
-    # Define cache key for this system
-    cache_key = f"waypoints_{system_symbol}"
-
     # Load the full cache
+    cache_key = key_for_waypoints(system_symbol)
     full_cache = load_cache()
 
     # Check if we have a cached entry for this system
@@ -213,10 +216,8 @@ def get_shipyard(
     Returns:
         Shipyard object with the most complete data available
     """
-    # Define cache key for this shipyard
-    cache_key = f"shipyard_{waypoint_symbol}"
-
     # Load the full cache
+    cache_key = key_for_shipyard(waypoint_symbol)
     full_cache = load_cache()
 
     # Try to get cached entry
@@ -291,10 +292,8 @@ def get_market(
     Returns:
         Market object with the most complete data available
     """
-    # Define cache key for this market
-    cache_key = f"market_{waypoint_symbol}"
-
     # Load the full cache
+    cache_key = key_for_market(waypoint_symbol)
     full_cache = load_cache()
 
     # Try to get cached entry
