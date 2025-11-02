@@ -54,11 +54,12 @@ def list_waypoints(
         waypoints_list = [w.model_dump(mode="json") for w in waypoints]
         print(json.dumps(waypoints_list, indent=2))
     else:
+        max_idx_width = len(str(len(waypoints) - 1)) if waypoints else 1
         for i, w in enumerate(waypoints):
             traits_str = ", ".join(t.symbol.value for t in w.traits) or "N/A"
             print(
-                f"[{i}] {w.symbol.root:<12} ({w.type.value:<18}) "
-                f"Traits: {traits_str}"
+                f"[{i:>{max_idx_width}}] {w.symbol.root:<12} "
+                f"({w.type.value:<19}) Traits: {traits_str}"
             )
 
 

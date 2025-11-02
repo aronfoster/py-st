@@ -90,9 +90,10 @@ def _print_contract_compact(
     due_rel = format_relative_due(contract.terms.deadline)
     deliver = _format_deliverables(contract, system_symbol, max_len=60)
 
+    idx_str = f"c-{idx}"
     print(
-        f"c-{idx:<3} {id6}  {type_abbr:<4}  {acc}/{ful}  "
-        f"{due_rel:<16}  {deliver}"
+        f"{idx_str:<5} {id6:<7} {type_abbr:<5} {acc}/{ful}  "
+        f"{due_rel:<16} {deliver}"
     )
 
 
@@ -149,7 +150,7 @@ def list_contracts(
         system_symbol = get_default_system(t)
 
         if not stacked and contracts_list_data:
-            print("IDX   ID6    T     A/F   DUE(REL)         DELIVER")
+            print("IDX   ID6     T     A/F  DUE(REL)         DELIVER")
 
         for i, contract in enumerate(contracts_list_data):
             if stacked:
