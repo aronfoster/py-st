@@ -8,17 +8,6 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 ### High Priority
 
-* **Cache freshness logic**
-
-  * Add `need_clean: bool` to all cache-using functions.
-  * All cache entries use a `dirty` flag. Functions that need dynamic fields (e.g., money, fuel, prices) should call with `need_clean=True`.
-* **Market cache returns incomplete data** ✅ **FIXED**
-
-  * CLI market/shipyard detail commands now call services with `force_refresh=True` to ensure prices/ships are always shown.
-* **Ship cache in-transit logic** ✅ **FIXED**
-
-  * `list_ships()` now auto-refreshes when any cached ship with `IN_TRANSIT` status has `arrival <= now(UTC)` and `need_clean=True`.
-
 ### Low Priority
 
 * Implement pagination in `get_ships` and `get_contracts`.
@@ -69,6 +58,9 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 ## 🔭 Long-Term Goals
 
+* **Additional Functions**
+  * Transfer Cargo, Install Module, Install Mount, Siphon Resources, Get Agent Events
+
 * **Automation Loop**
 
   * Build the first playable ship automation script:
@@ -99,3 +91,5 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 * Waypoint indexing and pretty-print display.
 * Initial cache implementation and testing harness.
 * Infrastructure: added `make clear-cache` target.
+* Market cache returns incomplete data
+* Ship cache in-transit logic
