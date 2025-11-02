@@ -2,52 +2,43 @@
 
 from typing import cast
 
-from py_st._generated.models import Market, Shipyard
+from py_st._generated.models import Market, Shipyard, TradeSymbol
+from py_st._generated.models.ShipType import ShipType as ShipTypeEnum
 from py_st.services.cache_merge import smart_merge_cache
+from tests.factories import (
+    MarketFactory,
+    MarketTradeGoodFactory,
+    ShipyardFactory,
+    ShipyardShipFactory,
+)
 
 
 def test_fresh_model_has_keep_field_uses_fresh_data() -> None:
     """Test that fresh data is used when keep_field is populated."""
     # Arrange
+    old_trade_good = MarketTradeGoodFactory.build_minimal(
+        symbol=TradeSymbol.IRON_ORE, purchase_price=100, sell_price=90
+    )
     cached_entry = {
         "prices_updated": "2025-01-01T00:00:00Z",
-        "data": {
-            "symbol": "X1-TEST-MARKET",
-            "exports": [{"symbol": "IRON", "name": "", "description": ""}],
-            "imports": [{"symbol": "FOOD", "name": "", "description": ""}],
-            "exchange": [],
-            "transactions": None,
-            "tradeGoods": [
-                {
-                    "symbol": "IRON",
-                    "type": "EXPORT",
-                    "tradeVolume": 10,
-                    "supply": "MODERATE",
-                    "purchasePrice": 100,
-                    "sellPrice": 90,
-                }
-            ],
-        },
+        "data": MarketFactory.build_minimal(
+            waypoint_symbol="X1-TEST-MARKET",
+            exports=[TradeSymbol.IRON_ORE],
+            imports=[TradeSymbol.FOOD],
+            trade_goods=[old_trade_good],
+        ),
     }
 
+    new_trade_good = MarketTradeGoodFactory.build_minimal(
+        symbol=TradeSymbol.COPPER, purchase_price=200, sell_price=180
+    )
     fresh_market = Market.model_validate(
-        {
-            "symbol": "X1-TEST-MARKET",
-            "exports": [{"symbol": "COPPER", "name": "", "description": ""}],
-            "imports": [{"symbol": "FUEL", "name": "", "description": ""}],
-            "exchange": [],
-            "transactions": None,
-            "tradeGoods": [
-                {
-                    "symbol": "COPPER",
-                    "type": "EXPORT",
-                    "tradeVolume": 20,
-                    "supply": "HIGH",
-                    "purchasePrice": 200,
-                    "sellPrice": 180,
-                }
-            ],
-        }
+        MarketFactory.build_minimal(
+            waypoint_symbol="X1-TEST-MARKET",
+            exports=[TradeSymbol.COPPER],
+            imports=[TradeSymbol.FUEL],
+            trade_goods=[new_trade_good],
+        )
     )
 
     # Act
@@ -77,36 +68,26 @@ def test_preserve_keep_field_when_fresh_lacks_it() -> None:
     """Test that keep_field is preserved when fresh model lacks it."""
     # Arrange
     old_timestamp = "2025-01-01T00:00:00Z"
+    old_trade_good = MarketTradeGoodFactory.build_minimal(
+        symbol=TradeSymbol.IRON_ORE, purchase_price=100, sell_price=90
+    )
     cached_entry = {
         "prices_updated": old_timestamp,
-        "data": {
-            "symbol": "X1-TEST-MARKET",
-            "exports": [{"symbol": "IRON", "name": "", "description": ""}],
-            "imports": [{"symbol": "FOOD", "name": "", "description": ""}],
-            "exchange": [],
-            "transactions": None,
-            "tradeGoods": [
-                {
-                    "symbol": "IRON",
-                    "type": "EXPORT",
-                    "tradeVolume": 10,
-                    "supply": "MODERATE",
-                    "purchasePrice": 100,
-                    "sellPrice": 90,
-                }
-            ],
-        },
+        "data": MarketFactory.build_minimal(
+            waypoint_symbol="X1-TEST-MARKET",
+            exports=[TradeSymbol.IRON_ORE],
+            imports=[TradeSymbol.FOOD],
+            trade_goods=[old_trade_good],
+        ),
     }
 
     fresh_market = Market.model_validate(
-        {
-            "symbol": "X1-TEST-MARKET",
-            "exports": [{"symbol": "COPPER", "name": "", "description": ""}],
-            "imports": [{"symbol": "FUEL", "name": "", "description": ""}],
-            "exchange": [],
-            "transactions": None,
-            "tradeGoods": None,
-        }
+        MarketFactory.build_minimal(
+            waypoint_symbol="X1-TEST-MARKET",
+            exports=[TradeSymbol.COPPER],
+            imports=[TradeSymbol.FUEL],
+            trade_goods=None,
+        )
     )
 
     # Act
@@ -125,7 +106,7 @@ def test_preserve_keep_field_when_fresh_lacks_it() -> None:
     ), "Should preserve tradeGoods from cache"
     assert len(result_market.tradeGoods) == 1, "Should keep cached prices"
     assert (
-        result_market.tradeGoods[0].symbol.value == "IRON"
+        result_market.tradeGoods[0].symbol.value == "IRON_ORE"
     ), "Should preserve cached trade good"
     assert (
         result_timestamp == old_timestamp
@@ -136,38 +117,28 @@ def test_merge_updates_other_fields_when_preserving() -> None:
     """Test that non-preserved fields are updated from fresh model."""
     # Arrange
     old_timestamp = "2025-01-01T00:00:00Z"
+    old_trade_good = MarketTradeGoodFactory.build_minimal(
+        symbol=TradeSymbol.IRON_ORE, purchase_price=100, sell_price=90
+    )
     cached_entry = {
         "prices_updated": old_timestamp,
-        "data": {
-            "symbol": "X1-TEST-MARKET",
-            "exports": [{"symbol": "IRON", "name": "", "description": ""}],
-            "imports": [{"symbol": "FOOD", "name": "", "description": ""}],
-            "exchange": [],
-            "transactions": None,
-            "tradeGoods": [
-                {
-                    "symbol": "IRON",
-                    "type": "EXPORT",
-                    "tradeVolume": 10,
-                    "supply": "MODERATE",
-                    "purchasePrice": 100,
-                    "sellPrice": 90,
-                }
-            ],
-        },
+        "data": MarketFactory.build_minimal(
+            waypoint_symbol="X1-TEST-MARKET",
+            exports=[TradeSymbol.IRON_ORE],
+            imports=[TradeSymbol.FOOD],
+            exchange=[],
+            trade_goods=[old_trade_good],
+        ),
     }
 
     fresh_market = Market.model_validate(
-        {
-            "symbol": "X1-TEST-MARKET",
-            "exports": [{"symbol": "COPPER", "name": "", "description": ""}],
-            "imports": [{"symbol": "FUEL", "name": "", "description": ""}],
-            "exchange": [
-                {"symbol": "ELECTRONICS", "name": "", "description": ""}
-            ],
-            "transactions": None,
-            "tradeGoods": None,
-        }
+        MarketFactory.build_minimal(
+            waypoint_symbol="X1-TEST-MARKET",
+            exports=[TradeSymbol.COPPER],
+            imports=[TradeSymbol.FUEL],
+            exchange=[TradeSymbol.ELECTRONICS],
+            trade_goods=None,
+        )
     )
 
     # Act
@@ -195,7 +166,7 @@ def test_merge_updates_other_fields_when_preserving() -> None:
     ), "Should have fresh exchange data"
     assert (
         result_market.tradeGoods is not None
-        and result_market.tradeGoods[0].symbol.value == "IRON"
+        and result_market.tradeGoods[0].symbol.value == "IRON_ORE"
     ), "Should still preserve cached tradeGoods"
 
 
@@ -203,14 +174,12 @@ def test_no_cache_uses_fresh_data() -> None:
     """Test that fresh data is used when there's no cache entry."""
     # Arrange
     fresh_market = Market.model_validate(
-        {
-            "symbol": "X1-TEST-MARKET",
-            "exports": [{"symbol": "COPPER", "name": "", "description": ""}],
-            "imports": [{"symbol": "FUEL", "name": "", "description": ""}],
-            "exchange": [],
-            "transactions": None,
-            "tradeGoods": None,
-        }
+        MarketFactory.build_minimal(
+            waypoint_symbol="X1-TEST-MARKET",
+            exports=[TradeSymbol.COPPER],
+            imports=[TradeSymbol.FUEL],
+            trade_goods=None,
+        )
     )
 
     # Act
@@ -220,6 +189,7 @@ def test_no_cache_uses_fresh_data() -> None:
         fresh_market,
         "tradeGoods",
         "prices_updated",
+        ["exports", "imports", "exchange"],
     )
 
     # Assert
@@ -236,25 +206,21 @@ def test_cache_lacks_keep_field_uses_fresh() -> None:
     # Arrange
     cached_entry = {
         "prices_updated": None,
-        "data": {
-            "symbol": "X1-TEST-MARKET",
-            "exports": [{"symbol": "IRON", "name": "", "description": ""}],
-            "imports": [{"symbol": "FOOD", "name": "", "description": ""}],
-            "exchange": [],
-            "transactions": None,
-            "tradeGoods": None,
-        },
+        "data": MarketFactory.build_minimal(
+            waypoint_symbol="X1-TEST-MARKET",
+            exports=[TradeSymbol.IRON_ORE],
+            imports=[TradeSymbol.FOOD],
+            trade_goods=None,
+        ),
     }
 
     fresh_market = Market.model_validate(
-        {
-            "symbol": "X1-TEST-MARKET",
-            "exports": [{"symbol": "COPPER", "name": "", "description": ""}],
-            "imports": [{"symbol": "FUEL", "name": "", "description": ""}],
-            "exchange": [],
-            "transactions": None,
-            "tradeGoods": None,
-        }
+        MarketFactory.build_minimal(
+            waypoint_symbol="X1-TEST-MARKET",
+            exports=[TradeSymbol.COPPER],
+            imports=[TradeSymbol.FUEL],
+            trade_goods=None,
+        )
     )
 
     # Act
@@ -281,71 +247,31 @@ def test_shipyard_preserves_ships_field() -> None:
     """Test smart merge with Shipyard model preserving ships."""
     # Arrange
     old_timestamp = "2025-01-01T00:00:00Z"
+    old_ship = ShipyardShipFactory.build_minimal(
+        ship_type=ShipTypeEnum.SHIP_MINING_DRONE,
+        name="Mining Drone",
+        purchase_price=50000,
+    )
     cached_entry = {
         "ships_updated": old_timestamp,
-        "data": {
-            "symbol": "X1-TEST-SHIPYARD",
-            "shipTypes": [{"type": "SHIP_MINING_DRONE"}],
-            "transactions": None,
-            "ships": [
-                {
-                    "type": "SHIP_MINING_DRONE",
-                    "name": "Mining Drone",
-                    "description": "A mining drone",
-                    "supply": "MODERATE",
-                    "purchasePrice": 50000,
-                    "frame": {
-                        "symbol": "FRAME_DRONE",
-                        "name": "Frame",
-                        "description": "",
-                        "condition": 1.0,
-                        "integrity": 1.0,
-                        "quality": 1,
-                        "moduleSlots": 1,
-                        "mountingPoints": 1,
-                        "fuelCapacity": 100,
-                        "requirements": {"power": 1, "crew": 0},
-                    },
-                    "reactor": {
-                        "symbol": "REACTOR_SOLAR_I",
-                        "name": "Reactor",
-                        "description": "",
-                        "condition": 1.0,
-                        "integrity": 1.0,
-                        "quality": 1,
-                        "powerOutput": 3,
-                        "requirements": {"crew": 0},
-                    },
-                    "engine": {
-                        "symbol": "ENGINE_IMPULSE_DRIVE_I",
-                        "name": "Engine",
-                        "description": "",
-                        "condition": 1.0,
-                        "integrity": 1.0,
-                        "quality": 1,
-                        "speed": 2,
-                        "requirements": {"power": 1, "crew": 0},
-                    },
-                    "modules": [],
-                    "mounts": [],
-                    "crew": {"required": 0, "capacity": 0},
-                }
-            ],
-            "modificationsFee": 1000,
-        },
+        "data": ShipyardFactory.build_minimal(
+            waypoint_symbol="X1-TEST-SHIPYARD",
+            ship_types=[ShipTypeEnum.SHIP_MINING_DRONE],
+            modifications_fee=1000,
+            ships=[old_ship],
+        ),
     }
 
     fresh_shipyard = Shipyard.model_validate(
-        {
-            "symbol": "X1-TEST-SHIPYARD",
-            "shipTypes": [
-                {"type": "SHIP_MINING_DRONE"},
-                {"type": "SHIP_LIGHT_HAULER"},
+        ShipyardFactory.build_minimal(
+            waypoint_symbol="X1-TEST-SHIPYARD",
+            ship_types=[
+                ShipTypeEnum.SHIP_MINING_DRONE,
+                ShipTypeEnum.SHIP_LIGHT_HAULER,
             ],
-            "transactions": None,
-            "ships": None,
-            "modificationsFee": 1500,
-        }
+            modifications_fee=1500,
+            ships=None,
+        )
     )
 
     # Act
@@ -378,66 +304,26 @@ def test_shipyard_uses_fresh_when_ships_populated() -> None:
     # Arrange
     cached_entry = {
         "ships_updated": "2025-01-01T00:00:00Z",
-        "data": {
-            "symbol": "X1-TEST-SHIPYARD",
-            "shipTypes": [{"type": "SHIP_MINING_DRONE"}],
-            "transactions": None,
-            "ships": None,
-            "modificationsFee": 1000,
-        },
+        "data": ShipyardFactory.build_minimal(
+            waypoint_symbol="X1-TEST-SHIPYARD",
+            ship_types=[ShipTypeEnum.SHIP_MINING_DRONE],
+            modifications_fee=1000,
+            ships=None,
+        ),
     }
 
+    new_ship = ShipyardShipFactory.build_minimal(
+        ship_type=ShipTypeEnum.SHIP_LIGHT_HAULER,
+        name="Light Hauler",
+        purchase_price=75000,
+    )
     fresh_shipyard = Shipyard.model_validate(
-        {
-            "symbol": "X1-TEST-SHIPYARD",
-            "shipTypes": [{"type": "SHIP_LIGHT_HAULER"}],
-            "transactions": None,
-            "ships": [
-                {
-                    "type": "SHIP_LIGHT_HAULER",
-                    "name": "Light Hauler",
-                    "description": "A hauler",
-                    "supply": "HIGH",
-                    "purchasePrice": 75000,
-                    "frame": {
-                        "symbol": "FRAME_LIGHT_FREIGHTER",
-                        "name": "Frame",
-                        "description": "",
-                        "condition": 1.0,
-                        "integrity": 1.0,
-                        "quality": 1,
-                        "moduleSlots": 3,
-                        "mountingPoints": 2,
-                        "fuelCapacity": 400,
-                        "requirements": {"power": 3, "crew": 1},
-                    },
-                    "reactor": {
-                        "symbol": "REACTOR_FISSION_I",
-                        "name": "Reactor",
-                        "description": "",
-                        "condition": 1.0,
-                        "integrity": 1.0,
-                        "quality": 1,
-                        "powerOutput": 10,
-                        "requirements": {"crew": 1},
-                    },
-                    "engine": {
-                        "symbol": "ENGINE_ION_DRIVE_I",
-                        "name": "Engine",
-                        "description": "",
-                        "condition": 1.0,
-                        "integrity": 1.0,
-                        "quality": 1,
-                        "speed": 10,
-                        "requirements": {"power": 3, "crew": 1},
-                    },
-                    "modules": [],
-                    "mounts": [],
-                    "crew": {"required": 1, "capacity": 3},
-                }
-            ],
-            "modificationsFee": 1500,
-        }
+        ShipyardFactory.build_minimal(
+            waypoint_symbol="X1-TEST-SHIPYARD",
+            ship_types=[ShipTypeEnum.SHIP_LIGHT_HAULER],
+            modifications_fee=1500,
+            ships=[new_ship],
+        )
     )
 
     # Act
