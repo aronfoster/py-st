@@ -647,6 +647,8 @@ class RegisterAgentResponseDataFactory:
         faction = Faction.model_validate(FactionFactory.build_minimal())
         ship = Ship.model_validate(ShipFactory.build_minimal())
 
+        #TODO I'm pretty sure this should be wrapped in a `data` object
+        # Explore this to verify, and fix if appropriate
         response_data = RegisterAgentResponseData(
             agent=agent,
             contract=contract,
