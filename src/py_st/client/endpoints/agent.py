@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
-
 from py_st._generated.models import Agent
+from py_st._manual_models import RegisterAgentResponse
 from py_st.client.transport import HttpTransport
 
 
@@ -17,7 +16,7 @@ class AgentEndpoint:
 
     def register_agent(
         self, symbol: str | None, faction: str | None
-    ) -> dict[str, Any]:
+    ) -> RegisterAgentResponse:
         """
         POST /register — register a new agent.
 
@@ -30,6 +29,4 @@ class AgentEndpoint:
             payload["faction"] = faction
 
         data = self._transport.request_json("POST", "/register", json=payload)
-        if not isinstance(data, dict):
-            raise ValueError("Expected dict response from /register")
-        return data
+        return RegisterAgentResponse.model_validate(data)

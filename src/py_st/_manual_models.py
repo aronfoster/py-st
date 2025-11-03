@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from py_st._generated.models import Cooldown, ShipCargo
+from py_st._generated.models import (
+    Agent,
+    Contract,
+    Cooldown,
+    Faction,
+    Ship,
+    ShipCargo,
+)
 
 
 class RefineItem(BaseModel):
@@ -19,3 +26,19 @@ class RefineResult(BaseModel):
     cooldown: Cooldown
     produced: list[RefineItem]
     consumed: list[RefineItem]
+
+
+class RegisterAgentResponseData(BaseModel):
+    """Holds the nested 'data' from a successful agent registration."""
+
+    agent: Agent
+    contract: Contract
+    faction: Faction
+    ship: Ship
+    token: str
+
+
+class RegisterAgentResponse(BaseModel):
+    """Models the top-level response from POST /register."""
+
+    data: RegisterAgentResponseData

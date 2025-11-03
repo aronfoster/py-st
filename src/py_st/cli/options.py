@@ -12,6 +12,36 @@ VERBOSE_OPTION = typer.Option(
 )
 SHOW_OPTION = typer.Option(True, help="Show current agent info.")
 
+# Agent registration options
+ACCOUNT_TOKEN_OPTION = typer.Option(
+    None,
+    "--account-token",
+    help=(
+        "Account token. Reads from SPACETRADERS_ACCOUNT_TOKEN "
+        "env var if not provided."
+    ),
+)
+AGENT_SYMBOL_OPTION = typer.Option(
+    None,
+    "--symbol",
+    help=(
+        "Agent symbol. Reads from DEFAULT_AGENT_SYMBOL "
+        "env var if not provided."
+    ),
+)
+AGENT_FACTION_OPTION = typer.Option(
+    None,
+    "--faction",
+    help=(
+        "Faction. Reads from DEFAULT_AGENT_FACTION " "env var if not provided."
+    ),
+)
+CLEAR_CACHE_OPTION = typer.Option(
+    False,
+    "--clear-cache",
+    help="Clear all cached data after registration.",
+)
+
 # Contract-specific
 SHIP_SYMBOL_ARG = typer.Argument(
     ...,

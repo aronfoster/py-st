@@ -10,7 +10,16 @@ from dotenv import load_dotenv
 from .. import cache
 from ..client.transport import APIError
 from ..services import agent
-from .options import SHOW_OPTION, TOKEN_OPTION, VERBOSE_OPTION, _get_token
+from .options import (
+    ACCOUNT_TOKEN_OPTION,
+    AGENT_FACTION_OPTION,
+    AGENT_SYMBOL_OPTION,
+    CLEAR_CACHE_OPTION,
+    SHOW_OPTION,
+    TOKEN_OPTION,
+    VERBOSE_OPTION,
+    _get_token,
+)
 
 agent_app: typer.Typer = typer.Typer(help="Manage agent information.")
 
@@ -36,35 +45,10 @@ def agent_info(
 
 @agent_app.command("register")
 def register(
-    account_token: str | None = typer.Option(
-        None,
-        "--account-token",
-        help=(
-            "Account token. Reads from SPACETRADERS_ACCOUNT_TOKEN "
-            "env var if not provided."
-        ),
-    ),
-    symbol: str | None = typer.Option(
-        None,
-        "--symbol",
-        help=(
-            "Agent symbol. Reads from DEFAULT_AGENT_SYMBOL "
-            "env var if not provided."
-        ),
-    ),
-    faction: str | None = typer.Option(
-        None,
-        "--faction",
-        help=(
-            "Faction. Reads from DEFAULT_AGENT_FACTION "
-            "env var if not provided."
-        ),
-    ),
-    clear_cache_flag: bool = typer.Option(
-        False,
-        "--clear-cache",
-        help="Clear all cached data after registration.",
-    ),
+    account_token: str | None = ACCOUNT_TOKEN_OPTION,
+    symbol: str | None = AGENT_SYMBOL_OPTION,
+    faction: str | None = AGENT_FACTION_OPTION,
+    clear_cache_flag: bool = CLEAR_CACHE_OPTION,
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
     """
@@ -100,10 +84,8 @@ def register(
             cache.clear_cache()
             print("Cache cleared.")
 
-        agent_data = data.get("agent", {})
-        agent_symbol = agent_data.get("symbol", "UNKNOWN")
         print(
-            f"Successfully registered agent {agent_symbol}. "
+            f"Successfully registered agent {data.agent.symbol}. "
             "Token saved to .env."
         )
 
