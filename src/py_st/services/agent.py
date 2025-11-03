@@ -134,9 +134,9 @@ def register_new_agent(
         symbol=resolved_symbol, faction=resolved_faction
     )
 
-    save_agent_token(response.token)
+    save_agent_token(response.data.token)
 
     if clear_cache_after:
         cache.clear_cache()
 
-    return response
+    return response.data

@@ -616,3 +616,42 @@ class RefineResultFactory:
             consumed=consumed,
         )
         return refine_result.model_dump(mode="json")
+
+
+class FactionFactory:
+    @staticmethod
+    def build_minimal() -> dict[str, Any]:
+        """Build a minimal valid Faction payload dict."""
+        from py_st._generated.models import Faction, FactionSymbol
+
+        faction = Faction(
+            symbol=FactionSymbol.COSMIC,
+            name="Cosmic Engineers",
+            description="A faction of explorers",
+            headquarters="X1-ABC-1",
+            traits=[],
+            isRecruiting=True,
+        )
+        return faction.model_dump(mode="json")
+
+
+class RegisterAgentResponseDataFactory:
+    @staticmethod
+    def build_minimal() -> dict[str, Any]:
+        """Build a minimal valid RegisterAgentResponseData payload dict."""
+        from py_st._generated.models import Agent, Contract, Faction, Ship
+        from py_st._manual_models import RegisterAgentResponseData
+
+        agent = Agent.model_validate(AgentFactory.build_minimal())
+        contract = Contract.model_validate(ContractFactory.build_minimal())
+        faction = Faction.model_validate(FactionFactory.build_minimal())
+        ship = Ship.model_validate(ShipFactory.build_minimal())
+
+        response_data = RegisterAgentResponseData(
+            agent=agent,
+            contract=contract,
+            faction=faction,
+            ships=[ship],
+            token="test-agent-token-123",
+        )
+        return response_data.model_dump(mode="json")

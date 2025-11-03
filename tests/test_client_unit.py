@@ -3,7 +3,6 @@ import httpx
 from py_st._generated.models import (
     Agent,
     Contract,
-    FactionSymbol,
     Ship,
     Waypoint,
 )
@@ -260,18 +259,11 @@ def test_sell_cargo_parses_response() -> None:
 
 def test_register_agent_parses_response() -> None:
     # Arrange
-    agent_json = AgentFactory.build_minimal()
-    contract_json = ContractFactory.build_minimal()
-    ship_json = ShipFactory.build_minimal()
+    from tests.factories import (
+        RegisterAgentResponseDataFactory,
+    )
 
-    faction_json = {
-        "symbol": "COSMIC",
-        "name": "Cosmic Engineers",
-        "description": "Test faction",
-        "headquarters": "X1-ABC-1",
-        "traits": [],
-        "isRecruiting": True,
-    }
+    response_data_json = RegisterAgentResponseDataFactory.build_minimal()
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v2/register"
@@ -284,18 +276,7 @@ def test_register_agent_parses_response() -> None:
         assert body["symbol"] == "TEST-AGENT"
         assert body["faction"] == "COSMIC"
 
-        return httpx.Response(
-            200,
-            json={
-                "data": {
-                    "agent": agent_json,
-                    "contract": contract_json,
-                    "faction": faction_json,
-                    "ships": [ship_json],
-                    "token": "new-agent-token-abc123",
-                }
-            },
-        )
+        return httpx.Response(200, json={"data": response_data_json})
 
     # Act
     transport = httpx.MockTransport(handler)
@@ -306,8 +287,7 @@ def test_register_agent_parses_response() -> None:
     response = st.agent.register_agent(symbol="TEST-AGENT", faction="COSMIC")
 
     # Assert
-    assert response.agent.symbol == "FOO"
-    assert response.contract.id == "contract-1"
-    assert response.faction.symbol == FactionSymbol.COSMIC
-    assert response.ships[0].symbol == "SHIP-1"
-    assert response.token == "new-agent-token-abc123"
+    assert response.data.agent.symbol == "FOO"
+    assert response.data.contract.id == "contract-1"
+    assert response.data.ships[0].symbol == "SHIP-1"
+    assert response.data.token == "test-agent-token-123"

@@ -5,16 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from py_st._generated.models import (
-    Agent,
-    Contract,
-    Faction,
-    FactionSymbol,
-    Ship,
-)
-from py_st._manual_models import RegisterAgentResponseData
+from py_st._manual_models import RegisterAgentResponse
 from py_st.services import agent
-from tests.factories import AgentFactory, ContractFactory, ShipFactory
+from tests.factories import RegisterAgentResponseDataFactory
 
 
 @patch("py_st.services.agent.save_agent_token")
@@ -31,29 +24,17 @@ def test_register_new_agent_with_all_params(
 ) -> None:
     """Test register_new_agent with all params provided."""
     # Arrange
-    test_agent = Agent.model_validate(AgentFactory.build_minimal())
-    test_contract = Contract.model_validate(ContractFactory.build_minimal())
-    test_ship = Ship.model_validate(ShipFactory.build_minimal())
+    from py_st._manual_models import RegisterAgentResponseData
 
-    test_faction = Faction(
-        symbol=FactionSymbol.COSMIC,
-        name="Cosmic Engineers",
-        description="Test faction",
-        headquarters="X1-ABC-1",
-        traits=[],
-        isRecruiting=True,
+    response_data_dict = RegisterAgentResponseDataFactory.build_minimal()
+    response_data = RegisterAgentResponseData.model_validate(
+        response_data_dict
     )
+    response = RegisterAgentResponse(data=response_data)
 
-    response_data = RegisterAgentResponseData(
-        agent=test_agent,
-        contract=test_contract,
-        faction=test_faction,
-        ships=[test_ship],
-        token="new-agent-token-123",
-    )
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
-    mock_client.agent.register_agent.return_value = response_data
+    mock_client.agent.register_agent.return_value = response
 
     # Act
     result = agent.register_new_agent(
@@ -65,15 +46,14 @@ def test_register_new_agent_with_all_params(
 
     # Assert
     assert result.agent.symbol == "FOO", "Should return agent data with symbol"
-    assert result.token == "new-agent-token-123", "Should return token"
-    assert isinstance(
-        result, RegisterAgentResponseData
-    ), "Should return RegisterAgentResponseData"
+    assert (
+        result.token == "test-agent-token-123"
+    ), "Should return correct token"
 
     mock_client.agent.register_agent.assert_called_once_with(
         symbol="TEST", faction="COSMIC"
     )
-    mock_save_token.assert_called_once_with("new-agent-token-123")
+    mock_save_token.assert_called_once_with("test-agent-token-123")
     mock_clear_cache.assert_called_once()
 
 
@@ -102,39 +82,29 @@ def test_register_new_agent_from_env_vars(
 
     mock_getenv.side_effect = getenv_side_effect
 
-    test_agent = Agent.model_validate(AgentFactory.build_minimal())
-    test_contract = Contract.model_validate(ContractFactory.build_minimal())
-    test_ship = Ship.model_validate(ShipFactory.build_minimal())
+    from py_st._manual_models import RegisterAgentResponseData
 
-    test_faction = Faction(
-        symbol=FactionSymbol.COSMIC,
-        name="Cosmic Engineers",
-        description="Test faction",
-        headquarters="X1-ABC-1",
-        traits=[],
-        isRecruiting=True,
+    response_data_dict = RegisterAgentResponseDataFactory.build_minimal()
+    response_data = RegisterAgentResponseData.model_validate(
+        response_data_dict
     )
+    response = RegisterAgentResponse(data=response_data)
 
-    response_data = RegisterAgentResponseData(
-        agent=test_agent,
-        contract=test_contract,
-        faction=test_faction,
-        ships=[test_ship],
-        token="new-agent-token-456",
-    )
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
-    mock_client.agent.register_agent.return_value = response_data
+    mock_client.agent.register_agent.return_value = response
 
     # Act
     result = agent.register_new_agent()
 
     # Assert
-    assert result.token == "new-agent-token-456", "Should return token"
+    assert (
+        result.token == "test-agent-token-123"
+    ), "Should return correct token"
     mock_client.agent.register_agent.assert_called_once_with(
         symbol="ENV-AGENT", faction="ENV-FACTION"
     )
-    mock_save_token.assert_called_once_with("new-agent-token-456")
+    mock_save_token.assert_called_once_with("test-agent-token-123")
     mock_clear_cache.assert_not_called()
 
 

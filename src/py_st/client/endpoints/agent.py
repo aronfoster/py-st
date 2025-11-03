@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from py_st._generated.models import Agent
-from py_st._manual_models import RegisterAgentResponseData
+from py_st._manual_models import (
+    RegisterAgentResponse,
+    RegisterAgentResponseData,
+)
 from py_st.client.transport import HttpTransport
 
 
@@ -16,7 +19,7 @@ class AgentEndpoint:
 
     def register_agent(
         self, symbol: str, faction: str
-    ) -> RegisterAgentResponseData:
+    ) -> RegisterAgentResponse:
         """
         POST /register — register a new agent.
 
@@ -24,4 +27,5 @@ class AgentEndpoint:
         """
         payload = {"symbol": symbol, "faction": faction}
         data = self._transport.request_json("POST", "/register", json=payload)
-        return RegisterAgentResponseData.model_validate(data)
+        response_data = RegisterAgentResponseData.model_validate(data)
+        return RegisterAgentResponse(data=response_data)
