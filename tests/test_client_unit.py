@@ -1,6 +1,11 @@
 import httpx
 
-from py_st._generated.models import Agent, Contract, Ship, Waypoint
+from py_st._generated.models import (
+    Agent,
+    Contract,
+    Ship,
+    Waypoint,
+)
 from py_st.client import SpaceTradersClient
 from tests.factories import (
     AgentFactory,
@@ -250,3 +255,39 @@ def test_sell_cargo_parses_response() -> None:
     assert result_agent.credits == 11500, "Agent credits should be updated"
     assert result_cargo.units == 2, "Cargo units should be decreased"
     assert result_cargo.capacity == 40, "Cargo capacity should be present"
+
+
+def test_register_agent_parses_response() -> None:
+    # Arrange
+    from tests.factories import (
+        RegisterAgentResponseDataFactory,
+    )
+
+    response_data_json = RegisterAgentResponseDataFactory.build_minimal()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/register"
+        assert request.method == "POST"
+
+        # Verify the payload
+        import json
+
+        body = json.loads(request.content)
+        assert body["symbol"] == "TEST-AGENT"
+        assert body["faction"] == "COSMIC"
+
+        return httpx.Response(200, json={"data": response_data_json})
+
+    # Act
+    transport = httpx.MockTransport(handler)
+    fake_client = httpx.Client(
+        transport=transport, base_url="https://api.spacetraders.io/v2"
+    )
+    st = SpaceTradersClient(token="account-token", client=fake_client)
+    response = st.agent.register_agent(symbol="TEST-AGENT", faction="COSMIC")
+
+    # Assert
+    assert response.data.agent.symbol == "FOO"
+    assert response.data.contract.id == "contract-1"
+    assert response.data.ships[0].symbol == "SHIP-1"
+    assert response.data.token == "test-agent-token-123"
