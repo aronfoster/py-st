@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from pydantic import ValidationError
 
 from py_st import cache
 from py_st._generated.models import Agent
 from py_st.client import SpaceTradersClient
+from py_st.env import save_agent_token
 from py_st.services.cache_keys import key_for_agent
 
 # Cache configuration for agent info
@@ -69,3 +71,38 @@ def get_agent_info(token: str) -> Agent:
     cache.save_cache(full_cache)
 
     return agent
+
+
+def register_new_agent(
+    account_token: str, symbol: str | None, faction: str | None
+) -> dict[str, Any]:
+    """
+    Register a new agent using the account token.
+
+    Creates a temporary client with the account token, calls the
+    registration endpoint, extracts and saves the new agent token
+    to .env, and returns the registration response data.
+
+    Args:
+        account_token: The master account token for registration.
+        symbol: The desired agent symbol (callsign), or None.
+        faction: The desired faction, or None.
+
+    Returns:
+        The registration response data (contains agent, contract,
+        faction, ship, and token).
+    """
+    client = SpaceTradersClient(token=account_token)
+    response = client.agent.register_agent(symbol=symbol, faction=faction)
+
+    data = response.get("data", {})
+    if not isinstance(data, dict):
+        raise ValueError("Unexpected registration response structure")
+
+    new_token = data.get("token")
+    if not new_token or not isinstance(new_token, str):
+        raise ValueError("No token in registration response")
+
+    save_agent_token(new_token)
+
+    return data

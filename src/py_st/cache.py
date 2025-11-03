@@ -51,3 +51,12 @@ def save_cache(data: dict[str, Any]) -> None:
             f.write(json_data)
     except (TypeError, OSError) as e:
         logging.error("Failed to save cache: %s", e)
+
+
+def clear_cache() -> None:
+    """Remove the cache file if it exists."""
+    if CACHE_FILE.exists():
+        try:
+            CACHE_FILE.unlink()
+        except OSError as e:
+            logging.error("Failed to clear cache: %s", e)

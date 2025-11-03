@@ -17,26 +17,10 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 ---
 
-Planned: Agent Bootstrap & Auto-Register Flow
+## Planned: Agent Bootstrap & Auto-Register Flow
 
-Agent Register Command
-Add py-st agent register to create a new agent explicitly using an account token.
-
-CLI flags: --account-token, [--symbol], [--faction]
-
-Sends POST /v2/register with default symbol/faction and the account token.
-
-Saves returned agent token to .env (SPACETRADERS_AGENT_TOKEN), clears cache (or not if flag set), and prints summary.
-
-Fails cleanly.
-
-No interactive prompts.
-
-Updates ROADMAP.md on completion.
-
-Task 2:
-Automatic Register on 401 (interactive)
-Enhance the HTTP transport to handle 401 Unauthorized from authenticated endpoints.
+### Automatic Register on 401 (interactive)
+Enhance the HTTP transport to handle 401 Unauthorized from endpoints.
 
 If running in an interactive TTY and SPACETRADERS_ACCOUNT_TOKEN exists:
 
@@ -44,15 +28,12 @@ Prompt user to register a new agent immediately.
 
 Ask for confirmation once.
 
-Reuse the same registration logic as above, retry the failed request once on success.
+Reuse registration logic, retry the failed request once on success.
 
 Non-interactive or missing account token → show guidance:
-“Authentication failed. Run: py-st agent register --account-token <TOKEN> --symbol <CALLSIGN>”
+"Authentication failed. Run: py-st agent register --account-token <TOKEN>"
 
 Prevent infinite retries.
-
-Updates ROADMAP.md on completion.
-
 
 ---
 
@@ -107,6 +88,7 @@ Updates ROADMAP.md on completion.
 
 ## ✅ Completed
 
+* **Agent Register Command**: Added `py-st agent register` CLI command to create a new agent using an account token. Supports CLI flags `--account-token`, `--symbol`, `--faction`, and `--clear-cache`. Sends POST to `/v2/register`, saves the returned agent token to `.env` (ST_TOKEN), and prints a success summary. Non-interactive implementation with clean error handling.
 * **CLI Table Alignment**: Fixed column alignment in `contracts list` and `systems waypoints` to handle mixed-digit indexes correctly. Contract columns (IDX, ID6, T, A/F, DUE(REL), DELIVER) now align properly when indexes expand from single to double digits. Waypoint indexes are right-aligned within brackets with fixed-width type fields ensuring "Traits:" column aligns vertically across all rows. Added comprehensive alignment tests.
 * **Document and Normalize Cache Schema**: Created `cache/SCHEMA.md` documenting all cache entry types (agent, ships, contracts, waypoints, markets, shipyards) with JSON structures, refresh policies, and invalidation triggers. Added `src/py_st/services/cache_keys.py` with helper functions for consistent cache key generation. Refactored all services to use centralized key helpers. Added comprehensive tests including drift check to prevent documentation-code divergence.
 * **Transfer Cargo Command**: Added `ships transfer-cargo` CLI command supporting ship index shortcuts (`s-0`, `s-1`) or full symbols. Includes client endpoint, service wrapper with cache invalidation, validation for same-ship and positive units, and comprehensive tests.
