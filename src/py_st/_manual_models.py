@@ -34,7 +34,7 @@ class RegisterAgentResponseData(BaseModel):
     agent: Agent
     contract: Contract
     faction: Faction
-    ship: Ship
+    ships: list[Ship]
     token: str
 
 
