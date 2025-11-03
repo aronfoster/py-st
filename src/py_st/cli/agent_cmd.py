@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 
 import typer
-from dotenv import load_dotenv
 
-from .. import cache
 from ..client.transport import APIError
 from ..services import agent
 from .options import (
@@ -59,29 +56,15 @@ def register(
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    load_dotenv()
-
-    account_token_to_use = account_token or os.getenv(
-        "SPACETRADERS_ACCOUNT_TOKEN"
-    )
-    if not account_token_to_use:
-        raise typer.BadParameter(
-            "Missing account token. Set --account-token or "
-            "SPACETRADERS_ACCOUNT_TOKEN env var."
-        )
-
-    symbol_to_use = symbol or os.getenv("DEFAULT_AGENT_SYMBOL")
-    faction_to_use = faction or os.getenv("DEFAULT_AGENT_FACTION")
-
     try:
         data = agent.register_new_agent(
-            account_token=account_token_to_use,
-            symbol=symbol_to_use,
-            faction=faction_to_use,
+            account_token=account_token,
+            symbol=symbol,
+            faction=faction,
+            clear_cache_after=clear_cache_flag,
         )
 
         if clear_cache_flag:
-            cache.clear_cache()
             print("Cache cleared.")
 
         print(
@@ -92,6 +75,6 @@ def register(
     except APIError as e:
         print(f"API Error: {e}")
         raise typer.Exit(code=1) from e
-    except (ValueError, KeyError) as e:
+    except ValueError as e:
         print(f"Registration failed: {e}")
         raise typer.Exit(code=1) from e

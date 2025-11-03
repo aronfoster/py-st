@@ -15,18 +15,13 @@ class AgentEndpoint:
         return Agent.model_validate(data)
 
     def register_agent(
-        self, symbol: str | None, faction: str | None
+        self, symbol: str, faction: str
     ) -> RegisterAgentResponse:
         """
         POST /register — register a new agent.
 
         Uses account token for authentication (not agent token).
         """
-        payload = {}
-        if symbol is not None:
-            payload["symbol"] = symbol
-        if faction is not None:
-            payload["faction"] = faction
-
+        payload = {"symbol": symbol, "faction": faction}
         data = self._transport.request_json("POST", "/register", json=payload)
         return RegisterAgentResponse.model_validate(data)

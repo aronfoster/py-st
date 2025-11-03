@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import UTC, datetime, timedelta
 
+from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from py_st import cache
@@ -74,27 +76,67 @@ def get_agent_info(token: str) -> Agent:
 
 
 def register_new_agent(
-    account_token: str, symbol: str | None, faction: str | None
+    account_token: str | None = None,
+    symbol: str | None = None,
+    faction: str | None = None,
+    clear_cache_after: bool = False,
 ) -> RegisterAgentResponseData:
     """
     Register a new agent using the account token.
 
-    Creates a temporary client with the account token, calls the
-    registration endpoint, extracts and saves the new agent token
-    to .env, and returns the registration response data.
+    Resolves account_token, symbol, and faction from environment
+    variables if not provided. Validates required fields, registers
+    the agent, saves the token to .env, and optionally clears cache.
 
     Args:
-        account_token: The master account token for registration.
-        symbol: The desired agent symbol (callsign), or None.
-        faction: The desired faction, or None.
+        account_token: Account token (reads from
+            SPACETRADERS_ACCOUNT_TOKEN env var if not provided).
+        symbol: Agent symbol (reads from DEFAULT_AGENT_SYMBOL
+            env var if not provided).
+        faction: Faction (reads from DEFAULT_AGENT_FACTION
+            env var if not provided).
+        clear_cache_after: Whether to clear cache after registration.
 
     Returns:
         The registration response data (contains agent, contract,
         faction, ship, and token).
+
+    Raises:
+        ValueError: If account_token, symbol, or faction is missing.
     """
-    client = SpaceTradersClient(token=account_token)
-    response = client.agent.register_agent(symbol=symbol, faction=faction)
+    load_dotenv()
+
+    resolved_account_token = account_token or os.getenv(
+        "SPACETRADERS_ACCOUNT_TOKEN"
+    )
+    if not resolved_account_token:
+        raise ValueError(
+            "Missing account token. Set --account-token or "
+            "SPACETRADERS_ACCOUNT_TOKEN env var."
+        )
+
+    resolved_symbol = symbol or os.getenv("DEFAULT_AGENT_SYMBOL")
+    if not resolved_symbol:
+        raise ValueError(
+            "Missing agent symbol. Set --symbol or "
+            "DEFAULT_AGENT_SYMBOL env var."
+        )
+
+    resolved_faction = faction or os.getenv("DEFAULT_AGENT_FACTION")
+    if not resolved_faction:
+        raise ValueError(
+            "Missing faction. Set --faction or "
+            "DEFAULT_AGENT_FACTION env var."
+        )
+
+    client = SpaceTradersClient(token=resolved_account_token)
+    response = client.agent.register_agent(
+        symbol=resolved_symbol, faction=resolved_faction
+    )
 
     save_agent_token(response.data.token)
+
+    if clear_cache_after:
+        cache.clear_cache()
 
     return response.data
