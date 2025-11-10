@@ -35,6 +35,15 @@ Non-interactive or missing account token → show guidance:
 
 Prevent infinite retries.
 
+Detect expired/invalid agent tokens by checking error.code == 4113 (“Token reset_date does not match the server”) in API responses.
+
+When 4113 occurs:
+
+In interactive sessions: prompt user to re-register agent (optional auto-register flow).
+
+In non-interactive sessions: show a clear hint to run py-st agent register --account-token <TOKEN> --symbol <CALLSIGN>.
+
+
 ---
 
 ## Sprint 5: Ergonomics & Cache Refactor
