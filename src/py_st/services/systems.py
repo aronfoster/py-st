@@ -14,7 +14,7 @@ from py_st._generated.models import (
     Waypoint,
 )
 from py_st.cache import load_cache, save_cache
-from py_st.client import SpaceTradersClient
+from py_st.client.client import get_client as SpaceTradersClient
 from py_st.services.cache_keys import (
     key_for_market,
     key_for_shipyard,

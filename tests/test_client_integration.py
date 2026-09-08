@@ -7,9 +7,12 @@ import pytest
 from py_st.client import SpaceTradersClient
 
 
-@pytest.mark.skipif(not os.getenv("ST_TOKEN"), reason="requires ST_TOKEN")
+@pytest.mark.skipif(
+    os.getenv("ST_LIVE_TESTS") != "1" or not os.getenv("ST_TOKEN"),
+    reason="requires explicit ST_LIVE_TESTS=1 and ST_TOKEN",
+)
 def test_get_agent_live() -> None:
     token = os.environ["ST_TOKEN"]
-    client = SpaceTradersClient(token=token)
-    agent = client.agent.get_agent()
+    with SpaceTradersClient(token=token) as client:
+        agent = client.agent.get_agent()
     assert agent.symbol  # has some non-empty value

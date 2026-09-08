@@ -22,12 +22,11 @@ class ShipsEndpoint:
     def __init__(self, transport: HttpTransport) -> None:
         self._transport = transport
 
-    # TODO: handle pagination so more than 20 ships can be retrieved
     def get_ships(self) -> list[Ship]:
         """
-        Fetches the first 20 of your ships.
+        Fetches all your ships.
         """
-        data = self._transport.request_json("GET", "/my/ships")
+        data = self._transport.request_json("GET", "/my/ships", paginate=True)
         return [Ship.model_validate(s) for s in data]
 
     def navigate_ship(self, ship_symbol: str, waypoint_symbol: str) -> ShipNav:

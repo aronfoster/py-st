@@ -4,6 +4,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from py_st._generated.models import (
     Agent,
     Extraction,
@@ -210,7 +212,7 @@ def test_extract_resources_with_survey(mock_client_class: Any) -> None:
 
 @patch("py_st.services.ships.SpaceTradersClient")
 def test_extract_resources_api_error(mock_client_class: Any) -> None:
-    """Test extract_resources handles APIError and returns None."""
+    """API errors must reach automation rather than masquerading as success."""
     # Arrange
     mock_client = MagicMock()
     mock_client_class.return_value = mock_client
@@ -219,10 +221,10 @@ def test_extract_resources_api_error(mock_client_class: Any) -> None:
     )
 
     # Act
-    result = ships.extract_resources("fake_token", "SHIP-1", survey_json=None)
+    with pytest.raises(APIError, match="Extraction failed"):
+        ships.extract_resources("fake_token", "SHIP-1", survey_json=None)
 
     # Assert
-    assert result is None, "Should return None on API error"
     mock_client.ships.extract_resources.assert_called_once()
 
 

@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, cast
 
-# Define cache location inside the src directory
-CACHE_DIR = Path(__file__).parent.parent / ".cache"
+CACHE_DIR = Path(os.environ.get("ST_CACHE_DIR", ".cache"))
 CACHE_FILE = CACHE_DIR / "data.json"
 
 
@@ -27,8 +28,11 @@ def load_cache() -> dict[str, Any]:
 
     try:
         with open(CACHE_FILE, encoding="utf-8") as f:
-            return cast(dict[str, Any], json.load(f))
-    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
+            data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("Cache root must be an object")
+            return cast(dict[str, Any], data)
+    except (ValueError, OSError) as e:
         logging.warning("Failed to load cache: %s", e)
         return {}
 
@@ -46,9 +50,18 @@ def save_cache(data: dict[str, Any]) -> None:
         # Serialize to JSON with pretty formatting
         json_data = json.dumps(data, indent=2, default=str)
 
-        # Write to file
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
-            f.write(json_data)
+        # Replace on the same filesystem so readers never see partial JSON.
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=CACHE_DIR, delete=False
+        ) as f:
+            temporary = Path(f.name)
+            try:
+                f.write(json_data)
+                f.flush()
+                os.fsync(f.fileno())
+                os.replace(temporary, CACHE_FILE)
+            finally:
+                temporary.unlink(missing_ok=True)
     except (TypeError, OSError) as e:
         logging.error("Failed to save cache: %s", e)
 

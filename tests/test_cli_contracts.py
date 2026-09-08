@@ -4,6 +4,8 @@ from datetime import UTC, datetime, timedelta
 from io import StringIO
 from unittest.mock import patch
 
+from typer.testing import CliRunner
+
 from py_st._generated.models import (
     Contract,
     ContractDeliverGood,
@@ -14,11 +16,25 @@ from py_st._generated.models import (
 )
 from py_st._generated.models.Contract import Type as ContractType
 from py_st.cli.contracts_cmd import (
+    contracts_app,
     deliver_contract_cli,
     list_contracts,
     negotiate_contract_cli,
 )
 from tests.factories import ContractFactory, ShipFactory
+
+
+def test_negotiate_help_distinguishes_offer_from_acceptance() -> None:
+    # Arrange
+    with patch("py_st.cli.contracts_cmd._get_token") as token:
+        # Act
+        result = CliRunner().invoke(contracts_app, ["negotiate", "--help"])
+
+    # Assert
+    assert result.exit_code == 0
+    for text in ("without accepting", "faction", "live POST", "STOP"):
+        assert text in result.output
+    token.assert_not_called()
 
 
 def test_negotiate_contract_cli_resolves_ship_index() -> None:

@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from py_st import cache
 from py_st._generated.models import Agent
 from py_st._manual_models import RegisterAgentResponseData
-from py_st.client import SpaceTradersClient
+from py_st.client.client import get_client as SpaceTradersClient
 from py_st.env import save_agent_token
 from py_st.services.cache_keys import key_for_agent
 

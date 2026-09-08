@@ -13,6 +13,45 @@ from tests.factories import ShipFactory
 runner = CliRunner()
 
 
+def test_extract_help_explains_prerequisites_without_token() -> None:
+    # Arrange
+    with patch("py_st.cli.ships_cmd._get_token") as token:
+        # Act
+        result = runner.invoke(ships_app, ["extract", "--help"])
+
+    # Assert
+    assert result.exit_code == 0
+    for text in ("Mining Laser", "IN_ORBIT", "cargo", "cooldown", "STOP"):
+        assert text in result.output
+    token.assert_not_called()
+
+
+@patch("py_st.cli.ships_cmd.ships.extract_resources")
+@patch("py_st.cli.ships_cmd.resolve_ship_id")
+@patch("py_st.cli.ships_cmd._get_token")
+def test_extract_preserves_api_error_and_fails(
+    mock_get_token: Any, mock_resolve: Any, mock_extract: Any
+) -> None:
+    # Arrange
+    mock_get_token.return_value = "fake_token"
+    mock_resolve.return_value = "SHIP-1"
+    mock_extract.side_effect = APIError(
+        "Ship must be in orbit",
+        status=400,
+        payload={"error": {"message": "Ship must be in orbit", "code": 4236}},
+    )
+
+    # Act
+    result = runner.invoke(ships_app, ["extract", "s-0"])
+
+    # Assert
+    assert result.exit_code == 1
+    assert "Ship must be in orbit" in result.output
+    assert "4236" in result.output
+    assert "Extraction successful" not in result.output
+    mock_extract.assert_called_once_with("fake_token", "SHIP-1")
+
+
 @patch("py_st.cli.ships_cmd.ships.transfer_cargo")
 @patch("py_st.cli.ships_cmd.resolve_ship_id")
 @patch("py_st.cli.ships_cmd._get_token")

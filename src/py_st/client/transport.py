@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import math
 import time
+from collections.abc import Callable
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any, cast
 
 import httpx
@@ -29,11 +33,28 @@ class APIError(Exception):
         super().__init__(message)
         self.status = status
         self.payload = payload or {}
+        error = self.payload.get("error")
+        self.code = error.get("code") if isinstance(error, dict) else None
+        self.authentication_failed = status == 401 or self.code == 4113
+
+
+class RequestAborted(APIError):
+    """Interrupted before dispatch; all earlier attempts were rejected."""
 
 
 class HttpTransport:
-    def __init__(self, client: httpx.Client) -> None:
+    def __init__(
+        self,
+        client: httpx.Client,
+        *,
+        interval: float = 0.55,
+        wait: Callable[[float], None] = time.sleep,
+    ) -> None:
         self._client = client
+        self._interval = interval
+        self._wait = wait
+        self._next_request = 0.0
+        self._auth_error: APIError | None = None
 
     def request_json(
         self,
@@ -46,8 +67,8 @@ class HttpTransport:
     ) -> JSON:
         """
         Make a request with bounded retries for:
-          - 409 (cooldown): wait remainingSeconds + small pad, retry
-          - 429 (rate limit): wait 1s, retry
+          - 409 / code 4000: wait remainingSeconds + small pad, retry
+          - 429: honor Retry-After header or payload, with a 1s minimum
         If paginate=True and response 'data' is a list, fetch all pages:
           - First call omits 'page', limit=20 unless caller provided
           - Subsequent calls set page=2..N with the same limit
@@ -58,7 +79,7 @@ class HttpTransport:
         base_params: dict[str, Any] = dict(params or {})
 
         collected_items: JSONList = []
-        page_number = 1
+        page_number = int(base_params.get("page", 1))
         first_request = True
 
         while True:
@@ -69,6 +90,8 @@ class HttpTransport:
                 if not first_request:
                     page_number += 1
                     request_params["page"] = page_number
+                if page_number > 10_000:
+                    raise APIError("Pagination budget exhausted")
 
             payload = self._send_with_retries(
                 method, path, params=request_params, json=json
@@ -100,6 +123,10 @@ class HttpTransport:
                 meta.get("limit", request_params.get("limit", _DEFAULT_LIMIT))
             )
             current_page = int(meta.get("page", page_number))
+            if current_page != page_number or limit_used <= 0:
+                raise APIError(
+                    "Invalid pagination metadata; refusing repeated pages"
+                )
 
             if current_page * limit_used >= total_items or (
                 isinstance(data, list) and len(data) == 0
@@ -107,6 +134,17 @@ class HttpTransport:
                 return collected_items
 
             first_request = False
+
+    def _wait_before_dispatch(
+        self, seconds: float, rejection_status: int | None
+    ) -> None:
+        # Only call between attempts, never around network I/O or parsing.
+        try:
+            self._wait(seconds)
+        except BaseException as exc:
+            raise RequestAborted(
+                "Interrupted before dispatch", status=rejection_status
+            ) from exc
 
     def _send_with_retries(
         self,
@@ -120,44 +158,100 @@ class HttpTransport:
         Send a single page with retries for 409/429 only. Returns full payload.
         """
         attempts = 0
+        rejection_status: int | None = None
         while True:
+            if self._auth_error is not None:
+                raise self._auth_error
+            self._wait_before_dispatch(
+                max(0, self._next_request - time.monotonic()), rejection_status
+            )
             response = self._client.request(
                 method, path, params=params, json=json
             )
+            self._next_request = time.monotonic() + self._interval
             content_type = response.headers.get("content-type", "")
             is_json = content_type.startswith("application/json")
 
-            # 409 Cooldown — wait remainingSeconds (+pad), then retry
-            if response.status_code == 409 and is_json:
+            try:
+                payload = response.json() if is_json else {}
+            except ValueError:
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            error = payload.get("error") or {}
+            if not isinstance(error, dict):
+                error = {}
+            if response.status_code == 401 or error.get("code") == 4113:
+                self._auth_error = APIError(
+                    "Authentication/reset mismatch: update ST_TOKEN; "
+                    "automation stopped without registration.",
+                    status=response.status_code,
+                    payload=payload,
+                )
+                raise self._auth_error
+
+            # Negotiation is one attempt, followed by fresh offer review.
+            negotiate = method == "POST" and path.endswith(
+                "/negotiate/contract"
+            )
+            # Only a documented cooldown rejection is safe to replay.
+            if (
+                not negotiate
+                and response.status_code == 409
+                and error.get("code") == 4000
+            ):
+                rejection_status = 409
                 attempts += 1
                 if attempts > _MAX_ATTEMPTS_PER_PAGE:
                     raise APIError(
                         "Retry budget exhausted (cooldown)", status=409
                     )
-                error = response.json().get("error", {})
                 cooldown = (error.get("data") or {}).get("cooldown") or {}
                 wait_seconds = int(cooldown.get("remainingSeconds", 1))
-                time.sleep(max(1, wait_seconds) + 0.25)
+                self._wait_before_dispatch(
+                    max(1, wait_seconds) + 0.25, rejection_status
+                )
                 continue
 
-            # 429 Rate limit — wait fixed interval, then retry
-            if response.status_code == 429:
+            # A 429 is a definitive rejection, not an uncertain mutation.
+            if response.status_code == 429 and not negotiate:
+                rejection_status = 429
                 attempts += 1
                 if attempts > _MAX_ATTEMPTS_PER_PAGE:
                     raise APIError(
                         "Retry budget exhausted (rate limit)", status=429
                     )
-                time.sleep(_RATE_LIMIT_SLEEP_SEC)
+                retry_after = response.headers.get("Retry-After", "")
+                try:
+                    delay = float(retry_after)
+                except ValueError:
+                    try:
+                        delay = (
+                            parsedate_to_datetime(retry_after)
+                            - datetime.now(UTC)
+                        ).total_seconds()
+                    except (ValueError, TypeError):
+                        delay = float(
+                            (error.get("data") or {}).get(
+                                "retryAfter", _RATE_LIMIT_SLEEP_SEC
+                            )
+                        )
+                if not math.isfinite(delay):
+                    raise APIError("Invalid Retry-After", status=429)
+                self._wait_before_dispatch(
+                    max(_RATE_LIMIT_SLEEP_SEC, delay), rejection_status
+                )
                 continue
 
             # Other errors — raise with payload if available
             if response.status_code >= 400:
-                payload = response.json() if is_json else {}
-                message = (payload.get("error") or {}).get(
-                    "message"
-                ) or response.text
+                message = error.get("message") or "API request failed"
                 raise APIError(
                     message, status=response.status_code, payload=payload
                 )
 
-            return cast(JSONDict, response.json())
+            if not payload:
+                raise APIError(
+                    "Missing JSON response object", status=response.status_code
+                )
+            return cast(JSONDict, payload)

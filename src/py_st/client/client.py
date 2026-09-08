@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import atexit
+from collections.abc import Callable
+from types import TracebackType
+
 import httpx
 
 from .endpoints.agent import AgentEndpoint
 from .endpoints.contracts import ContractsEndpoint
 from .endpoints.ships import ShipsEndpoint
 from .endpoints.systems import SystemsEndpoint
-from .transport import HttpTransport
+from .transport import JSON, HttpTransport, JSONDict
 
 
 class SpaceTradersClient:
@@ -26,6 +30,40 @@ class SpaceTradersClient:
         self._ships = ShipsEndpoint(self._transport)
         self._systems = SystemsEndpoint(self._transport)
 
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self) -> SpaceTradersClient:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def set_wait(self, wait: Callable[[float], None]) -> None:
+        """Install an interruptible wait for bounded automation sessions."""
+        self._transport._wait = wait
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: JSONDict | None = None,
+        paginate: bool = False,
+    ) -> JSON:
+        """Raw endpoint access through the same pacing and error policy."""
+        return self._transport.request_json(
+            method, path, json=body, paginate=paginate
+        )
+
+    def status(self) -> JSONDict:
+        return self._transport._send_with_retries("GET", "/")
+
     @property
     def agent(self) -> AgentEndpoint:
         return self._agent
@@ -41,3 +79,25 @@ class SpaceTradersClient:
     @property
     def systems(self) -> SystemsEndpoint:
         return self._systems
+
+
+_shared: tuple[str, SpaceTradersClient] | None = None
+
+
+def close_shared_client() -> None:
+    global _shared
+    if _shared is not None:
+        _shared[1].close()
+        _shared = None
+
+
+def get_client(token: str) -> SpaceTradersClient:
+    """Reuse one session per CLI process; rotation closes the old session."""
+    global _shared
+    if _shared is None or _shared[0] != token:
+        close_shared_client()
+        _shared = (token, SpaceTradersClient(token))
+    return _shared[1]
+
+
+atexit.register(close_shared_client)

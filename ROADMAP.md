@@ -10,39 +10,42 @@ The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and ke
 
 ### Low Priority
 
-* Implement pagination in `get_ships` and `get_contracts`.
 * Drop unused `traits` filter in `SystemsEndpoint.list_waypoints_all`.
 * Correct help text for contract-id arguments to mention all relevant commands and shortcut syntax.
 * Add `--force-update` or some similar flag to `systems waypoints` to force a cache refresh. Do other command line commands need this?
 
 ---
 
-## Planned: Agent Bootstrap & Auto-Register Flow
+## Owner-Managed Authentication Recovery
 
-### Automatic Register on 401 (interactive)
-Enhance the HTTP transport to handle 401 Unauthorized from endpoints.
+The older automatic-registration proposal is superseded by FOS-63 safety rules.
+On HTTP 401 or reset mismatch 4113, stop live automation and report the recovery
+step. The owner verifies the reset and updates ignored token configuration;
+registration, if required, is an explicit owner action. Never put tokens in
+command arguments, silently register, or replay a mutation after re-registration.
 
-If running in an interactive TTY and SPACETRADERS_ACCOUNT_TOKEN exists:
+---
 
-Prompt user to register a new agent immediately.
+## Planned: Home System to Wider Exploration
 
-Ask for confirmation once.
+Owner direction: flesh out home-system trading, understand combat if implemented,
+then repair/complete the jumpgate and visit other systems, possibly meeting other
+players. See [Exploration Plan](docs/EXPLORATION.md) for prerequisites, evidence
+URLs checked 2026-09-08 UTC, validation gaps and phase exit criteria.
 
-Reuse registration logic, retry the failed request once on success.
+1. Establish repeatable local trading, fresh scouting and costed procurement.
+2. Assess combat availability, gate connections/material deficits and ship
+   capabilities read-only. Official combat remains future work; multiplayer
+   economic competition and player visibility are distinct existing capabilities.
+3. Complete gate construction only if needed and economically justified, using
+   fresh per-material requirements and tested, bounded, authorized supply actions.
+4. Test a single costed cross-system route with a return/refuel plan before wider
+   discovery. Preserve the FOS-63 live jump/warp guard until behavior is tested,
+   travel is needed, and ticket authorization resolves the explicit run ban.
+5. Expand discovery and player awareness after travel proof; do not implement
+   speculative combat or treat a ship scan as a read-only GET.
 
-Non-interactive or missing account token → show guidance:
-"Authentication failed. Run: py-st agent register --account-token <TOKEN>"
-
-Prevent infinite retries.
-
-Detect expired/invalid agent tokens by checking error.code == 4113 (“Token reset_date does not match the server”) in API responses.
-
-When 4113 occurs:
-
-In interactive sessions: prompt user to re-register agent (optional auto-register flow).
-
-In non-interactive sessions: show a clear hint to run py-st agent register --account-token <TOKEN> --symbol <CALLSIGN>.
-
+This plan enables no live actions and changes no safety guard or allowlist.
 
 ---
 
@@ -73,22 +76,21 @@ In non-interactive sessions: show a clear hint to run py-st agent register --acc
 
 * **Automation Loop**
 
-  * Build the first playable ship automation script:
-    contract → navigate → refuel → buy → deliver → complete.
+  * Extend the implemented bounded workflows with tested repositioning and
+    multi-load/multi-good obligations; prove unattended continuation separately.
 * **Client generation**
 
   * Investigate `openapi-python-client` or a custom generator for `SpaceTraders.json`.
 * **Persistent registration**
 
-  * Migrate from agent tokens to account-based registration with auto-create on missing agent.
+  * Improve owner-managed credential recovery without automatic agent creation.
 * **Async & rate limiting**
 
   * Rework request layer for concurrency and adaptive throttling.
 * **GUI**
 
-  * Research frameworks (PySide6, Tkinter, etc.).
-  * Prototype a live UI for universe/fleet visualization and simple command triggers.
-  * Run GUI in its own thread, independent of automation logic.
+  * Extend the existing local Flight Ledger dashboard over shared services.
+  * Add tested controls beyond STOP without exposing tokens or bypassing guards.
 * **Trait name abbreviation**
 
   * Consider abbreviating long trait names in `systems waypoints` output for more compact display.
@@ -96,6 +98,17 @@ In non-interactive sessions: show a clear hint to run py-st agent register --acc
 ---
 
 ## ✅ Completed
+
+* FOS-63 local branch: semantic retries, shared sessions, pagination, atomic
+  cache, bounded journaled procurement/trading, SQLite history and cash audit,
+  fleet assignment, bounded same-system fuel-free probe market scouting, and a
+  working local dashboard. Scouting has seven live verified visits. A bounded
+  `auto earn SYSTEM` controller connects ready-route trading and discovery with
+  offline regression proof only; historical-route repositioning remains deferred.
+  See `docs/HANDOFF.md` for verification, measured economics, safety limits
+  and remaining work. Remote single-good/single-load procurement now has live
+  proof; multi-load/multi-good procurement, extraction optimization and
+  cross-system discovery remain opportunities, not completed features.
 
 * **Agent Register Command**: Added `py-st agent register` CLI command to create a new agent using an account token. Supports CLI flags `--account-token`, `--symbol`, `--faction`, and `--clear-cache`. Sends POST to `/v2/register`, saves the returned agent token to `.env` (ST_TOKEN), and prints a success summary. Non-interactive implementation with clean error handling.
 * **CLI Table Alignment**: Fixed column alignment in `contracts list` and `systems waypoints` to handle mixed-digit indexes correctly. Contract columns (IDX, ID6, T, A/F, DUE(REL), DELIVER) now align properly when indexes expand from single to double digits. Waypoint indexes are right-aligned within brackets with fixed-width type fields ensuring "Traits:" column aligns vertically across all rows. Added comprehensive alignment tests.

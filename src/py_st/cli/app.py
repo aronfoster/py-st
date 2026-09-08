@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import typer
 
-from . import agent_cmd, contracts_cmd, ships_cmd, systems_cmd
+from . import agent_cmd, auto_cmd, contracts_cmd, ships_cmd, systems_cmd
 
 app = typer.Typer(help="SpaceTraders CLI for py-st")
 app.add_typer(contracts_cmd.contracts_app, name="contracts")
 app.add_typer(ships_cmd.ships_app, name="ships")
 app.add_typer(systems_cmd.systems_app, name="systems")
 app.add_typer(agent_cmd.agent_app, name="agent")
+app.add_typer(auto_cmd.auto_app, name="auto")
 
 
 @app.callback()
