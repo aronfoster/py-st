@@ -15,6 +15,7 @@ from dotenv import find_dotenv, load_dotenv
 
 from py_st.client import APIError, SpaceTradersClient
 from py_st.services.automation import SafetyStop, Session
+from py_st.services.contract_planning import plan_contract_procurement
 from py_st.services.dashboard import dashboard_server
 from py_st.services.earning import earn_run
 from py_st.services.intelligence import Intelligence
@@ -137,6 +138,34 @@ def contract(
         typer.echo(
             json.dumps(contract_run(run, ship, contract_id, source), indent=2)
         )
+
+
+@auto_app.command("contract-model")
+def contract_model(input_file: Path) -> None:
+    """Model a complete procurement contract from an offline JSON fixture."""
+    try:
+        payload = json.loads(input_file.read_text(encoding="utf-8"))
+        plan = plan_contract_procurement(
+            payload["contract"],
+            payload["quotes"],
+            ship_capacity=payload["ship_capacity"],
+            credits=payload["credits"],
+            credit_floor=payload.get("credit_floor", 50_000),
+            fuel_allowance=payload.get("fuel_allowance", 1_000),
+            price_margin=payload.get("price_margin", 0.20),
+            deadline_margin_seconds=payload.get(
+                "deadline_margin_seconds", 3_600
+            ),
+        )
+    except (
+        OSError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise typer.BadParameter(str(exc)) from None
+    typer.echo(json.dumps(plan, indent=2))
 
 
 @auto_app.command()
