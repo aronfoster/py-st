@@ -10,6 +10,25 @@ The assistant stopped at a checkpoint despite the instruction to continue
 overnight. No token exhaustion or external blocker was established. This is a
 partial engineering result, not fulfillment of that unattended-run requirement.
 
+### 2026-09-08 Daytime Offline Increment
+
+The cloud/daytime continuation started from review tip `d312606` and made no
+SpaceTraders gameplay requests, token reads, registrations, or live-ledger
+copies. Implementation commit `c0fab42` adds a pure multi-obligation procurement
+model and `auto contract-model INPUT.json`. It accepts explicit synthetic or
+operator-exported contract/route snapshots, costs every good across source
+capacity, purchase batches and cargo trips, applies price/fuel/reserve/deadline
+guards, and always emits `execution_authorized: false`. It does **not** expand
+the existing live single-good executor or mutation allowlist.
+
+Fresh Python 3.12 offline CI after this increment: **494 passed, 1 skipped**;
+Black, Ruff `--no-fix`, and mypy pass across 154 source files. No schema change
+or migration is included. Read [Offline Contract Planning](CONTRACT_PLANNING.md)
+for the input format, limitations, official API findings, and a bounded sequence
+for converting the model into a journaled nighttime workflow. The eventual
+daytime branch tip is the latest descendant of `c0fab42`; inspect it rather than
+resetting or overwriting the original worktree.
+
 - Review branch: `aron/fos-63-review`, prepared for the owner's authorized push.
 - Original local history: `aron/fos-63-run-gpt-6-astra-overnight-on-py-st`.
   Historical SHAs in the logs refer to that retained local branch, not the
@@ -92,6 +111,9 @@ results and unaccepted offer estimates are never added to realized earnings.
 - Same-market and remote single-good procurement. Remote support aggregates
   batches into one cargo load, protects original ceilings and destination refill,
   and recovers observed acceptance/acquisition/delivery/fulfillment progress.
+- Offline multi-good/multi-load contract portfolio modeling with explicit
+  quotes, batches, trips, reserves and deadlines. This is analysis only and is
+  not wired to live execution.
 - Resumable trading, guarded refueling, existing-fleet hauler/scout selection.
   Every purchase rechecks the buyer as well as the source.
 - Bounded local scouting using fuel-free probes, original price freshness,
@@ -107,7 +129,7 @@ results and unaccepted offer estimates are never added to realized earnings.
 
 ## Verification
 
-- Current full offline CI after independent safety review fixes: **487 passed,
+- Current full offline CI after the daytime planner increment: **494 passed,
   1 skipped**; Black, Ruff `--no-fix`, mypy and commit hooks pass.
 - Review fixes include fresh buyer checks, completion-first recovery, prohibited
   flight-mode rejection before spending, dispatch-aware interruption records,
@@ -164,6 +186,8 @@ Owner guides:
 - [Fuel and Navigation](FUEL_NAVIGATION.md): verified refueling, flight modes,
   explicit formula assumptions and limitations.
 - [Historical Routes](HISTORICAL_ROUTES.md): offline replay interpretation.
+- [Offline Contract Planning](CONTRACT_PLANNING.md): multi-obligation fixture
+  model, official API constraints, and nighttime implementation checklist.
 - [Exploration](EXPLORATION.md): combat status, gate construction and future travel.
 
 ## Remaining Work and Resume
@@ -174,8 +198,9 @@ No external dependency currently blocks further engineering. Useful next work:
    procurement with trading. Do not replay old routes or price estimates.
 2. Improve earn-controller repositioning and test it live after review; it currently
    trades ready routes or scouts, not arbitrary historical-route repositioning.
-3. Expand remote procurement beyond single-good/single-load only after modeling
-   all obligations and tested fuel/recovery; do not silently relax those limits.
+3. Use `auto contract-model` to inspect a complete fresh obligation portfolio,
+   then expand live procurement only after adding persisted portfolio recovery
+   and interruption tests. The offline model does not silently relax limits.
 4. Investigate mining economically. The command ship has Mining Laser II and
    Surveyor II; its earlier station/docked state was not extractable. XC5Z is
    STRIPPED, but no extraction experiment has established the earlier error.
