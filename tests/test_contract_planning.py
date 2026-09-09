@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -199,3 +201,142 @@ def test_offline_cli_never_opens_a_session(tmp_path: Path) -> None:
     assert output["mode"] == "offline counterfactual"
     assert output["contract"] == "C-MULTI"
     assert output["execution_authorized"] is False
+
+
+@pytest.mark.parametrize(
+    "units,capacity,volume,batches,trips",
+    [(80, 40, 30, 4, 2), (81, 40, 30, 5, 3), (80, 40, 100, 2, 2)],
+)
+def test_purchase_batches_cannot_span_cargo_trips(
+    units: int, capacity: int, volume: int, batches: int, trips: int
+) -> None:
+    # Arrange
+    offer: dict[str, Any] = contract()
+    delivery = offer["terms"]["deliver"][0]
+    delivery.update(unitsRequired=units, unitsFulfilled=0)
+    offer["terms"]["deliver"] = [delivery]
+    quote = quotes()[0] | {
+        "available_units": units,
+        "trade_volume": volume,
+    }
+
+    # Act
+    plan = plan_contract_procurement(
+        offer, [quote], ship_capacity=capacity, credits=150_000
+    )
+
+    # Assert
+    assert plan["steps"][0]["purchase_batches"] == batches
+    assert plan["cargo_trips"] == trips
+
+
+@pytest.mark.parametrize("other_destination", [False, True])
+def test_source_capacity_is_shared_across_delivery_terms(
+    other_destination: bool,
+) -> None:
+    # Arrange
+    offer: dict[str, Any] = contract()
+    delivery = offer["terms"]["deliver"][0]
+    delivery.update(unitsRequired=20, unitsFulfilled=0)
+    second = deepcopy(delivery)
+    source_quotes = [quotes()[0]]
+    if other_destination:
+        second["destinationSymbol"] = "X-A-OTHER"
+        source_quotes.append(source_quotes[0] | {"destination": "X-A-OTHER"})
+    offer["terms"]["deliver"] = [delivery, second]
+
+    # Act
+    plan = plan_contract_procurement(
+        offer, source_quotes, ship_capacity=40, credits=150_000
+    )
+
+    # Assert
+    assert sum(step["units"] for step in plan["steps"]) == 30
+    assert plan["feasible"] is False
+    assert "Missing 10 units of EQUIPMENT capacity" in plan["reasons"]
+
+
+@pytest.mark.parametrize("duplicate", [True, False])
+def test_ambiguous_source_quotes_are_rejected(duplicate: bool) -> None:
+    # Arrange
+    quote = quotes()[0]
+    second = quote.copy()
+    if not duplicate:
+        second.update(destination="X-A-OTHER", available_units=31)
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="Duplicate route|Inconsistent"):
+        plan_contract_procurement(
+            contract(), [quote, second], ship_capacity=40, credits=150_000
+        )
+
+
+@pytest.mark.parametrize("field", ["deadlineToAccept", "expiration"])
+@pytest.mark.parametrize("accepted", [False, True])
+def test_acceptance_window_is_distinct_from_delivery_deadline(
+    field: str, accepted: bool
+) -> None:
+    # Arrange
+    now = datetime.now(UTC)
+    offer = contract(accepted=accepted)
+    offer[field] = now.isoformat()
+
+    # Act
+    plan = plan_contract_procurement(
+        offer, quotes(), ship_capacity=40, credits=150_000, now=now
+    )
+
+    # Assert
+    assert plan["feasible"] is accepted
+    assert ("Contract acceptance deadline has expired" in plan["reasons"]) == (
+        not accepted
+    )
+
+
+def test_acceptance_deadline_takes_precedence_over_legacy_expiration() -> None:
+    # Arrange
+    now = datetime.now(UTC)
+    offer = contract()
+    offer["deadlineToAccept"] = (now + timedelta(hours=1)).isoformat()
+    offer["expiration"] = (now - timedelta(hours=1)).isoformat()
+
+    # Act
+    plan = plan_contract_procurement(
+        offer, quotes(), ship_capacity=40, credits=150_000, now=now
+    )
+
+    # Assert
+    assert plan["feasible"] is True
+
+
+def test_completed_contract_is_not_modeled_as_future_income() -> None:
+    # Arrange
+    offer = contract(accepted=True)
+    offer["fulfilled"] = True
+
+    # Act / Assert
+    with pytest.raises(ValueError, match="already fulfilled"):
+        plan_contract_procurement(
+            offer, quotes(), ship_capacity=40, credits=150_000
+        )
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"credit_floor": float("nan")},
+        {"fuel_allowance": True},
+        {"deadline_margin_seconds": float("nan")},
+        {"price_margin": float("nan")},
+        {"price_margin": float("inf")},
+        {"price_margin": True},
+    ],
+)
+def test_invalid_reserve_and_margin_inputs_fail_closed(
+    options: dict[str, Any],
+) -> None:
+    # Arrange / Act / Assert
+    with pytest.raises(ValueError):
+        plan_contract_procurement(
+            contract(), quotes(), ship_capacity=40, credits=150_000, **options
+        )

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -16,10 +18,14 @@ from dotenv import find_dotenv, load_dotenv
 from py_st.client import APIError, SpaceTradersClient
 from py_st.services.automation import SafetyStop, Session
 from py_st.services.contract_planning import plan_contract_procurement
+from py_st.services.contract_sources import contract_sources
 from py_st.services.dashboard import dashboard_server
+from py_st.services.doctor import diagnose
 from py_st.services.earning import earn_run
 from py_st.services.intelligence import Intelligence
+from py_st.services.mining import diagnose_mining
 from py_st.services.negotiation import negotiate_run
+from py_st.services.pilot import pilot_run
 from py_st.services.route_history import RouteScenario, evaluate_route
 from py_st.services.scouting import scout_plan, scout_run
 from py_st.services.strategies import (
@@ -114,6 +120,28 @@ def move(
 
 
 @auto_app.command()
+def mining(
+    ship: str,
+    seconds: int = typer.Option(120, min=1, max=7200),
+) -> None:
+    """GET-only unsurveyed ore diagnostics; never extract, orbit or wait."""
+    with session(False, seconds, 1) as run:
+        run.check()
+        run.refresh()
+        fresh_ship = run.ship(ship)
+        nav = fresh_ship["nav"]
+        waypoint = run.get(
+            f"/systems/{nav['systemSymbol']}/waypoints/{nav['waypointSymbol']}"
+        )
+        typer.echo(
+            json.dumps(
+                diagnose_mining(fresh_ship, waypoint, now=datetime.now(UTC)),
+                indent=2,
+            )
+        )
+
+
+@auto_app.command()
 def negotiate(
     ship: str,
     execute: bool = False,
@@ -169,6 +197,47 @@ def contract_model(input_file: Path) -> None:
 
 
 @auto_app.command()
+def sources(
+    contract_id: str,
+    scope: str = typer.Option(..., help="Explicit RESET:AGENT scope."),
+    database: Path = Path(".state/intelligence.sqlite3"),
+    max_age: int = typer.Option(900, min=1, max=86400),
+) -> None:
+    """OFFLINE ONLY: contract sources without ledger record writes.
+
+    Requires an existing ledger. SQLite may create WAL/shared-memory
+    sidecars or update shared memory; this is not zero filesystem writes.
+    """
+    try:
+        result = contract_sources(
+            database, scope, contract_id, max_age=max_age
+        )
+    except (ValueError, sqlite3.Error) as exc:
+        raise typer.BadParameter(str(exc)) from None
+    typer.echo(json.dumps(result, indent=2))
+
+
+@auto_app.command()
+def doctor(
+    scope: str = typer.Option(..., help="Explicit RESET:AGENT scope."),
+    database: Path = Path(".state/intelligence.sqlite3"),
+    root: Path = Path("."),
+    max_age: int = typer.Option(900, min=1, max=86400),
+) -> None:
+    """OFFLINE ONLY: recorded concerns, not execution or process readiness.
+
+    Exit 0: no recorded concerns; 1: attention; 2: invalid/unavailable.
+    Existing database only. No credentials, API, lock or STOP changes.
+    --root selects the STOP directory only and defaults to cwd.
+    SQLite read-only may create/use WAL/shared-memory sidecars; not zero
+    filesystem writes. Missing contract rows do not verify an empty list.
+    """
+    result = diagnose(database, scope, root=root, max_age=max_age)
+    typer.echo(json.dumps(result, separators=(",", ":")))
+    raise typer.Exit(result["exit_code"])
+
+
+@auto_app.command()
 def refuel(ship: str, execute: bool = False) -> None:
     """Fill fuel with a live quote and protected credit reserve."""
     with session(execute, 120, 2) as run:
@@ -212,6 +281,10 @@ def fleet(
 def earn(
     system: str,
     execute: bool = False,
+    reposition: bool = typer.Option(
+        False,
+        help="Allow one costed return to a completed trade's original source.",
+    ),
     cycles: int = typer.Option(3, min=1, max=5),
     max_age: int = typer.Option(900, min=1, max=86400),
     seconds: int = typer.Option(600, min=1, max=7200),
@@ -220,8 +293,53 @@ def earn(
     """Trade ready routes or scout one market per cycle; dry run uses GETs."""
     with session(execute, seconds, actions) as run:
         typer.echo(
-            json.dumps(earn_run(run, system, cycles, max_age), indent=2)
+            json.dumps(
+                earn_run(run, system, cycles, max_age, reposition=reposition),
+                indent=2,
+            )
         )
+
+
+@auto_app.command()
+def pilot(
+    system: str,
+    execute: bool = False,
+    steps: int = typer.Option(10, min=1, max=100),
+    seconds: int = typer.Option(3600, min=1, max=7200),
+    actions: int = typer.Option(100, min=1, max=200),
+    max_age: int = typer.Option(900, min=1, max=86400),
+    reposition: bool = False,
+) -> None:
+    """Continue bounded earning decisions; dry run inspects only the next."""
+    with session(execute, seconds, actions) as run:
+        try:
+            result = pilot_run(
+                run, system, steps, max_age, reposition=reposition
+            )
+        except BaseException:
+            if run.scope:
+                typer.echo(
+                    "Inspect automation_runs in `python -m py_st auto report "
+                    f"--scope {shlex.quote(run.scope)}` or the dashboard "
+                    "for this scope. The terminal record may be missing if "
+                    "storage failed.",
+                    err=True,
+                )
+            else:
+                typer.echo(
+                    "Pilot scope unavailable; "
+                    "no scoped run ID can be reported.",
+                    err=True,
+                )
+            typer.echo(
+                "After reviewing blockers, STOP and pending actions, restart "
+                "with auto pilot SYSTEM and explicit bounds. Restart creates "
+                "a NEW run with NEW budgets and fresh decisions; it never "
+                "replays recorded decisions or uncertain actions.",
+                err=True,
+            )
+            raise
+        typer.echo(json.dumps(result, indent=2))
 
 
 @auto_app.command()

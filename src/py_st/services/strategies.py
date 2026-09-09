@@ -24,6 +24,7 @@ def fleet_run(
     if not 1 <= cycles <= 20:
         raise ValueError("Use 1..20 cycles")
     state = run.refresh()
+    run.check_reposition()
     positions = [
         p
         for p in run.store.latest(run.scope, "position")
@@ -120,6 +121,7 @@ def fleet_run(
                 | {
                     "hauler": ship["symbol"],
                     "price_scout": scouts[0],
+                    "required_fuel": 1.5 * route["round_trip_fuel"] + 10,
                     "estimated_round_trip_seconds": round(seconds),
                     "estimated_credits_per_hour": round(
                         plan["conservative_net"] * 3600 / seconds
@@ -158,13 +160,65 @@ def fleet_run(
     }
 
 
-def refuel_run(run: Session, ship_symbol: str) -> dict[str, Any]:
+def refuel_run(
+    run: Session,
+    ship_symbol: str,
+    *,
+    trade: dict[str, Any] | None = None,
+    plan_only: bool = False,
+    additional_reserve: int = 0,
+) -> dict[str, Any]:
+    if type(additional_reserve) is not int or additional_reserve < 0:
+        raise ValueError("additional_reserve must be a nonnegative integer")
+    if run.execute and not plan_only:
+        plan = refuel_run(
+            run,
+            ship_symbol,
+            trade=trade,
+            plan_only=True,
+            additional_reserve=additional_reserve,
+        )
+        if plan.get("status"):
+            return plan
+        run.dock(ship_symbol)
+        # Docking may wait or mutate; validate again before buying fuel.
+        plan = refuel_run(
+            run,
+            ship_symbol,
+            trade=trade,
+            plan_only=True,
+            additional_reserve=additional_reserve,
+        )
+        if plan.get("status"):
+            return plan
+        result = run.mutate(f"/my/ships/{ship_symbol}/refuel")
+        run.ship(ship_symbol)
+        return plan | {
+            "transaction": result["transaction"],
+            "fuel": result["fuel"],
+        }
+    run.check()
     state = run.refresh()
+    run.check_reposition()
+    if run.store.pending(run.scope):
+        raise SafetyStop("Pending action requires explicit reconciliation")
     if any(c["accepted"] and not c["fulfilled"] for c in state["contracts"]):
         raise SafetyStop(
             "Refuel requires explicit reserve for active contracts"
         )
-    ship = run.arrive(ship_symbol)
+    ship = run.ship(ship_symbol) if trade else run.arrive(ship_symbol)
+    if trade:
+        if (
+            ship["nav"]["waypointSymbol"] != trade["source"]
+            or ship["nav"]["status"] == "IN_TRANSIT"
+            or ship["nav"]["flightMode"] != "CRUISE"
+            or ship["cargo"]["units"]
+            or ship["cargo"]["capacity"] < trade["units"]
+        ):
+            raise SafetyStop("Trade refill ship preconditions changed")
+        if ship["fuel"]["capacity"] < trade["required_fuel"]:
+            raise SafetyStop("Route exceeds full-tank safety range")
+        _check_trade_purchase(run, trade)
     missing = ship["fuel"]["capacity"] - ship["fuel"]["current"]
     if missing <= 0:
         return {"status": "full or fuel-free", "ship": ship_symbol}
@@ -173,30 +227,26 @@ def refuel_run(run: Session, ship_symbol: str) -> dict[str, Any]:
         (g for g in market.get("tradeGoods", []) if g["symbol"] == "FUEL"),
         None,
     )
-    if not fuel or fuel["purchasePrice"] <= 0:
+    if (
+        not fuel
+        or fuel["purchasePrice"] <= 0
+        or fuel.get("tradeVolume", 0) <= 0
+    ):
         raise SafetyStop("No live fuel quote at current location")
     maximum_cost = math.ceil(missing / 100) * math.ceil(
         fuel["purchasePrice"] * 1.2
     )
-    if (
-        state["agent"]["credits"] - maximum_cost
-        < CREDIT_FLOOR + FUEL_ALLOWANCE
-    ):
+    reserve = CREDIT_FLOOR + FUEL_ALLOWANCE + additional_reserve
+    if trade:
+        reserve += trade["fuel_allowance"] + trade["units"] * trade["max_buy"]
+    if run.get("/my/agent")["credits"] - maximum_cost < reserve:
         raise SafetyStop("Refuel would violate credit reserve")
     plan = {
         "ship": ship_symbol,
         "missing_fuel": missing,
         "maximum_estimated_cost": maximum_cost,
     }
-    if not run.execute:
-        return plan
-    run.dock(ship_symbol)
-    result = run.mutate(f"/my/ships/{ship_symbol}/refuel")
-    run.ship(ship_symbol)
-    return plan | {
-        "transaction": result["transaction"],
-        "fuel": result["fuel"],
-    }
+    return plan
 
 
 def trade_plan(
@@ -227,7 +277,9 @@ def trade_plan(
         capacity,
         seller["tradeVolume"],
         buyer["tradeVolume"],
-        max(0, (credits - CREDIT_FLOOR - FUEL_ALLOWANCE) // max_buy),
+        max(
+            0, (credits - CREDIT_FLOOR - FUEL_ALLOWANCE - fuel_cost) // max_buy
+        ),
     )
     net = units * (min_sell - max_buy) - fuel_cost
     return {
@@ -243,6 +295,53 @@ def trade_plan(
     }
 
 
+class _TradePurchaseRejected(SafetyStop):
+    """Definitive quote/reserve failure, not an interrupted observation."""
+
+
+def _check_trade_purchase(run: Session, plan: dict[str, Any]) -> None:
+    quote = next(
+        (
+            g
+            for g in run.market(plan["source"]).get("tradeGoods", [])
+            if g["symbol"] == plan["good"]
+        ),
+        None,
+    )
+    if (
+        not quote
+        or not 0 < quote["purchasePrice"] <= plan["max_buy"]
+        or quote["tradeVolume"] < plan["units"]
+        or plan["units"] <= 0
+    ):
+        raise _TradePurchaseRejected(
+            "Resume acquisition quote no longer valid"
+        )
+    buyer_quote = next(
+        (
+            g
+            for g in run.market(plan["destination"]).get("tradeGoods", [])
+            if g["symbol"] == plan["good"]
+        ),
+        None,
+    )
+    if (
+        not buyer_quote
+        or buyer_quote["sellPrice"] < plan["min_sell"]
+        or buyer_quote["tradeVolume"] < plan["units"]
+        or plan["units"] * (plan["min_sell"] - plan["max_buy"])
+        <= plan["fuel_allowance"]
+    ):
+        raise _TradePurchaseRejected(
+            "Buyer quote no longer supports the trade"
+        )
+    if (
+        run.get("/my/agent")["credits"] - plan["units"] * plan["max_buy"]
+        < CREDIT_FLOOR + FUEL_ALLOWANCE + plan["fuel_allowance"]
+    ):
+        raise _TradePurchaseRejected("Resume would violate reserves")
+
+
 def trade_run(
     run: Session,
     ship_symbol: str,
@@ -250,11 +349,14 @@ def trade_run(
     destination: str,
     good: str,
     cycles: int = 1,
+    *,
+    require_source: bool = False,
 ) -> dict[str, Any]:
     if not 1 <= cycles <= 20 or source == destination:
         raise ValueError("Use distinct markets and 1..20 cycles")
     started = time.monotonic()
     state = run.refresh()
+    run.check_reposition()
     initial_credits = state["agent"]["credits"]
     if any(c["accepted"] and not c["fulfilled"] for c in state["contracts"]):
         raise SafetyStop(
@@ -263,6 +365,7 @@ def trade_run(
     key = f"trade:{ship_symbol}"
     for _ in range(cycles):
         run.check()
+        created_intent = False
         previous = next(
             (
                 r["data"]
@@ -285,6 +388,13 @@ def trade_run(
                     "Resume the open trade's original route and good"
                 )
         else:
+            if require_source and (
+                ship["nav"]["waypointSymbol"] != source
+                or ship["nav"]["flightMode"] != "CRUISE"
+            ):
+                raise SafetyStop(
+                    "Trade requires CRUISE ship already at source"
+                )
             if ship["cargo"]["units"]:
                 raise SafetyStop(
                     "Untracked cargo; inspect before opening a trade"
@@ -306,7 +416,7 @@ def trade_run(
                     )
                 ),
             )
-            if run.execute:
+            if run.execute and not require_source:
                 run.navigate(ship_symbol, source)
             seller, buyer = run.market(source), run.market(destination)
             fuels = [
@@ -328,18 +438,35 @@ def trade_run(
                 fuel_cost,
             )
             plan["required_fuel"] = 3 * distance + 10
+            if (
+                ship["fuel"]["capacity"]
+                and ship["fuel"]["capacity"] < plan["required_fuel"]
+            ):
+                raise SafetyStop("Route exceeds full-tank safety range")
             run.store.observe(run.scope, "plan", key, plan, "strategy")
             if not run.execute:
+                if ship["nav"]["waypointSymbol"] != source:
+                    plan["note"] = (
+                        "Approach/refill before reaching source not modeled"
+                    )
+                elif (
+                    ship["fuel"]["capacity"]
+                    and ship["fuel"]["current"] < plan["required_fuel"]
+                ):
+                    plan["refill"] = refuel_run(
+                        run, ship_symbol, trade=plan, plan_only=True
+                    )
                 return plan
             if not plan["feasible"]:
                 raise SafetyStop("No positive conservative trade margin")
-            run.navigate(ship_symbol, source)
+            if not require_source:
+                run.navigate(ship_symbol, source)
             ship = run.dock(ship_symbol)
             if (
                 ship["fuel"]["capacity"]
                 and ship["fuel"]["current"] < 3 * distance + 10
             ):
-                refuel_run(run, ship_symbol)
+                refuel_run(run, ship_symbol, trade=plan)
                 ship = run.ship(ship_symbol)
                 if ship["fuel"]["current"] < plan["required_fuel"]:
                     raise SafetyStop("Route exceeds full-tank safety range")
@@ -347,6 +474,7 @@ def trade_run(
             # ambiguous outcomes; known held cargo is sold before buying again.
             previous = {"status": "open", "plan": plan, "bought": False}
             run.store.observe(run.scope, "position", key, previous, "strategy")
+            created_intent = True
         if not run.execute:
             return {"resume": previous}
         ship = run.arrive(ship_symbol)
@@ -357,49 +485,45 @@ def trade_run(
         )
         if not held and not previous["bought"]:
             # On restart, never buy at an unverified waypoint/price.
-            run.navigate(ship_symbol, source)
+            if require_source and ship["nav"]["waypointSymbol"] != source:
+                raise SafetyStop("Trade requires ship already at source")
+            if not require_source:
+                run.navigate(ship_symbol, source)
             ship = run.dock(ship_symbol)
+            if require_source and (
+                ship["nav"]["waypointSymbol"] != source
+                or ship["nav"]["flightMode"] != "CRUISE"
+            ):
+                raise SafetyStop(
+                    "Trade requires CRUISE ship already at source"
+                )
             if ship["cargo"]["units"] or (
                 ship["fuel"]["capacity"]
                 and ship["fuel"]["current"] < plan["required_fuel"]
             ):
                 raise SafetyStop("Resume cargo/fuel preconditions changed")
-            quote = next(
-                (
-                    g
-                    for g in run.market(source).get("tradeGoods", [])
-                    if g["symbol"] == good
-                ),
-                None,
-            )
-            if (
-                not quote
-                or not 0 < quote["purchasePrice"] <= plan["max_buy"]
-                or quote["tradeVolume"] < plan["units"]
-            ):
-                raise SafetyStop("Resume acquisition quote no longer valid")
-            buyer_quote = next(
-                (
-                    g
-                    for g in run.market(destination).get("tradeGoods", [])
-                    if g["symbol"] == good
-                ),
-                None,
-            )
-            if (
-                not buyer_quote
-                or buyer_quote["sellPrice"] < plan["min_sell"]
-                or buyer_quote["tradeVolume"] < plan["units"]
-                or plan["units"] * (plan["min_sell"] - plan["max_buy"])
-                <= plan["fuel_allowance"]
-            ):
-                raise SafetyStop("Buyer quote no longer supports the trade")
-            if (
-                run.get("/my/agent")["credits"]
-                - plan["units"] * plan["max_buy"]
-                < CREDIT_FLOOR + FUEL_ALLOWANCE
-            ):
-                raise SafetyStop("Resume would violate reserves")
+            try:
+                _check_trade_purchase(run, plan)
+            except _TradePurchaseRejected as exc:
+                if created_intent:
+                    run.check()
+                    if not run.store.pending(run.scope):
+                        # Only this cycle's new, empty intent is known never
+                        # to have reached purchase dispatch. Never infer this
+                        # from a resumed position's lagging bought flag.
+                        run.store.observe(
+                            run.scope,
+                            "position",
+                            key,
+                            previous
+                            | {
+                                "status": "closed",
+                                "cancellation_reason": str(exc),
+                                "purchase_dispatched": False,
+                            },
+                            "strategy",
+                        )
+                raise
             run.mutate(
                 f"/my/ships/{ship_symbol}/purchase",
                 {"symbol": good, "units": plan["units"]},
@@ -517,6 +641,7 @@ def contract_run(
 ) -> dict[str, Any]:
     started = time.monotonic()
     state = run.refresh()
+    run.check_reposition()
     initial_credits = state["agent"]["credits"]
     contract = next(
         (c for c in state["contracts"] if c["id"] == contract_id), None

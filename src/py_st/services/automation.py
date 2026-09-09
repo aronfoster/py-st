@@ -104,7 +104,17 @@ class Session:
                 self.store.observe(scope, kind, item[key], item)
         return result
 
-    def mutate(self, path: str, body: JSONDict | None = None) -> JSONDict:
+    def check_reposition(self) -> None:
+        if any(
+            p["key"].startswith("reposition:")
+            and p["data"].get("status") != "closed"
+            for p in self.store.latest(self.scope, "position")
+        ):
+            raise SafetyStop("Recover open reposition before other automation")
+
+    def mutate(
+        self, path: str, body: JSONDict | None = None, *, reposition: str = ""
+    ) -> JSONDict:
         self.check()
         if not re.fullmatch(
             r"/my/(ships/[A-Za-z0-9_-]+/"
@@ -117,6 +127,32 @@ class Session:
             )
         if not self.scope:
             raise SafetyStop("Observe live state before mutations")
+        if reposition:
+            positions = [
+                p
+                for p in self.store.latest(self.scope, "position")
+                if p["data"].get("status") != "closed"
+            ]
+            if (
+                len(positions) != 1
+                or positions[0]["key"] != reposition
+                or not reposition.startswith("reposition:")
+                or positions[0]["data"].get("status") != "open"
+            ):
+                raise SafetyStop("Ambiguous reposition mutation authority")
+            ship = reposition.removeprefix("reposition:")
+            source = positions[0]["data"].get("plan", {}).get("source")
+            if not (
+                (path == f"/my/ships/{ship}/orbit" and body is None)
+                or (
+                    path == f"/my/ships/{ship}/navigate"
+                    and source
+                    and body == {"waypointSymbol": source}
+                )
+            ):
+                raise SafetyStop("Reposition permits only original approach")
+        else:
+            self.check_reposition()
         if not self.execute:
             raise SafetyStop(f"Dry run: would POST {path} {body or {}}")
         if self.remaining <= 0:
@@ -362,14 +398,7 @@ class Session:
     def reconcile(self, action_id: int, evidence: str = "") -> dict[str, Any]:
         """Record review after fresh observations, never replay API calls."""
         state = self.refresh()
-        action = next(
-            (
-                a
-                for a in self.store.actions(self.scope)
-                if a["id"] == action_id and a["status"] == "pending"
-            ),
-            None,
-        )
+        action = self.store.pending_action(self.scope, action_id)
         if action is None:
             raise SafetyStop(
                 "No pending action with that ID in the live scope"

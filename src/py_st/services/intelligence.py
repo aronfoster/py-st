@@ -152,6 +152,27 @@ class Intelligence:
             is not None
         )
 
+    def pending_actions(self, scope: str) -> list[dict[str, Any]]:
+        """All unresolved actions, independent of the recent-history cap."""
+        return [
+            dict(row)
+            for row in self.db.execute(
+                "SELECT id,started_at,status FROM actions "
+                "WHERE scope=? AND status='pending' ORDER BY id",
+                (scope,),
+            )
+        ]
+
+    def pending_action(
+        self, scope: str, action_id: int
+    ) -> dict[str, Any] | None:
+        row = self.db.execute(
+            "SELECT * FROM actions WHERE scope=? AND id=? "
+            "AND status='pending'",
+            (scope, action_id),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
     def negotiated_contracts(self, scope: str) -> list[dict[str, Any]]:
         """Receipts survive interruption before contract observation."""
         return [
@@ -193,6 +214,7 @@ class Intelligence:
             "economics": self.economics(scope),
             "positions": self.latest(scope, "position"),
             "scout_visits": self.latest(scope, "scout_visit"),
+            "automation_runs": self.latest(scope, "automation_run"),
         }
 
     def economics(self, scope: str) -> dict[str, Any]:

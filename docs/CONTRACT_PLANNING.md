@@ -14,6 +14,55 @@ tested single-good paths. Do not manually translate model steps into mutations.
 The nighttime agent should first add a journaled state machine with recovery
 proof for the complete obligation portfolio.
 
+## Offline Source Shortlist
+
+```sh
+PYTHONPATH=src python -m py_st auto sources CONTRACT_ID \
+  --scope RESET:AGENT --database /path/to/existing-ledger.sqlite3 \
+  --max-age 900
+```
+
+`auto sources` is **OFFLINE ONLY**, unlike live automation dry runs. It opens
+an existing ledger read-only, requires an explicit known reset/agent scope,
+and never loads credentials, creates a Session, calls the API, or records a
+plan. A fresh cloud checkout without a ledger receives an error; it does not
+initialize one or obtain live data. The shared `contract_sources` service
+reads a consistent SQLite snapshot without a schema change or migration.
+Read-only means **no ledger record writes**, not zero filesystem writes:
+SQLite may create WAL/shared-memory sidecars (`-wal`/`-shm`) or update shared
+memory while reading a WAL-mode database. The connection uses `mode=ro`, not
+`immutable=1`, so committed records still in the WAL remain visible. Do not
+use immutable mode on an active ledger to avoid sidecars; it ignores the WAL
+and can return stale data.
+
+The JSON shortlist uses the latest stored contract and market adverts for every
+remaining delivery good/destination. Repeated delivery terms are consolidated;
+each advertised market appears once per good/destination, not as additive supply.
+Exporters and exchanges rank before importers, then by straight-line Euclidean
+source-to-delivery distance and source symbol. Same-system symbols constrain
+discovery; absent waypoint coordinates produce a null distance, not invented
+geometry. No optimizer, cross-system search or ship assignment is performed.
+
+`quote_observed_at` and `quote_age_seconds` belong to the latest detailed market
+snapshot when it contains that good, not the newer sparse advert. Only the latest
+detailed market snapshot is inspected: missing/invalid goods do not fall back
+to older per-good prices. Price and trade volume are null unless both are
+positive integers and the original quote age is within `--max-age` (900 seconds
+by default). Stale, missing, invalid and future-dated evidence is explicit.
+A newer sparse advert leaves a fresh retained quote labeled `fresh_historical`
+and **not actionable**; it does not restore current price visibility.
+
+`actionable_quote` means only that the latest stored market observation contains
+fresh valid detailed evidence. It is not execution permission. Contract status,
+acceptance/delivery deadlines and expired/fulfilled sourcing blockers are
+reported separately; adverts may still be inspected for blocked contracts.
+Unknown deadlines are labeled unknown rather than assumed safe. There is no
+`execution_authorized` field, acceptance recommendation, inventory estimate,
+goods budget, fuel/travel estimate or profit claim. Use `auto contract-model`
+with explicit inputs for the **whole obligation**, including all goods and
+route costs. Every live action still requires fresh observations and existing
+execution/recovery guards.
+
 ## Input
 
 Create a disposable JSON file outside `.state` containing an observed contract
@@ -22,8 +71,10 @@ and explicit route quotes:
 ```json
 {
   "contract": {
-    "id": "SYNTHETIC-CONTRACT",
-    "accepted": false,
+     "id": "SYNTHETIC-CONTRACT",
+     "accepted": false,
+     "fulfilled": false,
+     "deadlineToAccept": "2098-12-31T00:00:00Z",
     "terms": {
       "deadline": "2099-01-01T00:00:00Z",
       "payment": {"onAccepted": 10000, "onFulfilled": 80000},
@@ -82,14 +133,41 @@ PYTHONPATH=src python -m py_st auto contract-model /tmp/contract.json
 Each quote is a caller-provided snapshot. `fuel_cost` and `travel_seconds` are
 the complete one-trip source-to-destination estimates; the model intentionally
 does not invent undocumented fuel or time formulas. `available_units` is an
-optional planning ceiling, not a claim that the API guarantees total inventory.
-`trade_volume` controls purchase batches, while `ship_capacity` controls trips.
+optional shared ceiling for a `(source, trade_symbol)` pair, consumed across all
+delivery terms and destinations, not a separate allocation per route. Every
+quote for that pair must specify the same ceiling, or all must omit it (no
+modeled supply limit). Zero is allowed. Inconsistent ceilings, including mixing
+omitted and specified values, are rejected. Duplicate
+`(source, trade_symbol, destination)` route quotes are rejected rather than
+counted as extra supply. These ceilings do not guarantee API inventory.
+
+`trade_volume` limits each purchase and `ship_capacity` limits each cargo load.
+Purchase batches are counted separately for every load, not by dividing total
+units by volume: 80 units with capacity 40 and volume 30 need two trips and
+four purchases (30 + 10 for each load), not three purchases.
+
+Credits, credit floor, fuel allowance and deadline margin must be non-negative
+integers; booleans are rejected. `price_margin` must be a finite, non-negative
+number, not a boolean, NaN or infinity. Capacity, required units, matching quote
+prices and trade volumes must be positive integers; fulfilled units must lie
+between zero and required units. Matching route fuel/time costs and explicit
+availability ceilings must be non-negative integers.
 
 The result conservatively applies `price_margin` to goods, charges fuel for
 every cargo trip, keeps the configured floor and allowance, excludes an already
 received acceptance payment, and checks total modeled travel against the
 contract deadline. Accepted contracts can remain feasible at a loss because
 they are obligations; unaccepted offers require positive conservative net.
+An already fulfilled contract is rejected as invalid model input. An expired
+unaccepted offer is infeasible using `deadlineToAccept`, with legacy `expiration`
+used only when that key is absent. Acceptance expiry is distinct from the
+delivery deadline and is not applied to already accepted obligations. Supplied
+deadlines must include a timezone; missing deadlines are not inferred.
+
+The full funding requirement is `credit_floor + fuel_allowance +
+conservative_goods_cost + fuel_cost`, paid from current credits without relying
+on either future award. An infeasible allocation can contain partial steps and
+costs; those totals are not a funded complete portfolio.
 
 ## Important Model Limits
 
@@ -98,14 +176,24 @@ they are obligations; unaccepted offers require positive conservative net.
   automatically inferred. Include their costs in route inputs or treat the
   result as optimistic.
 - Greedy source allocation ranks conservative landed cost per cargo chunk. It
-  is deterministic and inspectable, but it is not a global vehicle-routing
-  optimizer and does not combine compatible goods in one hold.
+  processes delivery terms in input order and consumes shared source capacity.
+  An earlier term can exhaust a scarce source needed by a later term even when
+  assigning the earlier term elsewhere would satisfy both. Thus an infeasible
+  result can be a greedy false negative, not proof that no feasible allocation
+  exists. It is not globally optimal and does not combine goods in one hold.
 - A quote's `available_units` is synthetic planning evidence. The official API
   documents `tradeVolume` as the per-transaction purchase limit, not durable
   inventory availability. Every live batch must refresh its price and volume.
 - A plan never authorizes acceptance, purchase, navigation, delivery, or
   fulfillment. Existing STOP, pending-action reconciliation, contract cargo,
   deadline, fuel, and reserve guards remain authoritative.
+
+## Verification
+
+Reported full offline verification for the current planner and funded local
+refuel increment: **560 passed, 1 skipped**. This documentation-only pass did not
+rerun checks or make live requests. The portfolio model remains analysis-only;
+the new earning-controller refuel selection has no live proof yet.
 
 ## Nighttime Implementation Sequence
 

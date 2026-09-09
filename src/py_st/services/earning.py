@@ -6,12 +6,18 @@ from typing import Any, cast
 
 from py_st.client.transport import JSONList
 from py_st.services.automation import SafetyStop, Session
+from py_st.services.repositioning import reposition_plan, reposition_run
 from py_st.services.scouting import scout_run
-from py_st.services.strategies import fleet_run, trade_run
+from py_st.services.strategies import fleet_run, refuel_run, trade_run
 
 
 def earn_run(
-    run: Session, system: str, cycles: int = 3, max_age: int = 900
+    run: Session,
+    system: str,
+    cycles: int = 3,
+    max_age: int = 900,
+    *,
+    reposition: bool = False,
 ) -> dict[str, Any]:
     if not 1 <= cycles <= 5 or not 1 <= max_age <= 86400:
         raise ValueError("Bounds: 1..5 cycles, 1..86400 max-age seconds")
@@ -31,12 +37,23 @@ def earn_run(
         positions = [
             p
             for p in run.store.latest(run.scope, "position")
-            if p["data"]["status"] != "closed"
+            if p["data"].get("status") != "closed"
         ]
         if positions:
+            if (
+                len(positions) == 1
+                and positions[0]["key"].startswith("reposition:")
+                and positions[0]["data"].get("status") == "open"
+            ):
+                return {
+                    "status": "recovery only",
+                    "result": reposition_run(
+                        run, positions[0]["data"].get("plan", {})
+                    ),
+                }
             if len(positions) != 1 or any(
                 not p["key"].startswith("trade:")
-                or p["data"]["status"] != "open"
+                or p["data"].get("status") != "open"
                 for p in positions
             ):
                 raise SafetyStop(
@@ -65,16 +82,82 @@ def earn_run(
         selected = next(
             (p for p in fleet["candidates"] if p["fuel_ready"]), None
         )
+        if selected is None:
+            for candidate in fleet["candidates"]:
+                try:
+                    refill = refuel_run(
+                        run,
+                        candidate["hauler"],
+                        trade=candidate,
+                        plan_only=True,
+                    )
+                except SafetyStop:
+                    # Candidate economics may fail; global stops must not turn
+                    # into permission to scout instead.
+                    run.check()
+                    if run.store.pending(run.scope) or any(
+                        c["accepted"] and not c["fulfilled"]
+                        for c in run.refresh()["contracts"]
+                    ):
+                        raise
+                    continue
+                selected = candidate | {"refill": refill}
+                break
+        return_plan = None
+        if selected is None and reposition:
+            return_plan = reposition_plan(run, system, max_age)
+            if return_plan["status"] != "declined":
+                decision = {
+                    "cycle": len(decisions) + 1,
+                    "kind": "reposition",
+                    "selected": return_plan,
+                    "remaining_actions": run.remaining,
+                }
+                run.store.observe(
+                    run.scope, "plan", f"earn:{system}", decision, "strategy"
+                )
+                if return_plan["status"] == "ready":
+                    decision["result"] = reposition_run(run, return_plan)
+                decisions.append(decision)
+                return {
+                    "status": (
+                        "dry run"
+                        if not run.execute
+                        else (
+                            "reposition blocked"
+                            if return_plan["status"] == "blocked"
+                            else "recovery only"
+                        )
+                    ),
+                    "decisions": decisions,
+                }
         decision = {
             "cycle": len(decisions) + 1,
             "kind": "trade" if selected else "discover",
             "selected": selected,
             "remaining_actions": run.remaining,
         }
+        if return_plan:
+            decision["reposition"] = return_plan
         run.store.observe(
             run.scope, "plan", f"earn:{system}", decision, "strategy"
         )
         if selected:
+            if any(
+                p["key"] == f"reposition:{selected['hauler']}"
+                and p["data"].get("status") == "closed"
+                and p["data"].get("plan", {}).get("source")
+                == selected["source"]
+                for p in run.store.latest(run.scope, "position")
+            ) and not any(
+                g["symbol"] == "FUEL"
+                and g.get("purchasePrice", 0) > 0
+                and g.get("tradeVolume", 0) > 0
+                for g in run.market(selected["source"]).get("tradeGoods", [])
+            ):
+                raise SafetyStop(
+                    "Returned source needs fresh usable FUEL; no purchase"
+                )
             decision["result"] = trade_run(
                 run,
                 selected["hauler"],
@@ -82,6 +165,7 @@ def earn_run(
                 selected["destination"],
                 selected["good"],
                 cycles=1,
+                require_source=True,
             )
         else:
             discovery = scout_run(

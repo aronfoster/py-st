@@ -561,3 +561,90 @@ needed: foreground CLI cycles are bounded and independently resumable.
   Installed `py-st --help` also works outside the source directory.
 - CI now runs for the review branch and explicitly disables live integration.
   This records local verification, not a claim that remote Actions has passed.
+
+## 2026-09-09: Product-First Overnight Continuation (Active)
+
+- Read FOS-63, local instructions, handoff, review, strategy/fuel documentation,
+  git state and the daytime diff. Root checkout remained on master; the clean
+  `tmp/astra` review worktree fast-forwarded from `d312606` to `28342c4`.
+  Daytime baseline independently passed **494 tests, 1 skipped**. Preserved
+  the original runtime ledger and history, with an online pre-validation backup.
+- Fixed source capacity reuse, cargo-trip batch undercounting, acceptance expiry,
+  completed-contract income and invalid reserves in the pure contract model.
+  Added regressions that failed before the corrections. Greedy source selection
+  remains explicitly non-optimal; missing modeled allocation is not proof that
+  no feasible global allocation exists.
+- Added funded local-refuel earning selection and protected costed trade fuel
+  in purchase sizing/rechecks. Independent review drove pre-refill full-tank,
+  quote, reserve and changed-source guards; manual approach previews preserve
+  their original route-model behavior with an explicit missing-approach caveat.
+- Bounded live validation verified the existing agent and one new low-fuel
+  `auto earn` cycle end-to-end: 20 ADVANCED_CIRCUITRY bought and sold after a
+  guarded refill, +56,016 session cash. Two further single-load contracts were
+  fulfilled. The second repeated a proven workflow rather than adding a product
+  capability. The owner clarified that building the application, not manual
+  profit-seeking play, is primary; FOS-63 and AGENTS now state that explicitly.
+  Gameplay was paused and STOP restored while engineering continued.
+- Last live snapshot at 01:18:37 UTC: 690,264 credits, empty cargo, both ships at
+  C45, hauler 253/400 fuel, four fulfilled contracts, no pending/open exposure.
+  Total new cash +193,492; cumulative +515,264; zero unexplained changes.
+  HANDOFF gives exact rewards/goods/fuel arithmetic without double counting.
+  Backup `.state/product-validation-20260909-0119.sqlite3` preserves this state.
+- Added offline scoped `auto sources` over shared observations with original
+  detailed quote timestamps and explicit stale/historical visibility. Added
+  GET-only `auto mining` with spec-limited blockers, malformed-evidence handling
+  and unknowns rather than claims about the owner's original extraction failure.
+- Flight Ledger now has a source browser and structured Contract Desk builder,
+  optional advanced JSON editing and the shared pure model endpoint. Explicit
+  fuel/time inputs are required. Host/Origin/CSRF and payload bounds protect the
+  endpoint; it holds no token and cannot execute gameplay. Independent browser
+  review caught previous-agent data surviving failed scope switches; all scoped
+  panels/export now clear immediately, and late responses cannot restore them.
+- Added opt-in original-source repositioning with persisted intent recovery and
+  no purchasing authority from historical prices. Independent review caught
+  legacy workflow bypass, stale-candidate discovery starvation, changed original
+  identity and expiry during transport retries. Fixes add narrow shared mutation
+  guards, scope-bound identity checks, expiry fallthrough without exposure, and
+  a temporary monotonic dispatch deadline restored before arrival polling.
+- Added foreground `auto pilot`: repeated decisions under one shared Session,
+  lock, wall-clock limit and action budget, with UUID-scoped run observations.
+  No-op/blocked/unknown outcomes stop. New invocations recover actual positions
+  and create new budgets, never replay saved decisions. Terminal storage failure
+  cannot mask the original interruption/error; failed CLI runs direct the user
+  to report/dashboard records. Flight Ledger displays recorded run history with
+  an explicit warning that stored RUNNING does not prove process liveness.
+- Current independent full offline CI: **857 passed, 2 skipped**, Black/Ruff
+  and mypy clean. Explicit synthetic Chrome dashboard suite: **30 passed** at
+  1440px and 390px, including the form builder, raw JSON, async scope races and
+  run history, no JavaScript errors or horizontal overflow. No new live proof
+  is claimed for pilot/repositioning. No database migration, push, credential
+  exposure, fleet purchase, destructive action or security change occurred.
+- The active code is uncommitted on the review branch. Keep application work
+  going; this log entry is a recoverable checkpoint, not the overnight stop.
+
+## 2026-09-09: Permission Stall and Owner-Requested Delivery
+
+- The owner reported that an unnecessary permission request for `~/git` froze
+  the unattended OpenCode workflow. This is an execution failure, not token
+  exhaustion. The owner requested status documentation, commit and push to the
+  review branch, then a stop before leaving for work. No permission expansion,
+  supervisor installation or global security change was used as a workaround.
+- Subsequent product work added Market Desk history, normalized chart timestamps,
+  offline doctor and GUI recorded-safety checks, safe retirement of undispatched
+  return intents, and funded buyer refueling for autonomous returns. The final
+  confirmed review gap was closed before delivery: observer/contract eligibility
+  is refreshed after refill preparation, before the fuel POST. Two failing
+  regressions reproduced spending after eligibility changed and now pass.
+- Final clean Python 3.12 `.[dev,browser]` installation and `ST_LIVE_TESTS=0 make ci`:
+  **1,021 passed, 10 skipped**, Black/Ruff/mypy clean. Explicit synthetic Chrome
+  dashboard suite: **70 passed**, desktop/mobile. Read-only browser verification
+  on the actual stored ledger passed without changing STOP or making gameplay
+  requests; uniquely named ignored screenshots preserve the original captures.
+- The post-validation backup passed `PRAGMA integrity_check`: `ok`, with **160
+  succeeded journal actions**. Live state remains the 01:18:37 UTC snapshot in
+  HANDOFF; no later gameplay is claimed. Pilot and repositioning have synthetic
+  and real-transport regression proof, not end-to-end live proof.
+- Delivery remains on `aron/fos-63-review`, based on integrated daytime revision
+  `28342c47d630f854ee989c453198039ed36997a2`. Commit only application/docs/tests,
+  never runtime data or the retained original history. See this handoff's commit
+  in branch history for the exact delivery revision. STOP stays present.

@@ -76,8 +76,9 @@ This plan enables no live actions and changes no safety guard or allowlist.
 
 * **Automation Loop**
 
-  * Extend the implemented bounded workflows with tested repositioning and
-    multi-load/multi-good obligations; prove unattended continuation separately.
+  * Live-validate the implemented pilot and opt-in original-source repositioning;
+    expand beyond the modeled multi-load/multi-good obligations. Resolve workspace
+    permission stalls before claiming reliable unattended execution.
 * **Client generation**
 
   * Investigate `openapi-python-client` or a custom generator for `SpaceTraders.json`.
@@ -102,9 +103,11 @@ This plan enables no live actions and changes no safety guard or allowlist.
 * FOS-63 local branch: semantic retries, shared sessions, pagination, atomic
   cache, bounded journaled procurement/trading, SQLite history and cash audit,
   fleet assignment, bounded same-system fuel-free probe market scouting, and a
-  working local dashboard. Scouting has seven live verified visits. A bounded
-  `auto earn SYSTEM` controller connects ready-route trading and discovery with
-  offline regression proof only; historical-route repositioning remains deferred.
+  working local dashboard. `auto earn SYSTEM` now has bounded live funded-refuel
+  proof. Foreground `auto pilot`, original-source repositioning, offline doctor,
+  source shortlists, mining diagnostics, Contract Desk and Market Desk are
+  implemented with regression/browser coverage. Pilot/repositioning remain
+  unproved live; arbitrary historical-route optimization is still deferred.
   See `docs/HANDOFF.md` for verification, measured economics, safety limits
   and remaining work. Remote single-good/single-load procurement now has live
   proof; multi-load/multi-good procurement, extraction optimization and

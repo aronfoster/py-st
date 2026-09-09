@@ -31,11 +31,6 @@ def _remaining(delivery: dict[str, Any]) -> int:
     return required - fulfilled
 
 
-def _quote_capacity(quote: dict[str, Any], remaining: int) -> int:
-    maximum = quote.get("available_units", remaining)
-    return min(_non_negative_int(maximum, "available_units"), remaining)
-
-
 def _deadline_seconds(contract: dict[str, Any], now: datetime) -> int | None:
     deadline = contract.get("terms", {}).get("deadline")
     if not deadline:
@@ -67,18 +62,19 @@ def plan_contract_procurement(
     either value.
     """
     capacity = _positive_int(ship_capacity, "ship_capacity")
+    _non_negative_int(credits, "credits")
+    _non_negative_int(credit_floor, "credit_floor")
+    _non_negative_int(fuel_allowance, "fuel_allowance")
+    _non_negative_int(deadline_margin_seconds, "deadline_margin_seconds")
     if (
-        not isinstance(credits, int)
-        or isinstance(credits, bool)
-        or credits < 0
+        not isinstance(price_margin, int | float)
+        or isinstance(price_margin, bool)
+        or not math.isfinite(price_margin)
+        or price_margin < 0
     ):
-        raise ValueError("credits must be a non-negative integer")
-    if credit_floor < 0 or fuel_allowance < 0:
-        raise ValueError("reserves must be non-negative")
-    if price_margin < 0:
-        raise ValueError("price_margin must be non-negative")
-    if deadline_margin_seconds < 0:
-        raise ValueError("deadline margin must be non-negative")
+        raise ValueError("price_margin must be finite and non-negative")
+    if contract.get("fulfilled", False):
+        raise ValueError("contract is already fulfilled")
 
     terms = contract.get("terms", {})
     deliveries = terms.get("deliver", [])
@@ -100,6 +96,26 @@ def plan_contract_procurement(
     total_travel = 0
     total_units = 0
     total_trips = 0
+    source_limits: dict[tuple[str, str], int | None] = {}
+    allocated: dict[tuple[str, str], int] = {}
+    routes: set[tuple[str, str, str]] = set()
+    for quote in quotes:
+        for field in ("source", "trade_symbol", "destination"):
+            if not isinstance(quote.get(field), str) or not quote[field]:
+                raise ValueError(f"quote {field} is required")
+        key = (quote["source"], quote["trade_symbol"])
+        route = (*key, quote["destination"])
+        if route in routes:
+            raise ValueError("Duplicate route quote")
+        routes.add(route)
+        limit = (
+            _non_negative_int(quote["available_units"], "available_units")
+            if "available_units" in quote
+            else None
+        )
+        if key in source_limits and source_limits[key] != limit:
+            raise ValueError("Inconsistent available_units for source/good")
+        source_limits[key] = limit
 
     for delivery in deliveries:
         symbol = delivery.get("tradeSymbol")
@@ -131,7 +147,13 @@ def plan_contract_procurement(
                 quote.get("travel_seconds"), "travel_seconds"
             )
             ceiling = math.ceil(price * (1 + price_margin))
-            supply = _quote_capacity(quote, remaining)
+            key = (source, symbol)
+            limit = source_limits[key]
+            supply = (
+                remaining
+                if limit is None
+                else min(remaining, limit - allocated.get(key, 0))
+            )
             if supply == 0:
                 continue
             # Rank full cargo chunks by conservative landed cost. Fixed trip
@@ -158,8 +180,11 @@ def plan_contract_procurement(
             if unallocated == 0:
                 break
             units = min(unallocated, supply)
-            trips = math.ceil(units / capacity)
-            purchases = math.ceil(units / volume)
+            full_loads, partial_load = divmod(units, capacity)
+            trips = full_loads + bool(partial_load)
+            # Each load must fit the hold before the next delivery trip.
+            purchases = full_loads * ((capacity + volume - 1) // volume)
+            purchases += (partial_load + volume - 1) // volume
             goods_cost = units * ceiling
             fuel_cost = trips * fuel
             step = {
@@ -181,11 +206,21 @@ def plan_contract_procurement(
             total_travel += trips * travel
             total_trips += trips
             unallocated -= units
+            key = (source, symbol)
+            allocated[key] = allocated.get(key, 0) + units
         if unallocated:
             reasons.append(f"Missing {unallocated} units of {symbol} capacity")
 
     required_credits = credit_floor + fuel_allowance + total_goods + total_fuel
-    deadline_seconds = _deadline_seconds(contract, now or datetime.now(UTC))
+    now = now or datetime.now(UTC)
+    deadline_seconds = _deadline_seconds(contract, now)
+    expiration = contract.get("deadlineToAccept", contract.get("expiration"))
+    if not contract.get("accepted", False) and expiration:
+        acceptance_deadline = datetime.fromisoformat(expiration)
+        if acceptance_deadline.tzinfo is None:
+            raise ValueError("acceptance deadline must include a timezone")
+        if acceptance_deadline <= now:
+            reasons.append("Contract acceptance deadline has expired")
     if deadline_seconds is not None:
         if deadline_seconds <= 0:
             reasons.append("Contract deadline has expired")

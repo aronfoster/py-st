@@ -1,5 +1,11 @@
 # Agent Instructions
 
+The primary goal is the best application for a human or automated process to
+play SpaceTraders. Gameplay is secondary: use bounded live experiments to
+validate capabilities, then return to building the tools. Profitable manual
+play is not a substitute for application development. Continue engineering
+through the available overnight token/runtime budget, not just green tests.
+
 Read this file, ROADMAP.md, docs/ASTRA_LOG.md and docs/HANDOFF.md first.
 This is Python 3.11+; use the owner's Python 3.12 virtual environment.
 Preserve CLI -> services/automation -> client/transport layering. Generated

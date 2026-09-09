@@ -152,6 +152,37 @@ def test_trade_plan_accounts_for_slippage_volume_and_fuel() -> None:
     assert not poor["feasible"]
 
 
+@pytest.mark.parametrize(
+    "credits,units",
+    [(51000, 0), (51176, 0), (51177, 1), (51281, 1), (51282, 2)],
+)
+def test_trade_plan_reserves_costed_fuel_before_sizing(
+    credits: int, units: int
+) -> None:
+    # Arrange
+    source = {
+        "symbol": "X-A-1",
+        "tradeGoods": [
+            {"symbol": "IRON", "purchasePrice": 100, "tradeVolume": 60}
+        ],
+    }
+    target = {
+        "symbol": "X-A-2",
+        "tradeGoods": [
+            {"symbol": "IRON", "sellPrice": 250, "tradeVolume": 60}
+        ],
+    }
+    # Act
+    plan = trade_plan(source, target, "IRON", 40, credits, 72)
+    # Assert
+    assert plan["units"] == units
+    assert plan["fuel_allowance"] == 72
+    assert plan["conservative_net"] == units * (237 - 105) - 72
+    assert plan["feasible"] is (units > 0)
+    if units:
+        assert credits - units * plan["max_buy"] >= 51000 + 72
+
+
 @pytest.mark.parametrize("interrupt", ["purchase", "sell"])
 @pytest.mark.parametrize("initial_fuel", [400, 50])
 def test_trade_resumes_after_mutation_without_double_buy(
@@ -221,7 +252,9 @@ def test_trade_resumes_after_mutation_without_double_buy(
     run.mutate.side_effect = mutate
     # Act
     with patch("py_st.services.strategies.refuel_run") as refuel:
-        refuel.side_effect = lambda *_: ship["fuel"].update({"current": 400})
+        refuel.side_effect = lambda *_, **__: ship["fuel"].update(
+            {"current": 400}
+        )
         with pytest.raises(SafetyStop, match="simulated"):
             trade_run(run, "S", "X-A-1", "X-A-2", "IRON")
         trade_run(run, "S", "X-A-1", "X-A-2", "IRON")
@@ -238,13 +271,18 @@ def test_refuel_dry_run_and_credit_floor() -> None:
     # Arrange
     run = MagicMock()
     run.execute = False
+    run.store.pending.return_value = False
     run.refresh.return_value = {"agent": {"credits": 100000}, "contracts": []}
-    run.arrive.return_value = {
+    run.get.side_effect = lambda _: run.refresh.return_value["agent"]
+    run.ship.return_value = {
         "nav": {"waypointSymbol": "X-A-1"},
         "fuel": {"capacity": 400, "current": 338},
     }
+    run.arrive.return_value = run.ship.return_value
     run.market.return_value = {
-        "tradeGoods": [{"symbol": "FUEL", "purchasePrice": 72}]
+        "tradeGoods": [
+            {"symbol": "FUEL", "purchasePrice": 72, "tradeVolume": 100}
+        ]
     }
     # Act
     plan = refuel_run(run, "S")
@@ -423,6 +461,66 @@ def trading_run(tmp_path: Path) -> Iterator[MagicMock]:
 
 
 @pytest.mark.parametrize("resume", [False, True])
+@pytest.mark.parametrize("headroom", [-72, -1, 0, 1])
+def test_trade_rechecks_costed_fuel_reserve_before_purchase(
+    trading_run: MagicMock, resume: bool, headroom: int
+) -> None:
+    # Arrange: plan with ample credits, then lose credits before buying.
+    run = trading_run
+    if resume:
+        plan = trade_plan(
+            run.market("X-A-1"), run.market("X-A-2"), "IRON", 40, 100000, 72
+        ) | {"required_fuel": 70}
+        run.store.observe(
+            run.scope,
+            "position",
+            "trade:S",
+            {"status": "open", "bought": False, "plan": plan},
+        )
+    get = run.get.side_effect
+    agent_reads = 0
+
+    def changed_credits(path: str) -> dict[str, Any]:
+        nonlocal agent_reads
+        result: dict[str, Any] = get(path)
+        if path == "/my/agent":
+            agent_reads += 1
+            if resume or agent_reads > 1:
+                result["credits"] = 51000 + 72 + 40 * 105 + headroom
+        return result
+
+    run.get.side_effect = changed_credits
+    # Act / Assert
+    if headroom < 0:
+        with pytest.raises(SafetyStop, match="Resume would violate reserves"):
+            trade_run(run, "S", "X-A-1", "X-A-2", "IRON")
+        run.mutate.assert_not_called()
+    else:
+        result = trade_run(run, "S", "X-A-1", "X-A-2", "IRON")
+        assert result["completed_cycles"] == 1
+        assert run.mutate.call_count == 2
+        assert run.mutate.call_args_list[0].args == (
+            "/my/ships/S/purchase",
+            {"symbol": "IRON", "units": 40},
+        )
+    position = run.store.latest(run.scope, "position")[0]["data"]
+    assert position["plan"]["units"] == 40
+    assert position["plan"]["fuel_allowance"] == 72
+    assert position["status"] == (
+        "open" if resume and headroom < 0 else "closed"
+    )
+    if headroom < 0 and not resume:
+        assert position["cancellation_reason"] == (
+            "Resume would violate reserves"
+        )
+        assert position["purchase_dispatched"] is False
+    else:
+        assert "cancellation_reason" not in position
+    assert position["bought"] is (headroom >= 0)
+    assert run.ship.return_value["cargo"]["units"] == 0
+
+
+@pytest.mark.parametrize("resume", [False, True])
 @pytest.mark.parametrize("change", ["price", "missing", "volume"])
 def test_trade_rechecks_buyer_before_every_purchase(
     trading_run: MagicMock, resume: bool, change: str
@@ -463,6 +561,54 @@ def test_trade_rechecks_buyer_before_every_purchase(
     # Assert
     run.mutate.assert_not_called()
     assert run.ship.return_value["cargo"]["units"] == 0
+    position = run.store.latest(run.scope, "position")[0]["data"]
+    if resume:
+        assert position == {"status": "open", "bought": False, "plan": plan}
+    else:
+        assert position["status"] == "closed"
+        assert position["bought"] is False
+        assert position["purchase_dispatched"] is False
+        assert position["cancellation_reason"] == (
+            "Buyer quote no longer supports the trade"
+        )
+
+
+@pytest.mark.parametrize("change", ["price", "missing", "volume"])
+def test_fresh_trade_retires_invalid_seller_quote(
+    trading_run: MagicMock, change: str
+) -> None:
+    # Arrange
+    run = trading_run
+    market = run.market.side_effect
+    seller_reads = 0
+
+    def changed_market(key: str) -> dict[str, Any]:
+        nonlocal seller_reads
+        quote: dict[str, Any] = market(key)
+        if key == "X-A-1":
+            seller_reads += 1
+            if seller_reads > 1:
+                if change == "missing":
+                    quote.pop("tradeGoods")
+                elif change == "price":
+                    quote["tradeGoods"][0]["purchasePrice"] = 106
+                else:
+                    quote["tradeGoods"][0]["tradeVolume"] = 39
+        return quote
+
+    run.market.side_effect = changed_market
+    # Act
+    with pytest.raises(SafetyStop, match="acquisition quote"):
+        trade_run(run, "S", "X-A-1", "X-A-2", "IRON")
+    # Assert
+    run.mutate.assert_not_called()
+    position = run.store.latest(run.scope, "position")[0]["data"]
+    assert position["status"] == "closed"
+    assert position["bought"] is False
+    assert position["purchase_dispatched"] is False
+    assert position["cancellation_reason"] == (
+        "Resume acquisition quote no longer valid"
+    )
 
 
 @pytest.mark.parametrize("mode", ["BURN", "DRIFT"])

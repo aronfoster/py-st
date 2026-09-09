@@ -1,6 +1,153 @@
 # FOS-63 Handoff
 
-## Current Snapshot
+## September 9 Morning Handoff
+
+**Application development is primary.** The owner clarified this explicitly
+during this run, and FOS-63 and AGENTS.md now preserve that direction. Gameplay
+is secondary validation, not the goal.
+
+**Unattended execution failed again.** The owner reported that an unnecessary
+permission request for `~/git` paused the entire OpenCode workflow overnight.
+This was a permission-prompt stall, not demonstrated token exhaustion and not
+successful completion of the overnight mandate. The owner requested this status,
+a commit and push, then a stop before work. Do not request access to a broad
+parent directory when the repository worktree and approved temporary directory
+are sufficient. No global permissions or security settings were changed to hide
+or bypass the failure.
+
+The clean review worktree was fast-forwarded from `d312606` to `28342c4` on
+`aron/fos-63-review`, integrating the daytime contract model. Exact integrated
+base: `28342c47d630f854ee989c453198039ed36997a2`. Application changes are delivered
+with this handoff on the review branch; identify the delivery revision with
+`git log -1 --format=%H`. `master` and the retained original implementation
+history remain unchanged. Only the review branch is authorized for this push.
+No detached supervisor or automatic post-exhaustion restart is claimed.
+
+### Product Capabilities Added
+
+- Contract model corrections: source/good capacity shared across obligations,
+  per-load purchase batching, acceptance expiry, fulfilled-contract rejection,
+  and validated finite margins/reserves. Duplicate/conflicting quotes fail closed.
+- `auto sources`: offline, scoped source discovery with original detailed-price
+  timestamps, stale/historical visibility labels, and no execution authorization.
+- `auto mining`: GET-only, spec-limited diagnostics. Unknown or incomplete
+  evidence stays unknown; it does not reproduce the owner's original failure.
+- Funded local refueling in earning selection, after ready routes. Execution
+  protects the goods budget and costed fuel in addition to the floor/allowance,
+  rechecks after docking, and rejects impossible full-tank routes before spending.
+- Definitively rejected, freshly created, unpurchased trade intents are retired
+  so the next invocation can replan. Resumed/unknown/STOP-interrupted intents
+  remain protected; no uncertain action is cleared automatically.
+- Opt-in `auto earn --reposition`: costed return to a completed trade's original
+  source, persisted recovery and observer protection. Fresh purchase checks are
+  still mandatory after arrival. New position guards cover other automation
+  entry points. Evidence expiry also bounds transport pacing/retry waits.
+  Funded buyer refueling can enable a return without relaxing physical reserves.
+  The final review fix rechecks contracts and the observer after preparation,
+  before spending. Expired, provably undispatched intents can be safely retired;
+  uncertain navigation remains protected.
+- `auto pilot`: foreground repeated earning decisions sharing one Session,
+  lock, deadline and action budget. UUID-scoped run history records outcomes and
+  restart instructions. A restart creates new budgets, not replayed decisions.
+- Flight Ledger Contract Desk: real scoped source discovery, structured route
+  and cost inputs, advanced JSON editing, and the shared pure procurement model.
+  Explicit fuel/time assumptions are required. Recorded pilot runs are visible;
+  a stored RUNNING record is not proof of a live process. No GUI execution
+  launcher was added. Failed scope switches clear old agent data immediately.
+- Market Desk shows cached price details and bounded historical trends with
+  original provenance and normalized plotting times. Contract Desk drafts bind
+  to the exact contract observation used by the source shortlist.
+- `auto doctor` and dashboard recorded-safety checks explain STOP, all pending
+  actions, recovery exposure, accepted contracts and stale observations offline.
+  No recorded concerns is not live readiness. Reconciliation now uses an exact
+  scoped lookup, including pending actions outside the recent 200-row report.
+
+### Verification and Data Compatibility
+
+Final fresh Python 3.12 installation from `.[dev,browser]`: **1,021 passed,
+10 skipped**; Black, Ruff and mypy pass. The skipped tests are opt-in live
+integration and synthetic browser verification.
+Explicit synthetic Chrome dashboard suite: **70 passed**, including desktop
+1440px/mobile 390px, structured model entry, stale responses and scope-switch
+failure/retry, with no JavaScript errors or horizontal overflow.
+
+Read-only browser verification against the preserved real ledger also passed:
+stored credits/fleet/Market Desk at both widths, no browser writes, STOP unchanged.
+Captures use the ignored prefix
+`.state/dashboard-product-readonly-bd0dc74331af4f7bbfb0411c0d404eda-`.
+These show stored state, not new live observations. A wheel install/CLI/asset
+smoke passed during development; the complete final source checks above are
+the final-code verification. Original screenshots were not overwritten.
+
+No SQL schema migration is required. New `automation_run` observations and
+`reposition:SHIP` positions use the existing scoped store. **Do not downgrade
+to older automation while a reposition intent is open**: older code does not
+understand that exposure. Recover with current code first. Read-only SQLite
+opens do not write ledger records but may create/use WAL/shared-memory sidecars;
+do not use `immutable=1` against an active ledger to suppress them.
+
+Preserved backups: `.state/overnight-start-20260909-0015.sqlite3` before live
+validation and `.state/product-validation-20260909-0119.sqlite3` afterward.
+The latter backup passed integrity checking with 160 succeeded actions.
+Earlier backups remain. Original `.state/intelligence.sqlite3` remains authoritative.
+STOP is present for application development. No gameplay process remains running.
+
+### Bounded Live Evidence (Not the Product Goal)
+
+The existing agent was verified without registration. Last live observation:
+**2026-09-09 01:18:37 UTC**, scope `2026-09-06:SOURCE_CODE`, **690,264 credits**,
+no pending actions or open positions, and 160 journal actions. Both ships are
+at C45; hauler docked with **253/400 fuel and empty cargo**, probe in orbit and
+fuel-free. All four contracts are fulfilled. No API requests have been needed
+for the subsequent offline product work.
+
+New cash since the 496,772-credit starting snapshot: **+193,492**, reconciled
+with zero unexplained change. Supporting receipts, counting fuel only once:
+
+| Validation | Cash Before Shared Fuel Costs |
+| --- | ---: |
+| 23 ELECTRONICS contract: 118,864 rewards minus 36,770 goods | +82,094 |
+| One funded-refuel earn trade: 133,640 sales minus 77,480 goods | +56,160 |
+| 5 SHIP_PARTS contract: 71,385 rewards minus 15,715 goods | +55,670 |
+| All new fuel purchases | -432 |
+| Total | **+193,492** |
+
+The one-cycle `auto earn` trial selected a low-fuel route, refueled, purchased,
+arrived and sold successfully under a 600-second/15-action bound. That is live
+proof of funded earning, **not** live proof of the later `--reposition` or
+`auto pilot` additions. Those have synthetic recovery/real-transport regression
+proof only. The fourth contract repeated an existing workflow and is not a new
+capability; the owner redirected the run back to application development.
+
+### Resume Deliberately
+
+From the review worktree with its Python environment selected:
+
+```sh
+PYTHONPATH=src ST_LIVE_TESTS=0 make ci
+PYTHONPATH=src ST_LIVE_TESTS=0 DASHBOARD_BROWSER_TESTS=1 python -m pytest tests/test_dashboard.py -q
+PYTHONPATH=src python -m py_st auto pilot --help
+PYTHONPATH=src python -m py_st auto sources --help
+PYTHONPATH=src python -m py_st auto doctor --scope 2026-09-06:SOURCE_CODE
+PYTHONPATH=src python -m py_st auto dashboard
+```
+
+Read OPERATIONS for offline planning versus GET-only live previews. Before any
+deferred live test, preserve the ledger, deliberately clear STOP, reobserve the
+existing agent and resolve pending/open exposure. A bounded future runner preview
+is `auto pilot X1-CY22 --steps 2 --seconds 300 --actions 8 --reposition`; it calls
+the game even without `--execute`. Only execute after a useful product-validation
+question and a freshly reviewed plan exist. Do not resume manual profit loops
+as a substitute for completing the application.
+
+Remaining priorities: bounded live validation of pilot/repositioning (not yet
+proved live), fuller multi-good/multi-load execution, broader fleet scheduling,
+and guarded user execution controls. Preserve the current recovery-aware code
+and ledger; do not launch a runner just because STOP was cleared. Before another
+unattended run, verify permission handling in the actual workspace so a needless
+access prompt cannot silently suspend the workflow again.
+
+## Earlier September 8 Snapshot
 
 This file describes the last recorded state, not a fresh morning observation.
 See [ASTRA_LOG.md](ASTRA_LOG.md) for dated implementation and live evidence.

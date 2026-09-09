@@ -311,6 +311,41 @@ def test_reconcile_requires_explicit_evidence_and_never_replays(
     store.close()
 
 
+def test_reconcile_old_pending_action_uses_scoped_exact_lookup(
+    tmp_path: Path,
+) -> None:
+    # Arrange: imported/recovered history can exceed the report's 200 rows.
+    store = Intelligence(tmp_path / "db")
+    client = MagicMock()
+    run = Session(client, store, root=tmp_path)
+    run.scope = "r:a"
+    action = store.begin_action(run.scope, "/my/ships/S/purchase", {})
+    foreign = store.begin_action("r:b", "/my/ships/OTHER/purchase", {})
+    for _ in range(201):
+        recent = store.begin_action(run.scope, "/my/ships/S/orbit", {})
+        store.finish_action(recent, "succeeded", {})
+    try:
+        assert all(row["id"] != action for row in store.actions(run.scope))
+        with patch.object(run, "refresh", return_value={}):
+            # Act / Assert
+            with pytest.raises(SafetyStop, match="No pending action"):
+                run.reconcile(foreign)
+            assert run.reconcile(action)["action"]["id"] == action
+            assert store.pending(run.scope)
+            run.reconcile(
+                action,
+                "Reviewed fresh ship cargo against the original receipt.",
+            )
+            with pytest.raises(SafetyStop, match="No pending action"):
+                run.reconcile(action)
+        assert not store.pending(run.scope)
+        assert store.pending("r:b")
+        client.request.assert_not_called()
+    finally:
+        run.close()
+        store.close()
+
+
 def test_economics_and_online_backup_include_confirmed_journal(
     tmp_path: Path,
 ) -> None:

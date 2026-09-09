@@ -399,6 +399,42 @@ above supersedes that contract-list snapshot.
 
 ## Mining Diagnosis
 
+### Read-Only Diagnostic Command
+
+`PYTHONPATH=src python -m py_st auto mining SHIP --seconds 120` uses a full
+ship symbol and a non-executing Session (the required minimum action budget
+is one, unused). It honors the existing
+lock, STOP and deadline; do not clear STOP or interrupt another Session just
+to inspect mining. There is no `--execute` option. It refreshes account/fleet/
+contracts, then GETs the individual ship and its current waypoint, without
+arrival waiting, orbiting, surveying or extraction. Session observations can
+write local SQLite; GET-only refers to gameplay, not filesystem read-only.
+The mutation allowlist is unchanged. This command was tested offline only.
+
+The pure `services/mining.py:diagnose_mining` accepts supplied ship/waypoint
+snapshots and an explicit clock. It reports orbit, location, missing ore laser,
+storage capacity and reported cooldown blockers separately from unknowns.
+Positive remaining cooldown is not silently cleared by a stale expiration;
+conflicting times and invalid/naive timezone dates produce unknowns.
+
+Evidence is the checked-in generated `reference/SpaceTraders.json` extraction
+description (line 1972), cooldown GET description (1821), and `models/ShipMount`,
+`ShipCargo`, `Cooldown`, `WaypointType`, and `ShipRequirements` schemas. The
+client's `ShipsEndpoint.extract_resources` already distinguishes unsurveyed
+`/extract` from the full signed-survey `/extract/survey` POST. Neither is called.
+
+Unlike the stronger historical location diagnosis below, this deliberately
+spec-limited report does **not** assert an exhaustive non-extractable type list:
+the spec names asteroid fields as an extractable example but supplies no
+complete type/trait eligibility matrix. Stations, ordinary/engineered asteroids
+and asteroid bases therefore retain unknown extractability, not automatic
+permission. STRIPPED in traits or modifiers is reported separately as a depletion
+warning, never converted into non-extractability, zero yield or an error code.
+All resource traits/descriptions are preserved without inventing yield rules.
+Full cargo proves no storage space, not a documented rejection code. Crew/power
+allocation, actual acceptance, yield, economics and the owner's original failure
+remain unestablished. Every report has `execution_authorized: false`.
+
 **Mining is supported by the current published game API and by this client.**
 Fresh upstream OpenAPI 2.3.0 documents POST `/my/ships/{shipSymbol}/extract`
 and `/extract/survey`. The former requires an extractable waypoint, orbit and

@@ -19,6 +19,7 @@ def remote_contract_run(
     while True:
         run.check()
         state = run.refresh()
+        run.check_reposition()
         if run.store.pending(run.scope) or any(
             p["data"].get("status") == "open" and p["key"] != key
             for p in run.store.latest(run.scope, "position")

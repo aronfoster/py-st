@@ -8,10 +8,12 @@ commits remain on `aron/fos-63-run-gpt-6-astra-overnight-on-py-st`; they are not
 being pushed because an earlier log version included a machine-specific path.
 Commit SHAs in historical evidence refer to that local history.
 
-The assistant stopped at checkpoints rather than continuing through the requested
-overnight budget. That requirement was not met. There is no background agent or
-automatic restart supervisor, and no claim of token exhaustion. The morning
-request is to make the existing work reviewable, not resume gameplay.
+The September 9 continuation integrated `28342c4` and added the product tools
+below. The unattended requirement was not met: the owner reported that an
+unnecessary parent-directory permission request froze OpenCode overnight.
+The owner requested status, commit and push, then a stop. This is not a claim
+of token exhaustion or a working automatic restart supervisor. Read the current
+morning section in HANDOFF; later sections preserve historical evidence.
 
 ## Start Here
 
@@ -27,8 +29,11 @@ Do not copy live credentials or journal databases into a PR or repository.
 | Mutation bounds and recovery | `services/automation.py` | `test_automation.py`, `test_fuel_navigation.py` |
 | Trading and procurement | `services/strategies.py`, `services/remote_procurement.py` | `test_strategies.py`, `test_remote_procurement.py` |
 | Offline contract portfolio model | `services/contract_planning.py`, `cli/auto_cmd.py` | `test_contract_planning.py` |
+| Source discovery and restart diagnosis | `services/contract_sources.py`, `services/doctor.py` | `test_contract_sources.py`, `test_doctor.py` |
+| Recorded market history and mining diagnostics | `services/market_history.py`, `services/mining.py` | `test_market_history.py`, `test_mining.py` |
 | New contract offers | `services/negotiation.py` | `test_negotiation.py` |
 | Discovery and earning decisions | `services/scouting.py`, `services/earning.py` | `test_scouting.py`, `test_earning.py` |
+| Foreground runner and return recovery | `services/pilot.py`, `services/repositioning.py` | `test_pilot.py`, `test_repositioning.py` |
 | Historical intelligence | `services/intelligence.py`, `services/route_history.py` | `test_route_history.py`, `test_automation.py` |
 | Local web interface | `services/dashboard.py`, `services/dashboard.html` | `test_dashboard.py`, `tools/check_dashboard.py` |
 
@@ -38,10 +43,10 @@ guides are linked from [HANDOFF.md](HANDOFF.md#usage-and-data).
 
 ## Evidence Versus Limitations
 
-- Daytime checks in a fresh Python 3.12 environment installed from `.[dev]`:
-  **494 passed, 1 skipped**, Black/Ruff/mypy clean. Formatter versions now match
-  the existing pre-commit hooks. The live test is opt-in and read-only; CI explicitly
-  disables it. Normal tests use fake APIs, not gameplay mutations.
+- Final clean Python 3.12 installation: **1,021 passed, 10 skipped**, with Black,
+  Ruff and mypy passing. Explicit synthetic Chrome dashboard suite: **70 passed**.
+  The skipped tests are opt-in browser/live checks. Read-only real-ledger browser
+  smoke also passed with STOP unchanged; it is not fresh gameplay evidence.
 - Recorded live result at **2026-09-08 03:34:08 UTC**: **496,772 credits**, up
   **321,772** from 175,000. Two contracts fulfilled, all cargo empty, hauler full
   fuel, 124 successful journal actions and zero unexplained cash changes.
@@ -49,22 +54,52 @@ guides are linked from [HANDOFF.md](HANDOFF.md#usage-and-data).
   acceptance and fulfillment awards are included; [HANDOFF.md](HANDOFF.md)
   gives exact arithmetic and separates the two contracts from trading.
 - Trading, negotiation, remote procurement and local scouting have bounded live
-  evidence. `auto earn` has offline integration tests, not end-to-end live proof.
+  evidence. One bounded funded-refuel `auto earn` cycle was proved live on
+  September 9. Later pilot and opt-in original-source return support have offline
+  regression proof only. Fuel-ready routes take priority, then funded local
+  refueling, optional costed return, and fuel-free discovery.
+  Fresh trade terms, fuel and credits are checked before refueling, again after
+  docking, and before goods acquisition as applicable. Full-tank range is checked
+  before fuel spending; funding protects the 50,000 floor, 1,000 allowance,
+  route fuel, maximum goods cost and maximum estimated refill cost together.
 - Mining is exposed by the client, but no live extraction experiment proved the
   earlier owner-reported failure. Combat is not a currently documented callable
   operation. Gate construction and inter-system travel are roadmap work.
 - Remote execution remains single-good/single-load. A new offline model covers
   multi-good/multi-load portfolios but does not authorize or orchestrate live
-  actions. No global route optimizer, automatic ship purchasing, cross-system
-  controller or fleet-wide concurrent execution is claimed.
+  actions. It shares source/good availability across terms and destinations,
+  rejects inconsistent ceilings and duplicate route quotes, and counts purchase
+  batches per cargo load. It rejects fulfilled contracts, marks expired unaccepted
+  offers infeasible (`deadlineToAccept`, legacy `expiration` when absent), and validates
+  reserves and finite margins. Input-order greedy allocation can exhaust scarce
+  supply and falsely report infeasibility; it is not globally optimal. No global
+  route optimizer, automatic ship purchasing, cross-system controller or
+  fleet-wide concurrent execution is claimed.
 - Quote freshness and credit margins do not guarantee future liquidity. One-way
   refueling is not escrow; extreme price changes or unavailable fuel can require
   intervention. Exact fuel formulas remain explicit assumptions where undocumented.
+  Manual away-source trade dry runs explicitly leave approach/refill before
+  reaching the source unmodeled; they do not prove a funded approach. Local refill
+  funding is also not a guarantee of all-in realized trade profit.
 - Unknown dispatched mutations block execution until evidence-based review;
   this is not exactly-once delivery. Linux file locking is local to this machine
   and does not coordinate other computers or manual gameplay.
-- The dashboard reads SQLite and controls STOP only. Clearing STOP never starts
-  automation. An in-flight HTTP request may finish after STOP is requested.
+  Refills are journaled before the trade position is persisted. A confirmed
+  refill interrupted before position creation is recovered by fresh observation
+  and replanning; an unknown refill stays pending, never blindly replayed or
+  treated as permission to scout. Trade intent persists before buying goods.
+- The dashboard provides shared Contract Desk modeling, Market Desk history,
+  recorded run status and offline safety diagnosis. Its only gameplay-related
+  control is STOP; it never loads tokens or launches a live process. Clearing
+  STOP never starts automation. An in-flight HTTP request may finish after STOP.
+- The latest preserved live state is the September 9 01:18:37 UTC snapshot:
+  690,264 credits, four fulfilled contracts, empty cargo and no pending/open
+  exposure. The hauler has 253/400 fuel, not a restored tank. Both ships are at
+  C45. This is historical state; fresh observations are required before mutation.
+- New observation/position kinds use schema v1 without migration. Do not run
+  older automation while a reposition intent is open. Freshly abandoned intents
+  require proof of no possible navigation dispatch; unknown outcomes are never
+  automatically cleared. Pilot restarts create new budgets and fresh decisions.
 
 ## Preserved Local Data
 
