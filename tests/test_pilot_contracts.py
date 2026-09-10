@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from py_st.cli.app import app
@@ -250,7 +251,9 @@ def test_cli_explicit_recovery_and_help() -> None:
             app, ["auto", "pilot", "X-A", "--execute", "--recover-contracts"]
         )
         help_result = CliRunner().invoke(
-            app, ["auto", "pilot", "--help"], env={"COLUMNS": "240"}
+            app,
+            ["auto", "pilot", "--help"],
+            env={"COLUMNS": "240", "FORCE_COLOR": "1"},
         )
     assert result.exit_code == help_result.exit_code == 0
     session.assert_called_once_with(True, 3600, 100)
@@ -262,7 +265,9 @@ def test_cli_explicit_recovery_and_help() -> None:
         reposition=False,
         recover_contracts=True,
     )
-    text = " ".join(help_result.output.replace(chr(0x2502), " ").split())
+    text = " ".join(
+        unstyle(help_result.output).replace(chr(0x2502), " ").split()
+    )
     assert "--recover-contracts" in text
     assert "--execute" in text
     assert "unaccepted intent" in text

@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from py_st.cli.app import app
@@ -465,14 +466,20 @@ def test_cli_offline_no_record_writes_credentials_or_session(
     assert not (ledger.parent / ".state").exists()
 
 
+@pytest.mark.parametrize("force_color", [False, True])
 def test_cli_missing_database_and_required_scope(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    force_color: bool,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    if force_color:
+        monkeypatch.setenv("FORCE_COLOR", "1")
+    else:
+        monkeypatch.delenv("FORCE_COLOR", raising=False)
     result = CliRunner().invoke(app, ["auto", "sources", "C"])
     assert result.exit_code != 0
-    assert "--scope" in result.output
+    assert "--scope" in unstyle(result.output)
     result = CliRunner().invoke(
         app,
         [
@@ -484,5 +491,5 @@ def test_cli_missing_database_and_required_scope(
         ],
     )
     assert result.exit_code != 0
-    assert "existing intelligence database" in result.output
+    assert "existing intelligence database" in unstyle(result.output)
     assert not (tmp_path / ".state").exists()
