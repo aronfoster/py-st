@@ -184,7 +184,7 @@ def test_key_must_match_original_contract(local: dict[str, Any]) -> None:
     assert not local["posts"]
 
 
-def test_completed_recovery_next_step_earns_without_new_contracts(
+def test_completed_recovery_stops_without_new_contracts(
     local: dict[str, Any],
 ) -> None:
     run = intent(local, 12)
@@ -197,24 +197,15 @@ def test_completed_recovery_next_step_earns_without_new_contracts(
         reads += 1
         return refresh()
 
-    def earn(actual: Session, system: str, **kwargs: Any) -> dict[str, Any]:
-        assert actual is run and actual.lock is lock
-        assert actual.deadline == deadline
-        assert reads >= 2 and local["contract"]["fulfilled"]
-        assert actual.remaining == 29
-        actual.remaining -= 1
-        return {"status": "cycle limit"}
-
     with (
         patch.object(run, "refresh", side_effect=fresh),
-        patch("py_st.services.pilot.earn_run", side_effect=earn) as earning,
+        patch("py_st.services.pilot.earn_run") as earning,
+        pytest.raises(SafetyStop, match="No open procurement"),
     ):
-        result = pilot_run(run, "X-A", steps=2, recover_contracts=True)
-    earning.assert_called_once_with(
-        run, "X-A", cycles=1, max_age=900, reposition=False
-    )
-    assert result["completed_steps"] == 2
-    assert result["actions_used"] == 2
+        pilot_run(run, "X-A", steps=2, recover_contracts=True)
+    earning.assert_not_called()
+    assert run.deadline == deadline and run.lock is lock
+    assert reads >= 2 and local["contract"]["fulfilled"]
     assert len(local["posts"]) == 13
 
 
@@ -235,10 +226,11 @@ def test_offline_plan_does_not_authorize_recovery(
             "py_st.services.pilot.earn_run",
             return_value={"status": "cycle limit"},
         ) as earn,
+        pytest.raises(SafetyStop, match="No open procurement"),
     ):
         pilot_run(run, "X-A", steps=1, recover_contracts=True)
     recover.assert_not_called()
-    earn.assert_called_once()
+    earn.assert_not_called()
     assert not local["posts"]
 
 
@@ -253,7 +245,7 @@ def test_cli_explicit_recovery_and_help() -> None:
         help_result = CliRunner().invoke(
             app,
             ["auto", "pilot", "--help"],
-            env={"COLUMNS": "240", "FORCE_COLOR": "1"},
+            env={"COLUMNS": "320", "FORCE_COLOR": "1"},
         )
     assert result.exit_code == help_result.exit_code == 0
     session.assert_called_once_with(True, 3600, 100)
@@ -268,7 +260,7 @@ def test_cli_explicit_recovery_and_help() -> None:
     text = " ".join(
         unstyle(help_result.output).replace(chr(0x2502), " ").split()
     )
-    assert "--recover-contracts" in text
+    assert "Recover one existing procurement intent" in text
     assert "--execute" in text
     assert "unaccepted intent" in text
     assert "never selects new offers or negotiates" in text

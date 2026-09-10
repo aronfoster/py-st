@@ -106,14 +106,14 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                     result = diagnose(database, scope, root=root)
                     self.reply(
                         400 if result["exit_code"] == 2 else 200,
-                        json.dumps(result),
+                        json.dumps(result, allow_nan=False),
                     )
                     return
                 if url.path == "/api/sources":
                     result = contract_sources(
                         database, scope, query.get("contract", [""])[0]
                     )
-                    self.reply(200, json.dumps(result))
+                    self.reply(200, json.dumps(result, allow_nan=False))
                     return
                 if not database.is_file():
                     if scope:

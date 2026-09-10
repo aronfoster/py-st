@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import time
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
 from py_st.client.transport import JSONList
 from py_st.services.automation import SafetyStop, Session
@@ -176,6 +176,7 @@ def scout_run(
     max_age: int = 900,
     *,
     excluded: set[str] | None = None,
+    waypoints: JSONList | None = None,
 ) -> dict[str, Any]:
     if not 1 <= attempts <= 100 or not 1 <= max_age <= 86400:
         raise ValueError("Bounds: 1..100 attempts, 1..86400 max-age seconds")
@@ -184,12 +185,8 @@ def scout_run(
     if not any(s["nav"]["systemSymbol"] == system for s in state["ships"]):
         raise SafetyStop("Scouting requires an owned ship in the same system")
     run.check()
-    waypoints = cast(
-        JSONList,
-        run.client.request(
-            "GET", f"/systems/{system}/waypoints", paginate=True
-        ),
-    )
+    if waypoints is None:
+        waypoints = run.get_all(f"/systems/{system}/waypoints")
     for waypoint in waypoints:
         run.check()
         run.store.observe(run.scope, "waypoint", waypoint["symbol"], waypoint)

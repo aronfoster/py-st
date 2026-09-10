@@ -33,7 +33,7 @@ extend-exclude = "src/py_st/_generated"
 
 [tool.ruff]
 line-length = 79
-fix = true
+fix = false
 target-version = "py311"
 exclude = [
   "src/py_st/_generated",

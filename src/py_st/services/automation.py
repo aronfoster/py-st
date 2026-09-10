@@ -77,10 +77,31 @@ class Session:
 
     def get(self, path: str) -> JSONDict:
         self.check()
-        return cast(JSONDict, self.client.request("GET", path))
+        try:
+            return cast(JSONDict, self.client.request("GET", path))
+        except RequestAborted as exc:
+            if exc.__cause__ is not None:
+                raise exc.__cause__ from None
+            raise
+
+    def get_all(self, path: str) -> JSONList:
+        self.check()
+        try:
+            return cast(
+                JSONList, self.client.request("GET", path, paginate=True)
+            )
+        except RequestAborted as exc:
+            if exc.__cause__ is not None:
+                raise exc.__cause__ from None
+            raise
 
     def refresh(self) -> dict[str, Any]:
-        status = self.client.status()
+        try:
+            status = self.client.status()
+        except RequestAborted as exc:
+            if exc.__cause__ is not None:
+                raise exc.__cause__ from None
+            raise
         agent = self.get("/my/agent")
         scope = f"{status['resetDate']}:{agent['symbol']}"
         if self.scope and self.scope != scope:
@@ -96,10 +117,7 @@ class Session:
             ("contracts", "contract", "id"),
         ):
             self.check()
-            items = cast(
-                JSONList,
-                self.client.request("GET", f"/my/{plural}", paginate=True),
-            )
+            items = self.get_all(f"/my/{plural}")
             result[plural] = items
             for item in items:
                 self.store.observe(scope, kind, item[key], item)
@@ -383,12 +401,7 @@ class Session:
 
     def scan(self, system: str) -> dict[str, Any]:
         self.refresh()
-        waypoints = cast(
-            JSONList,
-            self.client.request(
-                "GET", f"/systems/{system}/waypoints", paginate=True
-            ),
-        )
+        waypoints = self.get_all(f"/systems/{system}/waypoints")
         markets = []
         for waypoint in waypoints:
             self.check()

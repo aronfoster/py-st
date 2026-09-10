@@ -371,8 +371,10 @@ def test_closed_intent_is_not_a_doctor_or_pilot_recovery(
         patch("py_st.services.pilot.contract_run") as recover,
         patch(
             "py_st.services.pilot.earn_run", return_value={"status": "dry run"}
-        ),
+        ) as earn,
+        pytest.raises(SafetyStop, match="No open procurement"),
     ):
         pilot_run(intent["run"], "X-A", recover_contracts=True)
     recover.assert_not_called()
+    earn.assert_not_called()
     assert intent["posts"] == []
