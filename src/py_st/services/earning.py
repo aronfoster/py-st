@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
-from py_st.client.transport import JSONList
 from py_st.services.automation import SafetyStop, Session
 from py_st.services.repositioning import reposition_plan, reposition_run
 from py_st.services.scouting import scout_run
@@ -65,12 +64,7 @@ def earn_run(
             raise SafetyStop("Earn requires an owned ship in the same system")
         if not decisions:
             run.check()
-            waypoints = cast(
-                JSONList,
-                run.client.request(
-                    "GET", f"/systems/{system}/waypoints", paginate=True
-                ),
-            )
+            waypoints = run.get_all(f"/systems/{system}/waypoints")
             for waypoint in waypoints:
                 run.check()
                 run.store.observe(
@@ -169,7 +163,12 @@ def earn_run(
             )
         else:
             discovery = scout_run(
-                run, system, attempts=1, max_age=max_age, excluded=visited
+                run,
+                system,
+                attempts=1,
+                max_age=max_age,
+                excluded=visited,
+                waypoints=waypoints,
             )
             decision["result"] = discovery
             visited.update(v["target"] for v in discovery.get("visits", []))

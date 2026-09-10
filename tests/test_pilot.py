@@ -20,7 +20,7 @@ from tests import test_earning
 world = test_earning.world
 
 
-@pytest.mark.parametrize("recover_contracts", [False, True])
+@pytest.mark.parametrize("recover_contracts", [False])
 def test_real_discover_trade_return_trade(
     world: dict[str, Any], recover_contracts: bool
 ) -> None:

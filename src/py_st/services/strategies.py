@@ -67,8 +67,13 @@ def fleet_run(
         location = ship["nav"]["waypointSymbol"]
         if system and location.rsplit("-", 1)[0] != system:
             continue
-        if location in markets and ship["nav"]["status"] != "IN_TRANSIT":
+        if (
+            location in markets
+            and location not in fresh
+            and ship["nav"]["status"] != "IN_TRANSIT"
+        ):
             fresh[location] = run.market(location)
+    routes_by_capacity: dict[int, list[dict[str, Any]]] = {}
     candidates = []
     for ship in state["ships"]:
         if (
@@ -77,7 +82,12 @@ def fleet_run(
             or ship["nav"]["flightMode"] != "CRUISE"
         ):
             continue
-        for route in run.store.routes(run.scope, ship["cargo"]["capacity"]):
+        capacity = ship["cargo"]["capacity"]
+        if capacity not in routes_by_capacity:
+            routes_by_capacity[capacity] = run.store.routes(
+                run.scope, capacity
+            )
+        for route in routes_by_capacity[capacity]:
             if (
                 route["stale"]
                 or ship["nav"]["waypointSymbol"] != route["source"]
@@ -463,8 +473,6 @@ def trade_run(
                 return plan
             if not plan["feasible"]:
                 raise SafetyStop("No positive conservative trade margin")
-            if not require_source:
-                run.navigate(ship_symbol, source)
             ship = run.dock(ship_symbol)
             if (
                 ship["fuel"]["capacity"]

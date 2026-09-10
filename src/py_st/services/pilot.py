@@ -167,6 +167,8 @@ def pilot_run(
                         raise SafetyStop(
                             "Other accepted contracts need review"
                         )
+                else:
+                    raise SafetyStop("No open procurement intent to recover")
             if original is not None:
                 result = contract_run(
                     run,

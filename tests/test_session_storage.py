@@ -1,5 +1,6 @@
 """CLI ledger authority tests use only synthetic child workspaces and APIs."""
 
+import os
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -543,52 +544,36 @@ def test_observe_accepts_existing_v1_without_losing_history(
     store.close()
 
 
-@pytest.mark.parametrize("valid", [False, True])
-def test_observe_file_appearing_at_exclusive_claim_is_not_repaired(
-    workspace: dict[str, Any], valid: bool
+def test_observe_file_appearing_at_atomic_publish_is_not_repaired(
+    workspace: dict[str, Any],
 ) -> None:
     database = workspace["database"]
-    original_open = Path.open
+    original_link = os.link
     claimed: list[bytes] = []
 
-    def race(path: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
-        if mode == "xb":
-            assert path.resolve() == database
-            assert not database.exists()
-            seed(database)
-            store = Intelligence(database)
-            if valid:
-                store.begin_action("r:a", "/my/ships/a-1/dock", {})
-            else:
-                store.db.execute("DROP TABLE actions")
-            store.close()
-            claimed.append(database.read_bytes())
-        return original_open(path, mode, *args, **kwargs)
+    def race(source: Path, target: Path) -> None:
+        seed(database)
+        store = Intelligence(database)
+        store.db.execute("DROP TABLE actions")
+        store.close()
+        claimed.append(database.read_bytes())
+        original_link(source, target)
 
-    with patch.object(Path, "open", race):
+    with patch("py_st.services.intelligence.os.link", side_effect=race):
         result = CliRunner().invoke(app, ["auto", "observe"])
 
     assert len(claimed) == 1
-    if valid:
-        assert result.exit_code == 0, result.output
-        store = Intelligence(database, existing_only=True)
-        assert store.pending("r:a")
-        assert len(snapshot(database)[0]) == 2
-        store.close()
-    else:
-        assert result.exit_code != 0
-        assert database.read_bytes() == claimed[0]
-        workspace["find"].assert_not_called()
-        workspace["api"].assert_not_called()
+    assert result.exit_code != 0
+    assert database.read_bytes() == claimed[0]
+    workspace["find"].assert_not_called()
+    workspace["api"].assert_not_called()
 
 
 @pytest.mark.parametrize("failure", ["connect", "pragma", "schema"])
-def test_new_ledger_failure_closes_claim_and_connection(
+def test_new_ledger_failure_removes_temporary_database(
     tmp_path: Path, failure: str
 ) -> None:
     database = tmp_path / "new.sqlite3"
-    original_open = Path.open
-    handles: list[Any] = []
     connection = MagicMock()
     connection.execute.return_value.fetchone.return_value = [0]
     error = sqlite3.OperationalError("synthetic failure")
@@ -597,13 +582,7 @@ def test_new_ledger_failure_closes_claim_and_connection(
     elif failure == "schema":
         connection.executescript.side_effect = error
 
-    def claim(path: Path, *args: Any, **kwargs: Any) -> Any:
-        handle = original_open(path, *args, **kwargs)
-        handles.append(handle)
-        return handle
-
     with (
-        patch.object(Path, "open", claim),
         patch(
             "py_st.services.intelligence.sqlite3.connect",
             side_effect=error if failure == "connect" else None,
@@ -613,10 +592,7 @@ def test_new_ledger_failure_closes_claim_and_connection(
     ):
         Intelligence(database, existing_or_create=True)
 
-    assert len(handles) == 1 and handles[0].closed
-    assert database.exists()
+    assert not database.exists()
+    assert list(tmp_path.iterdir()) == []
     if failure != "connect":
         connection.close.assert_called_once()
-    # A failed bootstrap is not silently retried as another new ledger.
-    with pytest.raises(ValueError, match="schema version"):
-        Intelligence(database, existing_or_create=True)

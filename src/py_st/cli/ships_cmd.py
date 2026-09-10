@@ -175,9 +175,6 @@ def extract_resources_cli(
     t = _get_token(token)
     resolved_symbol = resolve_ship_id(t, ship_symbol)
     extraction = ships.extract_resources(t, resolved_symbol)
-    if extraction is None:
-        print("Extraction failed or aborted.")
-        return
     print("⛏️ Extraction successful!")
     print(json.dumps(extraction.model_dump(mode="json"), indent=2))
 

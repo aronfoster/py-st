@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sqlite3
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -30,11 +32,26 @@ class Intelligence:
             return
         if existing_or_create and not existing_only:
             path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                # Only our exclusively claimed file may receive a new schema.
-                with path.open("xb"):
+            if path.exists():
+                existing_only = True
+            else:
+                temporary = path.with_name(
+                    f".{path.name}.{uuid.uuid4().hex}.tmp"
+                )
+                try:
+                    created = Intelligence(temporary)
+                    created.close()
+                    os.link(temporary, path)
+                except FileExistsError:
                     pass
-            except FileExistsError:
+                finally:
+                    temporary.unlink(missing_ok=True)
+                    temporary.with_name(temporary.name + "-wal").unlink(
+                        missing_ok=True
+                    )
+                    temporary.with_name(temporary.name + "-shm").unlink(
+                        missing_ok=True
+                    )
                 existing_only = True
         if existing_only:
             self.db = sqlite3.connect(
@@ -161,9 +178,9 @@ class Intelligence:
 
     def finish_action(self, action: int, status: str, result: Any) -> None:
         with self.db:
-            self.db.execute(
+            cursor = self.db.execute(
                 "UPDATE actions SET status=?,finished_at=?,result=? "
-                "WHERE id=?",
+                "WHERE id=? AND status='pending'",
                 (
                     status,
                     datetime.now(UTC).isoformat(),
@@ -171,6 +188,8 @@ class Intelligence:
                     action,
                 ),
             )
+            if cursor.rowcount != 1:
+                raise ValueError("Action is missing or already finished")
 
     def actions(self, scope: str) -> list[dict[str, Any]]:
         return [

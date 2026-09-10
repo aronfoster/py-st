@@ -2,7 +2,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [ master, aron/fos-63-review ]
+    branches: [ master ]
 
 jobs:
   test:
