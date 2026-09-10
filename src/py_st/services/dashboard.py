@@ -16,6 +16,7 @@ from py_st.services.doctor import diagnose
 from py_st.services.intelligence import Intelligence
 from py_st.services.market_history import market_history
 from py_st.services.stop_control import request_stop, stop_requested
+from py_st.services.system_explorer import system_explorer
 
 
 def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
@@ -133,6 +134,9 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                 if not scope and len(scopes) == 1:
                     scope = scopes[0]
                 report = store.report(scope) if scope in scopes else {}
+                report["explorer"] = (
+                    system_explorer(store, scope) if scope in scopes else {}
+                )
                 report["agents"] = store.latest(scope, "agent")
                 report.update(
                     {"scopes": scopes, "paused": stop_requested(root)}

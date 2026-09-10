@@ -17,6 +17,8 @@ main{max-width:1500px;margin:auto;padding:36px 5vw}h1{font:clamp(32px,4vw,54px) 
 .builder-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:0 18px}.builder-fields>div{min-width:0}.desk input[type=number]{width:100%;min-width:0;padding:11px;background:var(--paper);color:var(--ink);border:1px solid var(--line);font:13px monospace}.desk input:focus-visible{outline:3px solid #f2a844;outline-offset:3px}.desk input[type=checkbox]{width:20px;height:20px;vertical-align:middle;accent-color:#3c7152;margin:0 10px 0 0}.builder-route{border:1px solid var(--line);padding:14px;margin-top:14px;min-width:0}.builder-route fieldset{border:0;padding:0;margin:0;min-width:0}.builder-route fieldset:disabled{opacity:.55}.builder-route>label{line-height:1.7;margin:0}.desk input[aria-invalid=true]{border-color:var(--amber)}
 .builder-route fieldset[hidden]{display:none}
 #market-trend[hidden]{display:none}
+.explorer-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:20px}.system-map{width:100%;height:auto;min-height:340px;background:#f6f4ed;border:1px solid var(--line);display:block}.system-map .waypoint{cursor:pointer;stroke:var(--paper);stroke-width:2}.system-map .selected{stroke:#f2a844;stroke-width:5}.system-map .ship-mark{fill:none;stroke:#a85b20;stroke-width:3;pointer-events:none}.system-map text{font:11px monospace;fill:var(--ink);pointer-events:none}.explorer-list{max-height:420px;overflow:auto;display:grid;gap:6px}.explorer-list button{width:100%;text-align:left;background:#f6f4ed}.explorer-list button[aria-current=true]{background:var(--accent);border-color:var(--ink)}.explorer-key{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 14px}.explorer-key span{font:11px monospace}.explorer-detail{margin-top:18px}.explorer-detail dl{display:grid;grid-template-columns:max-content 1fr;gap:8px 14px;font:12px monospace}.explorer-detail dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:800px){.explorer-layout{grid-template-columns:1fr}.system-map{min-height:260px}.explorer-list{max-height:300px}}
 </style>
 </head>
 <body>
@@ -25,7 +27,8 @@ main{max-width:1500px;margin:auto;padding:36px 5vw}h1{font:clamp(32px,4vw,54px) 
 <section class="lead"><div><div class="eyebrow">Local intelligence / no live requests from this page</div><h1>Keep the fleet earning.</h1><p>Observed economics, fleet readiness and an accountable action trail. Decisions are bounded. The credit reserve is not negotiable.</p></div><div class="controls"><button id="refresh">Refresh ledger</button><button id="pause">Pause automation</button><button id="resume">Clear stop</button></div></section>
 <div id="error" role="alert"></div>
 <section class="metrics" aria-label="Account summary"><div class="metric"><div class="eyebrow">Credits on hand</div><div id="credits" class="value">--</div><div id="observed" class="small">No observation yet</div></div><div class="metric"><div class="eyebrow">Scope cash change</div><div id="profit" class="value">--</div><div class="small">Cash flow, not inventory-adjusted profit</div></div><div class="metric"><div class="eyebrow">Above fixed floor</div><div id="reserve" class="value">--</div><div class="small">Before fuel and contract obligations</div></div><div class="metric"><div class="eyebrow">Market coverage</div><div id="coverage" class="value">--</div><div class="small">Priced / advertised markets</div></div></section>
-<div class="grid"><section class="panel"><h2>The credit trail</h2><svg id="chart" class="chart" viewBox="0 0 600 180" role="img" aria-label="Observed credit history"></svg><div class="small">All observations are scoped to the selected reset and agent.</div></section><section class="panel"><h2>Local system</h2><svg id="map" class="chart" viewBox="0 0 600 180" role="img" aria-label="Fleet and market positions"></svg><div class="small">Market positions and last observed ship locations, not live telemetry.</div></section></div>
+<section class="panel"><h2>The credit trail</h2><svg id="chart" class="chart" viewBox="0 0 600 180" role="img" aria-label="Observed credit history"></svg><div class="small">All observations are scoped to the selected reset and agent.</div></section>
+<section class="desk" aria-labelledby="explorer-title"><div class="eyebrow">System explorer / stored observations only</div><h2 id="explorer-title">Explore a recorded system.</h2><div class="controls"><label for="system-select" class="small">SYSTEM</label><select id="system-select"></select><label for="explorer-ship" class="small">FLEET</label><select id="explorer-ship"></select></div><div class="explorer-key"><span>● waypoint</span><span>◆ market</span><span>■ shipyard</span><span>⬢ jump gate</span><span>◎ selected ship</span></div><p id="explorer-status" class="small" role="status"></p><div class="explorer-layout"><svg id="map" class="system-map" viewBox="0 0 700 420" role="img" aria-label="Observed system waypoints"></svg><div><div id="waypoint-list" class="explorer-list" aria-label="Observed waypoints"></div></div></div><div id="waypoint-detail" class="explorer-detail"></div></section>
 <div class="grid"><section class="panel"><h2>Fleet readiness</h2><div id="fleet" class="fleet"></div></section><section class="panel"><h2>Contract desk</h2><div id="contracts"></div><h2 style="margin-top:24px">Strategy notes</h2><div id="plans"></div></section></div>
 <section class="desk" aria-labelledby="market-title">
 <div class="eyebrow">Market desk / cached evidence only</div><h2 id="market-title">Inspect the recorded market.</h2>
@@ -142,6 +145,38 @@ async function loadMarketHistory(){
  }catch(e){if(version===marketVersion)$('market-status').textContent='History unavailable: '+e.message;}
 }
 let ledger={}, deskEvidence=null, deskSnapshot=null, builderBase=null, deskVersion=0, reportVersion=0, modelVersion=0, doctorVersion=0;
+let explorerSystem='', explorerWaypoint='', explorerShip='';
+const observation=row=>row?`${row.observed_at||'timestamp missing'} / ${row.source||'source missing'}`:'not observed';
+function systemForWaypoint(symbol){return (ledger.explorer?.systems||[]).find(s=>s.waypoints.some(w=>w.symbol===symbol))?.symbol||''}
+function selectWaypoint(symbol){explorerWaypoint=symbol;drawExplorer()}
+function waypointMarker(w,x,y){let marker;if(w.has_jump_gate)marker=svg('polygon',{points:`${x},${y-11} ${x+10},${y-5} ${x+10},${y+5} ${x},${y+11} ${x-10},${y+5} ${x-10},${y-5}`});else if(w.has_shipyard)marker=svg('rect',{x:x-8,y:y-8,width:16,height:16});else if(w.has_market)marker=svg('polygon',{points:`${x},${y-9} ${x+9},${y} ${x},${y+9} ${x-9},${y}`});else marker=svg('circle',{cx:x,cy:y,r:5});marker.setAttribute('class','waypoint'+(w.symbol===explorerWaypoint?' selected':''));return marker}
+function describeExplorer(w){
+ const out=$('waypoint-detail');out.replaceChildren();if(!w){out.append(node('p','Select a waypoint on the map or in the list.','empty'));return;}
+ out.append(node('h3',w.symbol));const dl=node('dl');
+ const add=(term,value)=>{dl.append(node('dt',term),node('dd',value));};
+ add('Type',w.type||'unknown');add('Coordinates',Number.isFinite(w.x)&&Number.isFinite(w.y)?`${w.x}, ${w.y}`:'missing');add('Traits',w.traits===null?'not observed':w.traits.length?w.traits.join(', '):'observed empty');add('Waypoint observed',w.observed_at||'timestamp missing');
+ if(w.has_market){const goods=w.market?.data?.tradeGoods;add('Market observation',observation(w.market));add('Market prices',!w.market?'missing':!Array.isArray(goods)?'not included in stored result':goods.length?goods.map(g=>`${g.symbol}: buy ${g.purchasePrice??'unknown'} / sell ${g.sellPrice??'unknown'} / volume ${g.tradeVolume??'unknown'}`).join('; '):'observed empty');}
+ if(w.has_shipyard){const ships=w.shipyard?.data?.ships;add('Shipyard observation',observation(w.shipyard));add('Shipyard details',!w.shipyard?'missing':!Array.isArray(ships)?'not included in stored result':ships.length?ships.map(s=>s.type||s.name||'unnamed ship').join(', '):'observed empty');}
+ if(w.has_jump_gate)add('Jump gate observation',observation(w.jump_gate));
+ out.append(dl);
+}
+function drawExplorer(){
+ const explorer=ledger.explorer||{systems:[],ships:[]},system=explorer.systems.find(s=>s.symbol===explorerSystem),points=system?.waypoints||[],map=$('map'),list=$('waypoint-list');map.replaceChildren();list.replaceChildren();
+ if(!system){$('explorer-status').textContent='No observed waypoint systems in this scope.';describeExplorer(null);return;}
+ if(!points.some(w=>w.symbol===explorerWaypoint))explorerWaypoint='';
+ const plotted=points.filter(w=>Number.isFinite(w.x)&&Number.isFinite(w.y)),xs=plotted.map(w=>w.x),ys=plotted.map(w=>w.y),xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys),dx=Math.max(1,xmax-xmin),dy=Math.max(1,ymax-ymin),scale=Math.min(600/dx,330/dy),xoff=350-(xmin+xmax)*scale/2,yoff=210-(ymin+ymax)*scale/2;
+ const selectedShip=explorer.ships.find(s=>s.symbol===explorerShip),shipTarget=selectedShip?.status==='IN_TRANSIT'?selectedShip.destination:selectedShip?.waypoint;
+ points.forEach(w=>{
+  const icons=[w.has_market?'◆':'',w.has_shipyard?'■':'',w.has_jump_gate?'⬢':''].filter(Boolean).join(' ')||'●',button=node('button',`${icons} ${w.symbol} / ${w.type||'unknown'} / (${Number.isFinite(w.x)&&Number.isFinite(w.y)?w.x+', '+w.y:'coordinates missing'}) / observed ${w.observed_at||'timestamp missing'}`);button.type='button';button.setAttribute('aria-current',String(w.symbol===explorerWaypoint));button.onclick=()=>selectWaypoint(w.symbol);list.append(button);
+  if(!Number.isFinite(w.x)||!Number.isFinite(w.y))return;const x=xoff+w.x*scale,y=yoff+w.y*scale,g=svg('g',{role:'button',tabindex:'0','aria-label':w.symbol});g.append(waypointMarker(w,x,y),svg('text',{x:x+14,y:y+4},w.symbol));g.onclick=()=>selectWaypoint(w.symbol);g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectWaypoint(w.symbol)}};map.append(g);if(shipTarget===w.symbol)map.append(svg('circle',{cx:x,cy:y,r:17,class:'ship-mark'}));
+ });
+ const missing=points.length-plotted.length,transit=selectedShip?.status==='IN_TRANSIT';$('explorer-status').textContent=`${system.symbol}: ${points.length} observed waypoints; ${plotted.length} plotted${missing?`; ${missing} missing coordinates`:''}. ${selectedShip?transit?`${selectedShip.symbol} recorded in transit ${selectedShip.origin||'unknown origin'} → ${selectedShip.destination||'unknown destination'}; arrival ${selectedShip.arrival||'unknown'}. Destination highlighted; no estimated position shown.`:`${selectedShip.symbol} recorded at ${selectedShip.waypoint||'unknown'}; observed ${selectedShip.observed_at||'timestamp missing'}.`: 'Select a ship to highlight its recorded location or destination.'}`;
+ describeExplorer(points.find(w=>w.symbol===explorerWaypoint));
+}
+function syncExplorer(d){
+ const systems=d.explorer?.systems||[],systemSelect=$('system-select'),shipSelect=$('explorer-ship');systemSelect.replaceChildren(new Option('No observed systems',''));systems.forEach(s=>systemSelect.append(new Option(s.symbol,s.symbol)));if(!systems.some(s=>s.symbol===explorerSystem))explorerSystem=systems[0]?.symbol||'';systemSelect.value=explorerSystem;systemSelect.disabled=!systems.length;
+ shipSelect.replaceChildren(new Option('Select a ship',''));(d.explorer?.ships||[]).forEach(s=>shipSelect.append(new Option(`${s.symbol} / ${s.status||'unknown'}`,s.symbol)));if(!(d.explorer?.ships||[]).some(s=>s.symbol===explorerShip))explorerShip='';shipSelect.value=explorerShip;drawExplorer();
+}
 function clearDoctor(){doctorVersion++;$('doctor-status').textContent='';$('doctor-findings').replaceChildren();}
 async function checkDoctor(){
  clearDoctor();const version=doctorVersion, scope=$('scope').value;
@@ -178,11 +213,12 @@ function clearDesk(message){
  $('desk-status').textContent=message;$('model-submit').disabled=false;
 }
 function clearScope(){
+ explorerSystem='';explorerWaypoint='';explorerShip='';
  clearMarketHistory('Loading selected scope...');['market-select','good-select','market-prices','market-asof'].forEach(id=>$(id).replaceChildren());
  clearDoctor();
  clearDesk('Loading selected scope...');ledger={};
  ['credits','profit','reserve','coverage'].forEach(id=>$(id).textContent='--');
-  ['chart','map','fleet','contracts','plans','routes','cash','audit','positions','markets','journal','contract-select','automation-runs'].forEach(id=>$(id).replaceChildren());
+  ['chart','map','waypoint-list','waypoint-detail','system-select','explorer-ship','fleet','contracts','plans','routes','cash','audit','positions','markets','journal','contract-select','automation-runs'].forEach(id=>$(id).replaceChildren());
  $('audit').classList.remove('warn');$('error').textContent='';
  $('observed').textContent='Loading selected scope...';
  $('export').removeAttribute('href');$('export').setAttribute('aria-disabled','true');
@@ -330,7 +366,7 @@ function render(d){
  $('state').textContent=d.paused?'STOP REQUESTED':'STOP CLEAR';$('state').classList.toggle('warn',d.paused);
  const history=d.credits||[],last=history.at(-1);$('credits').textContent=last?fmt(last.credits):'--';$('profit').textContent=fmt(d.credit_change||0);$('reserve').textContent=last?fmt(last.credits-50000):'--';$('observed').textContent=last?'Observed '+age(last.observed_at)+' ago':'Select a universe / agent';$('coverage').textContent=(d.prices||[]).length+' / '+(d.markets||[]).length;
  const chart=$('chart');chart.replaceChildren();if(history.length){const min=Math.min(...history.map(x=>x.credits)),max=Math.max(...history.map(x=>x.credits)),span=Math.max(1,max-min);chart.append(svg('polyline',{points:history.map((p,i)=>`${15+i*570/Math.max(1,history.length-1)},${145-(p.credits-min)/span*120}`).join(' ')}));chart.append(svg('text',{x:15,y:174},fmt(min)+' - '+fmt(max)+' credits'))}
- const map=$('map');map.replaceChildren();const points=(d.waypoints||[]).filter(w=>w.data.traits.some(t=>t.symbol==='MARKETPLACE'));if(points.length){const xs=points.map(p=>p.data.x),ys=points.map(p=>p.data.y),xmin=Math.min(...xs),ymin=Math.min(...ys),dx=Math.max(1,Math.max(...xs)-xmin),dy=Math.max(1,Math.max(...ys)-ymin);points.forEach(p=>{const x=30+(p.data.x-xmin)/dx*520,y=15+(p.data.y-ymin)/dy*145;map.append(svg('circle',{cx:x,cy:y,r:3}));const ships=(d.ships||[]).filter(s=>s.data.nav.waypointSymbol===p.key);ships.forEach((s,i)=>{map.append(svg('circle',{cx:x,cy:y,r:6,style:'fill:#d39143'}));map.append(svg('text',{x:x+9,y:y+4+i*12},s.key))})})}
+ syncExplorer(d);
  $('fleet').replaceChildren();(d.ships||[]).forEach(r=>{const s=r.data,card=node('article',undefined,'ship'),top=node('div',undefined,'ship-top');top.append(node('strong',s.symbol),node('span',s.nav.status));card.append(top,node('p',s.nav.waypointSymbol+' / '+s.nav.flightMode+' / observed '+age(r.observed_at)+' ago'));const fuel=s.fuel,bar=node('div',undefined,'bar'),fill=node('i');fill.style.width=(fuel.capacity?100*fuel.current/fuel.capacity:100)+'%';bar.append(fill);card.append(node('div',`Fuel ${fuel.current}/${fuel.capacity}   Cargo ${s.cargo.units}/${s.cargo.capacity}`,'small'),bar,node('div',`Cooldown ${s.cooldown.remainingSeconds}s (at observation)`,'small'));const details=node('details');details.append(node('summary','Cargo and navigation details'),node('pre',JSON.stringify({cargo:s.cargo.inventory,route:s.nav.route},null,2)));card.append(details);$('fleet').append(card)});
  $('contracts').replaceChildren();(d.contracts||[]).forEach(r=>{const c=r.data,card=node('article',undefined,'ship');card.append(node('div',c.fulfilled?'FULFILLED':c.accepted?'ACCEPTED':'AVAILABLE','eyebrow'),node('p',c.id));(c.terms.deliver||[]).forEach(g=>card.append(node('div',`${g.tradeSymbol}: ${g.unitsFulfilled}/${g.unitsRequired} -> ${g.destinationSymbol}`,'small')));card.append(node('p',`Payout ${fmt(c.terms.payment.onAccepted+c.terms.payment.onFulfilled)} / due ${c.terms.deadline}`,'small'));$('contracts').append(card)});
  $('plans').replaceChildren();(d.plans||[]).forEach(r=>{const el=node('details');el.append(node('summary',r.key),node('pre',JSON.stringify(r.data,null,2)));$('plans').append(el)});
@@ -347,6 +383,7 @@ $('contract-select').onchange=loadSources;$('source-reload').onclick=loadSources
 $('builder-form').onsubmit=buildDraft;$('builder-form').oninput=event=>{event.target.removeAttribute('aria-invalid');$('builder-error').textContent='';$('builder-status').textContent='Form changed. Build draft from form to apply; JSON is unchanged.';};
 $('refresh').onclick=refresh;$('scope').onchange=()=>{clearScope();refresh()};$('pause').onclick=()=>control('pause');$('resume').onclick=()=>control('resume');refresh();setInterval(refresh,10000);
 $('doctor-check').onclick=checkDoctor;
+$('system-select').onchange=()=>{explorerSystem=$('system-select').value;explorerWaypoint='';drawExplorer()};$('explorer-ship').onchange=()=>{explorerShip=$('explorer-ship').value;const ship=ledger.explorer?.ships.find(s=>s.symbol===explorerShip),target=ship?.status==='IN_TRANSIT'?ship.destination:ship?.waypoint,system=target?systemForWaypoint(target):'';if(system){explorerSystem=system;$('system-select').value=system;explorerWaypoint=target;}drawExplorer()};
 $('market-select').onchange=()=>{$('good-select').value='';showMarket();};$('good-select').onchange=loadMarketHistory;
 </script>
 </body>
