@@ -1,10 +1,26 @@
 # Flight Ledger Operations
 
-Run commands from the worktree root. Activate a Python 3.12 virtual environment
+Run commands from the normal repository root; no extra worktree is needed.
+The local checkout and its `.state` ledger were consolidated here. Activate a
+Python 3.12 virtual environment
 and install `python -m pip install -e '.[dev]'` (see the README for setup).
 For source-tree execution, use `export PYTHONPATH=src`. The CLI discovers
 the ignored `.env` up the current directory's parent chain. Never pass tokens
 as command arguments. No automatic registration is performed.
+
+Live commands, including GET-only previews, require an existing version-1 WAL
+ledger with a valid recorded agent identity in the current directory. They never
+silently create replacement history. Before a workflow starts, its locked Session
+checks the live reset/agent against that recorded identity without first writing
+it. A mismatch or authentication failure does not initialize a new scope.
+
+If a command reports missing history, return to the authoritative repository
+directory first. **Do not create an empty ledger in another directory to bypass
+the error.** `auto observe` explicitly permits initialization for genuinely new
+history or an owner-reviewed reset/account transition. Existing initialized
+ledgers require no migration or marker. Offline report/backup tools can create
+empty local stores, but an empty or market-only store does not authorize live
+workflows. Read-only SQLite and existing-file opens may still use WAL sidecars.
 
 ## Choose the Right Workflow
 
@@ -86,6 +102,13 @@ cached evidence; scope/selection changes invalidate outstanding history results.
 
 ## Recorded Safety Doctor (Offline)
 
+STOP is a filesystem sentinel: any directory entry named `STOP`, including a
+dangling symbolic link, requests a stop. Runner, report and doctor use the same
+detection. Dashboard pause exclusively creates the sentinel if absent and preserves
+an existing entry/target; clear-stop unlinks the sentinel, never a symlink target.
+A directory or inaccessible control path may require owner filesystem review;
+the dashboard reports the control unavailable rather than claiming STOP cleared.
+
 ```sh
 python -m py_st auto doctor --scope RESET:AGENT
 python -m py_st auto doctor --scope RESET:AGENT --database .state/backup.sqlite3 --root . --max-age 900
@@ -99,6 +122,17 @@ Exit **0** means no recorded concerns, **1** means recorded concerns need attent
 and **2** means invalid or unavailable input, including missing database or unknown
 scope. Neither 0 nor fresh per-key records proves complete lists or live readiness.
 
+For one open procurement intent, the recovery finding includes a `procurement`
+summary joined to the latest contract and original ship in that scope. It shows
+required/delivered/remaining goods, matching held cargo, quantities still to acquire,
+excess and unrelated cargo, and a suggested recovery step to review. Missing or
+inconsistent evidence stays unknown. The position, contract and ship keep their
+separate observation timestamps: this is not a simultaneous live snapshot.
+Acceptance/delivery deadlines are classified against the report clock as open,
+expired or unknown; accepted contracts no longer need acceptance-time headroom.
+Expired completed contracts can still require local intent closure. These summaries
+never supply execution authority or automatically reconcile/abandon a position.
+
 In Flight Ledger, select a universe/agent and click **Check recorded safety** near
 Automation Runs. `GET /api/doctor?scope=RESET:AGENT` calls the same shared doctor
 with the server's fixed root and `.state/intelligence.sqlite3`. Exact loopback
@@ -107,6 +141,8 @@ database, execution and other parameters are rejected. Structured exit 0/1 resul
 return HTTP 200; invalid/unavailable results return HTTP 400. An empty checkout
 does not create a ledger. The check runs only on click, not on background refresh.
 New checks and scope changes discard late diagnostic responses and old findings.
+The same per-good progress, observation times and deadline states appear beneath
+the procurement finding in the dashboard.
 
 Findings are offline recorded evidence: live scope and readiness remain unverified,
 process liveness unknown, and execution unauthorized. Pending action IDs and any
@@ -276,11 +312,15 @@ the entire remaining load fitting its hold, carried delivery-leg round-trip
 fuel, and an independent stationary fuel-free probe at the delivery market.
 Reposition with guarded `auto move` dry runs/executions before acceptance.
 Fresh destination fuel must fund a full tank at a persisted 20% price ceiling,
-in addition to the 50,000 floor, 1,000 allowance and all remaining goods.
+including the refill command's own 20% headroom at that ceiling, in addition
+to the 50,000 floor, 1,000 allowance and all remaining goods. For a 400-unit tank
+and a 72-credit fuel quote, the ceiling is 87 and the full refill reserve is
+`4 * ceil(87 * 1.2) = 420`, not 348. Older saved price ceilings stay unchanged;
+acquisition rechecks the corrected funding requirement before further spending.
 Remote execution aggregates purchase batches before one delivery flight, then
 delivers and fulfills. Run guarded `auto refuel` afterward; its reserved refill
-is not automatically spent, and no return trip is promised. Multi-good and
-simultaneous accepted obligations fail closed. Dry-run
+is not automatically spent, and no return trip is promised. Remote multi-good
+and simultaneous accepted obligations fail closed. Dry-run
 prices must be available at the source, so scout with the probe first if needed.
 Purchases retain a 50,000 floor, 1,000 fuel allowance and budget for remaining
 contract goods. Unit prices may rise at most 20% from the original plan.
@@ -299,6 +339,24 @@ partial/full acquisition, delivery and fulfillment. Omitting `--source` on a
 restart uses that original source. Unknown outcomes still require reconciliation.
 No jettison, scrap, jump, warp or ship purchase
 is available through this automation.
+
+### Same-Market Multi-Good Execution
+
+`auto contract SHIP CONTRACT_ID` now handles one contract with multiple distinct
+goods when every delivery and acquisition uses the same marketplace and the ship
+is already there. It does not move or refuel the ship. It checks all goods and
+funds the complete remaining obligation before acceptance, then delivers after
+each capacity/volume-bounded purchase. This supports quantities larger than the
+hold without any travel legs. Repeated terms for the same good are rejected
+because the API's delivery request does not identify an individual term.
+
+A `procurement:CONTRACT_ID` execution intent preserves original ship, market,
+terms and per-good ceilings. Other nonclosed exposure blocks procurement, and
+an unaccepted procurement intent also blocks unrelated trading, fleet selection
+and refueling. Completed purchases/deliveries are observed, never blindly replayed;
+unknown outcomes remain pending. Owned-cargo delivery and final fulfillment do
+not require acquisition quotes or purchase liquidity. Read
+[Stationary Multi-Good Procurement](LOCAL_PROCUREMENT.md) before execution.
 
 For offline multi-good/multi-load analysis, use `auto contract-model INPUT.json`;
 see [Offline Contract Planning](CONTRACT_PLANNING.md). Shared source/good
@@ -536,10 +594,11 @@ mutation types, daemon, account registration or fleet purchases are enabled.
 
 `auto pilot SYSTEM` is the foreground controller for repeating earning decisions
 without manually restarting `earn` after each returned cycle or recovery. It
-does not choose contract procurement or extraction, and is not a daemon,
+does not choose new contracts or extraction. With `--recover-contracts`, it can
+recover one saved procurement intent before earning. It is not a daemon,
 scheduler, background service or dashboard-launchable process.
 
-1. Activate the environment at the worktree root. Inspect `auto report` first;
+1. Activate the environment at the repository root. Inspect `auto report` first;
    select `--scope RESET:AGENT` if it lists multiple scopes. Review open positions,
    pending actions and previous `automation_runs`. Do not overlap controllers or
    manual gameplay against the same account.
@@ -572,9 +631,11 @@ python -m py_st auto report --scope RESET:AGENT
 | `--actions` | 100 | 1..200 journaled mutations for the entire Session |
 | `--max-age` | 900 | 1..86400 seconds; scouting freshness and reposition evidence |
 | `--reposition` | false | Opt in to the costed return-to-original-source policy below |
+| `--recover-contracts` | false | Recover a single original procurement execution intent; never choose a new offer |
 | `--execute` | false | Explicitly permit guarded gameplay mutations |
 
-Execution calls `earn_run(..., cycles=1)` repeatedly with **one shared Session**:
+Execution calls `earn_run(..., cycles=1)` or opted-in contract recovery with
+**one shared Session**:
 one lock, deadline, action budget, STOP boundary and write-ahead journal. Budgets
 do not reset between steps. Each returned decision increments `completed_steps`;
 a decision that raises midway may have used actions without incrementing it.
@@ -587,6 +648,23 @@ invocation. No saved itinerary is replayed; later purchases still require fresh
 quotes, usable source fuel and the unchanged trade guards. Scout freshness and
 persisted visit cooldowns carry across calls, but earn's per-call visited set is
 not a pilot-wide itinerary exclusion.
+
+`--recover-contracts` only considers one open `procurement:CONTRACT_ID` position,
+not an offline Contract Desk model or saved preview. It validates the original
+ship/source/contract and invokes the same contract service. Recovery may include
+accepting an original unaccepted execution intent when `--execute` is supplied;
+it never negotiates or chooses a new offer. Missing/ambiguous identities, pending
+actions, other positions or other accepted obligations stop the run. One complete
+contract recovery counts as one returned decision, possibly many mutations. With
+more steps, ordinary earning can follow fulfillment. Use `--steps 1` to request
+only recovery; this still shares the overall time/action bounds.
+
+```sh
+# Live GET-only preview of an existing execution intent, not offline:
+python -m py_st auto pilot SYSTEM --recover-contracts --steps 1 --seconds 600 --actions 30
+# Explicit recovery only after reviewing the original intent and preview:
+python -m py_st auto pilot SYSTEM --recover-contracts --execute --steps 1 --seconds 600 --actions 30
+```
 
 Pilot stops on `no ready routes or scout targets` or `reposition blocked` instead
 of spinning. STOP, exhausted time/actions, pending outcomes and other safety
@@ -624,7 +702,8 @@ delete state or blindly replay an uncertain action to get past an error.
 
 The saved `resume_command` is a **suggestion for a NEW run with NEW budgets**,
 not continuation of the old UUID, remaining-time allowance or recorded decisions.
-It may include `--execute` and `--reposition`; review those flags and set explicit
+It may include `--execute`, `--reposition` and `--recover-contracts`; review
+those flags and set explicit
 bounds yourself. A deliberate restart observes current state and recovers durable
 positions before selecting new work. STOP is never automatically cleared and
 the UI cannot execute the suggested command. This documentation does not claim

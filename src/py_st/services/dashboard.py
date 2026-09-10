@@ -15,6 +15,7 @@ from py_st.services.contract_sources import contract_sources
 from py_st.services.doctor import diagnose
 from py_st.services.intelligence import Intelligence
 from py_st.services.market_history import market_history
+from py_st.services.stop_control import request_stop, stop_requested
 
 
 def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
@@ -120,7 +121,7 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                     self.reply(
                         200,
                         json.dumps(
-                            {"scopes": [], "paused": (root / "STOP").exists()}
+                            {"scopes": [], "paused": stop_requested(root)}
                         ),
                     )
                     return
@@ -134,13 +135,17 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                 report = store.report(scope) if scope in scopes else {}
                 report["agents"] = store.latest(scope, "agent")
                 report.update(
-                    {"scopes": scopes, "paused": (root / "STOP").exists()}
+                    {"scopes": scopes, "paused": stop_requested(root)}
                 )
                 self.reply(200, json.dumps(report))
             except ValueError as exc:
                 self.reply(400, json.dumps({"error": str(exc)}))
             except sqlite3.Error:
                 self.reply(503, json.dumps({"error": "Ledger unavailable"}))
+            except OSError:
+                self.reply(
+                    503, json.dumps({"error": "Local state unavailable"})
+                )
             finally:
                 if store is not None:
                     store.close()
@@ -202,11 +207,17 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                     self.reply(200, json.dumps(result, allow_nan=False))
                     return
                 if body.get("action") == "pause":
-                    (root / "STOP").touch()
+                    request_stop(root)
                 elif body.get("action") == "resume":
                     (root / "STOP").unlink(missing_ok=True)
                 else:
                     raise ValueError("action")
+                paused = stop_requested(root)
+            except OSError:
+                self.reply(
+                    503, json.dumps({"error": "STOP control unavailable"})
+                )
+                return
             except (
                 ValueError,
                 TypeError,
@@ -217,6 +228,6 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
             ) as exc:
                 self.reply(400, json.dumps({"error": str(exc)}))
                 return
-            self.reply(200, json.dumps({"paused": (root / "STOP").exists()}))
+            self.reply(200, json.dumps({"paused": paused}))
 
     return ThreadingHTTPServer(("127.0.0.1", port), Handler)

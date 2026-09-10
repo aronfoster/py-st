@@ -22,10 +22,15 @@ from py_st.services.contract_sources import contract_sources
 from py_st.services.dashboard import dashboard_server
 from py_st.services.doctor import diagnose
 from py_st.services.earning import earn_run
+from py_st.services.infrastructure import (
+    infrastructure_run,
+    validate_infrastructure,
+)
 from py_st.services.intelligence import Intelligence
 from py_st.services.mining import diagnose_mining
 from py_st.services.negotiation import negotiate_run
 from py_st.services.pilot import pilot_run
+from py_st.services.procurement_recovery import abandon_procurement
 from py_st.services.route_history import RouteScenario, evaluate_route
 from py_st.services.scouting import scout_plan, scout_run
 from py_st.services.strategies import (
@@ -39,23 +44,98 @@ auto_app = typer.Typer(help="Bounded automation; dry-run unless --execute.")
 
 
 @contextmanager
-def session(execute: bool, seconds: int, actions: int) -> Iterator[Session]:
-    load_dotenv(find_dotenv(usecwd=True))
-    token = os.environ.get("ST_TOKEN")
-    if not token:
-        raise typer.BadParameter("Set ST_TOKEN in ignored .env; never in argv")
-    store = Intelligence()
+def session(
+    execute: bool, seconds: int, actions: int, *, initialize: bool = False
+) -> Iterator[Session]:
+    guidance = (
+        "Return to the authoritative workspace first. Use auto observe only "
+        "for genuinely new history; do not copy or create an empty ledger "
+        "as a workaround."
+    )
+    try:
+        store = Intelligence(
+            existing_only=not initialize, existing_or_create=initialize
+        )
+    except (OSError, sqlite3.Error, ValueError):
+        raise typer.BadParameter(
+            f"Cannot open a supported durable intelligence ledger. {guidance}"
+        ) from None
     run: Session | None = None
     try:
-        with SpaceTradersClient(token) as client:
-            run = Session(
-                client,
-                store,
-                execute=execute,
-                seconds=seconds,
-                actions=actions,
-            )
+        recorded: set[str] = set()
+        if not initialize:
             try:
+                for scope in store.scopes():
+                    reset, separator, symbol = scope.partition(":")
+                    if (
+                        not separator
+                        or not reset
+                        or not symbol
+                        or reset != reset.strip()
+                        or symbol != symbol.strip()
+                        or ":" in symbol
+                    ):
+                        continue
+                    for row in store.latest(scope, "agent"):
+                        data = row["data"]
+                        if (
+                            row["key"] == symbol
+                            and isinstance(data, dict)
+                            and data.get("symbol") == symbol
+                        ):
+                            recorded.add(scope)
+            except (sqlite3.Error, ValueError, TypeError):
+                raise SafetyStop("Invalid recorded agent history") from None
+            if not recorded:
+                raise SafetyStop(
+                    f"No valid recorded agent history. {guidance}"
+                )
+        load_dotenv(find_dotenv(usecwd=True))
+        token = os.environ.get("ST_TOKEN")
+        if not token:
+            raise typer.BadParameter(
+                "Set ST_TOKEN in ignored .env; never in argv"
+            )
+        with SpaceTradersClient(token) as client:
+            try:
+                run = Session(
+                    client,
+                    store,
+                    execute=execute,
+                    seconds=seconds,
+                    actions=actions,
+                )
+            except (OSError, ValueError):
+                raise SafetyStop("Cannot initialize bounded session") from None
+            try:
+                run.check()
+                status = client.status()
+                agent = run.get("/my/agent")
+                live_reset = (
+                    status.get("resetDate")
+                    if isinstance(status, dict)
+                    else None
+                )
+                live_symbol = (
+                    agent.get("symbol") if isinstance(agent, dict) else None
+                )
+                if any(
+                    not isinstance(value, str)
+                    or not value.strip()
+                    or value != value.strip()
+                    or ":" in value
+                    for value in (live_reset, live_symbol)
+                ):
+                    raise SafetyStop("Invalid live reset/agent identity")
+                scope = f"{live_reset}:{live_symbol}"
+                if not initialize and scope not in recorded:
+                    raise SafetyStop(
+                        "Live reset/agent has no matching recorded agent in "
+                        "this ledger. Return to the authoritative workspace; "
+                        "review reset/account state without replacing history."
+                    )
+                run.check()
+                run.scope = scope
                 yield run
             finally:
                 run.close()
@@ -64,21 +144,34 @@ def session(execute: bool, seconds: int, actions: int) -> Iterator[Session]:
         message = (
             str(exc) if isinstance(exc, SafetyStop) else type(exc).__name__
         )
+        if isinstance(exc, APIError):
+            details = []
+            if type(exc.status) is int:
+                details.append(f"HTTP {exc.status}")
+            if type(exc.code) is int:
+                details.append(f"code {exc.code}")
+            if details:
+                message += f" ({', '.join(details)})"
         typer.echo(f"Stopped: {message}", err=True)
         if isinstance(exc, APIError) and exc.authentication_failed:
             typer.echo(
                 "Owner must update ST_TOKEN; do not auto-register.", err=True
             )
         if run is not None and run.scope:
-            typer.echo(
-                json.dumps(
-                    {
-                        "economics": store.economics(run.scope),
-                        "pending_action": store.pending(run.scope),
-                    },
-                    indent=2,
+            try:
+                typer.echo(
+                    json.dumps(
+                        {
+                            "economics": store.economics(run.scope),
+                            "pending_action": store.pending(run.scope),
+                        },
+                        indent=2,
+                    )
                 )
-            )
+            except (sqlite3.Error, ValueError, TypeError, KeyError):
+                typer.echo(
+                    "Recorded summary unavailable; inspect ledger.", err=True
+                )
         raise typer.Exit(1) from None
     finally:
         store.close()
@@ -87,7 +180,7 @@ def session(execute: bool, seconds: int, actions: int) -> Iterator[Session]:
 @auto_app.command()
 def observe() -> None:
     """Fresh agent, fleet and contracts into SQLite (no mutations)."""
-    with session(False, 120, 1) as run:
+    with session(False, 120, 1, initialize=True) as run:
         run.refresh()
         typer.echo(json.dumps(run.store.report(run.scope), indent=2))
 
@@ -97,6 +190,23 @@ def scan(system: str) -> None:
     """Record all waypoints and advertised markets in a system."""
     with session(False, 300, 1) as run:
         typer.echo(json.dumps(run.scan(system), indent=2))
+
+
+@auto_app.command()
+def infrastructure(
+    system: str,
+    max_sites: int = typer.Option(10, min=1, max=100),
+    seconds: int = typer.Option(300, min=1, max=7200),
+) -> None:
+    """GET-only gate, shipyard and construction observations; no execution."""
+    try:
+        validate_infrastructure(system, max_sites, seconds)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
+    with session(False, seconds, 1) as run:
+        typer.echo(
+            json.dumps(infrastructure_run(run, system, max_sites), indent=2)
+        )
 
 
 @auto_app.command()
@@ -161,10 +271,39 @@ def contract(
     seconds: int = 600,
     actions: int = 30,
 ) -> None:
-    """Plan or resume profitable single-good procurement from fresh state."""
+    """Plan/resume single-good or same-market multi-good procurement."""
     with session(execute, seconds, actions) as run:
         typer.echo(
             json.dumps(contract_run(run, ship, contract_id, source), indent=2)
+        )
+
+
+@auto_app.command("abandon-procurement")
+def abandon_procurement_command(
+    contract_id: str,
+    execute: bool = False,
+    reason: str = typer.Option(
+        "", help="Local audit reason; omit sensitive data."
+    ),
+    seconds: int = typer.Option(120, min=1, max=7200),
+) -> None:
+    """LIVE GET preview; --execute closes local intent, never game actions.
+
+    Requires an unaccepted contract and empty ship at its original source.
+    Execution requires --reason of at least 20 characters. STOP is preserved.
+    """
+    if execute and len(reason.strip()) < 20:
+        raise typer.BadParameter(
+            "--execute requires --reason of at least 20 characters"
+        )
+    with session(False, seconds, 1) as run:
+        typer.echo(
+            json.dumps(
+                abandon_procurement(
+                    run, contract_id, execute=execute, reason=reason
+                ),
+                indent=2,
+            )
         )
 
 
@@ -309,12 +448,24 @@ def pilot(
     actions: int = typer.Option(100, min=1, max=200),
     max_age: int = typer.Option(900, min=1, max=86400),
     reposition: bool = False,
+    recover_contracts: bool = typer.Option(
+        False,
+        help="Recover one existing procurement intent using its original "
+        "ship/source/contract. With --execute this may accept that original "
+        "unaccepted intent; never selects new offers or negotiates. "
+        "Without --execute, preview only.",
+    ),
 ) -> None:
     """Continue bounded earning decisions; dry run inspects only the next."""
     with session(execute, seconds, actions) as run:
         try:
             result = pilot_run(
-                run, system, steps, max_age, reposition=reposition
+                run,
+                system,
+                steps,
+                max_age,
+                reposition=reposition,
+                recover_contracts=recover_contracts,
             )
         except BaseException:
             if run.scope:

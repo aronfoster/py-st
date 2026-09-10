@@ -648,3 +648,103 @@ needed: foreground CLI cycles are bounded and independently resumable.
   `28342c47d630f854ee989c453198039ed36997a2`. Commit only application/docs/tests,
   never runtime data or the retained original history. See this handoff's commit
   in branch history for the exact delivery revision. STOP stays present.
+
+## 2026-09-10: Consolidated-Checkout Nightly Attempt
+
+- Continued in the normal root checkout on `aron/fos-63-review` at `c6be829`.
+  Recorded the completed worktree consolidation in AGENTS/HANDOFF so historical
+  instructions cannot recreate it. All subsequent test/artifact paths are
+  explicitly under `.cache/nightly`, with the existing `.venv/bin/python`.
+  No parent-directory permission request or new worktree was needed.
+- Independent baseline: 1,021 passed, 10 skipped. Corrected two existing
+  procurement gaps with failing-before regressions: local contracts could consume
+  unrelated trade exposure, and remote full-refill reservation did not cover
+  the refill command's extra headroom at the allowed fuel-price ceiling.
+- Implemented stationary multi-good execution through the existing contract
+  command. One persisted original position funds every good and preserves ship,
+  market, terms and price ceilings. Completion uses observed cargo/deliveries.
+  Duplicate-good terms and remote/multi-destination execution remain unsupported.
+  Review found stale pre-dispatch eligibility, transport-time expiry and malformed
+  status flags; fixes and regression tests landed before any live experiment.
+- Added explicit pilot procurement recovery, including original unaccepted
+  execution intents only when execution is authorized. Added explicit local
+  abandonment for provably unaccepted/undispatched empty-ship intents. Review
+  corrected cross-scope acceptance evidence and an abandoned-remote dispatch
+  fallback. Neither a preview record nor changed terms can recreate authority.
+- Dashboard recovery cards now show per-good progress, unknown exposure and the
+  actual reposition destination. Doctor classifies procurement recovery. Chrome
+  fixtures verify mobile/desktop rendering and scoped response handling.
+- Closed the wrong-working-directory initialization hazard at the CLI boundary:
+  ordinary live previews/execution use an existing-only, version-1 WAL open and
+  recorded agent identity, followed by a locked non-recording live identity check.
+  Only explicit observe permits initialization. No fallback creates history after
+  a mismatch/authentication failure; library constructors retain their existing
+  opt-in creation semantics. Synthetic admission tests include resource cleanup,
+  invalid history, reset/account changes, pending preservation and observe setup.
+- Current full offline checks: **1,382 passed, 10 skipped**, Black/Ruff/mypy clean.
+  Explicit synthetic dashboard/browser suite: **70 passed**. All use project-local
+  test temp paths. No new live game result, runtime migration, commit or push is
+  claimed. This is a recoverable engineering checkpoint, not a completed overnight
+  mandate. Remaining work includes bounded live validation and broader remote
+  procurement, not manually repeating already-proven gameplay loops.
+
+## 2026-09-10: Explicit Unsupervised Continuation
+
+- Read FOS-63 and its latest comments, repository instructions, roadmap, review,
+  handoff and operating/recovery source. Continued on `aron/fos-63-review` at
+  `c6be829` with the existing substantial uncommitted work preserved. Independent
+  baseline was **1,449 passed, 10 skipped**, Black/Ruff/mypy clean; this was newer
+  than the previously written 1,382-test checkpoint.
+- Reproduced abandonment of contradictory saved multi-good evidence; now both
+  immutable initial and latest per-good quantities must support an unacquired
+  intent before local retirement. Existing accepted/pending/receipt guards remain.
+- Reproduced duplicate-ID selection authorizing procurement and truthy invalid
+  status flags closing remote recovery. Added shared admission, plus actionable
+  malformed multi-good evidence errors.
+- Reproduced remote acceptance/purchases after quote-time eligibility drift:
+  cargo, fuel, observer, contract terms, other obligations and competing positions.
+  Fresh pre-dispatch revalidation and protected latest credits stop these cases.
+  Unique positive-integer goods/fuel quotes replace first-match quote selection.
+- Real transport with a synthetic HTTP peer verifies quote/acceptance/planning
+  cutoffs during pacing and 429 waits: no expired dispatch/retry; definitive
+  rejections and not-sent outcomes remain distinct from unknown dispatch.
+- Reproduced remote delivery using pre-navigation obligations and invalid delivery
+  quantities/fulfillment closing intent. Recovery refreshes after navigation and
+  docking, discards pre-arrival-wait contracts, and bounds delivery/fulfillment
+  transport waits by actual deadline while restoring the enclosing Session budget.
+  Further review reproduced closed/unknown/mismatched remote intent regaining
+  acquisition authority. Original contract identity, strategy and status now
+  require explicit consistency before recovery; five regressions cover the gap.
+- Added shared offline procurement progress/deadline summaries to doctor and its
+  dashboard view, with original timestamps, scope isolation, partial quantities,
+  unknown evidence and review hints. No executable commands are derived from
+  those records. Browser checks cover mobile/desktop and late scoped responses.
+- Reproduced a dangling STOP link being ignored by Session/report while doctor
+  saw it, and dashboard pause touching a symlink target. Shared lstat-based
+  detection and exclusive sentinel creation fix this inconsistency. Filesystem
+  control errors return an explicit unavailable response without clearing STOP.
+- Latest full non-mutating CI: **1,543 passed, 10 skipped**, Black/Ruff/mypy clean
+  across 180 checked files. Explicit synthetic dashboard suite: **73 passed**.
+  All temporary stores/browser artifacts remain under `.cache/nightly`. Added
+  94 tests over the observed starting baseline; no live telemetry or earnings.
+- No game requests, credentials access, authoritative runtime-ledger writes,
+  STOP modification, schema migration, commit or push in this continuation.
+  Remaining live proof and executable bounded validation shape are in HANDOFF.
+  FOS-63 remains in progress; no completed overnight mandate is claimed.
+
+## 2026-09-10: Owner-Requested Delivery Preparation
+
+- Owner requested pushing the accumulated changes and bringing Linear up to date.
+  Reviewed the working tree and fetched origin; the review branch still starts at
+  `c6be829`, with the original implementation-history branch kept separate.
+- Repeated full offline CI before committing: **1,543 passed, 10 skipped**,
+  Black/Ruff/mypy clean (180 checked files). Latest full synthetic dashboard
+  verification remains **73 passed**. `git diff --check` is clean.
+- Delivery includes multi-good procurement, pilot recovery, intent retirement,
+  existing-ledger admission, GET-only infrastructure observations, recovery
+  diagnostics and the subsequent remote/STOP safeguards. Runtime credentials,
+  ledger, backups and STOP remain local and outside the delivery.
+- The earlier continuation ended at a verified checkpoint; no actual token
+  exhaustion or external blocker was established. The owner has now redirected
+  work to publication. Do not equate this delivery with completing the full-budget
+  unattended mandate. The exact commit and confirmed push result go in FOS-63.

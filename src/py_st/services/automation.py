@@ -17,6 +17,7 @@ from py_st._generated.models import Contract
 from py_st.client import APIError, SpaceTradersClient
 from py_st.client.transport import JSONDict, JSONList, RequestAborted
 from py_st.services.intelligence import Intelligence
+from py_st.services.stop_control import stop_requested
 
 
 class SafetyStop(Exception):
@@ -58,7 +59,7 @@ class Session:
         self.lock.close()
 
     def check(self) -> None:
-        if (self.root / "STOP").exists():
+        if stop_requested(self.root):
             raise SafetyStop("STOP sentinel present; remove deliberately")
         if time.monotonic() >= self.deadline:
             raise SafetyStop(
@@ -111,6 +112,16 @@ class Session:
             for p in self.store.latest(self.scope, "position")
         ):
             raise SafetyStop("Recover open reposition before other automation")
+
+    def check_procurement(self) -> None:
+        if any(
+            p["key"].startswith("procurement:")
+            and p["data"].get("status") != "closed"
+            for p in self.store.latest(self.scope, "position")
+        ):
+            raise SafetyStop(
+                "Recover nonclosed procurement before trading or refueling"
+            )
 
     def mutate(
         self, path: str, body: JSONDict | None = None, *, reposition: str = ""

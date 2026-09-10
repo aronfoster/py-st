@@ -20,8 +20,17 @@ from tests import test_earning
 world = test_earning.world
 
 
-def test_real_discover_trade_return_trade(world: dict[str, Any]) -> None:
-    result = pilot_run(world["run"], "X-A", steps=4, reposition=True)
+@pytest.mark.parametrize("recover_contracts", [False, True])
+def test_real_discover_trade_return_trade(
+    world: dict[str, Any], recover_contracts: bool
+) -> None:
+    result = pilot_run(
+        world["run"],
+        "X-A",
+        steps=4,
+        reposition=True,
+        recover_contracts=recover_contracts,
+    )
     assert result["status"] == "completed"
     assert result["outcome"] == "step limit"
     assert result["completed_steps"] == 4
@@ -351,6 +360,7 @@ def test_cli_defaults() -> None:
         10,
         900,
         reposition=False,
+        recover_contracts=False,
     )
 
 
@@ -372,15 +382,26 @@ def test_cli_failure_guidance_preserves_handler(
     store = MagicMock()
     store.economics.return_value = {}
     store.pending.return_value = None
+    store.scopes.return_value = ["r:a"]
+    store.latest.return_value = [{"key": "a", "data": {"symbol": "a"}}]
+    run.get.return_value = {"symbol": "a"}
+
+    def fail(*args: Any, **kwargs: Any) -> None:
+        run.scope = scope
+        raise error
+
     with (
         patch("py_st.cli.auto_cmd.load_dotenv"),
         patch("py_st.cli.auto_cmd.find_dotenv", return_value=""),
         patch("py_st.cli.auto_cmd.os.environ", {"ST_TOKEN": "synthetic"}),
-        patch("py_st.cli.auto_cmd.SpaceTradersClient"),
+        patch("py_st.cli.auto_cmd.SpaceTradersClient") as client,
         patch("py_st.cli.auto_cmd.Intelligence", return_value=store),
         patch("py_st.cli.auto_cmd.Session", return_value=run),
-        patch("py_st.cli.auto_cmd.pilot_run", side_effect=error),
+        patch("py_st.cli.auto_cmd.pilot_run", side_effect=fail),
     ):
+        client.return_value.__enter__.return_value.status.return_value = {
+            "resetDate": "r"
+        }
         result = CliRunner().invoke(app, ["auto", "pilot", "X-A"])
     assert result.exit_code != 0
     assert "NEW budgets and fresh decisions" in result.output

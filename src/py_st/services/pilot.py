@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from py_st.services.automation import SafetyStop, Session
 from py_st.services.earning import earn_run
+from py_st.services.strategies import contract_run
 
 
 def pilot_run(
@@ -22,11 +23,12 @@ def pilot_run(
     max_age: int = 900,
     *,
     reposition: bool = False,
+    recover_contracts: bool = False,
 ) -> dict[str, Any]:
     """Count returned earn decisions, not trades; exceptions never retry.
 
     Dry runs inspect one decision. A fresh invocation recovers positions via
-    earn_run, never by replaying this run's recorded decisions.
+    earn_run or explicit procurement recovery, never by replaying records.
     """
     if not 1 <= steps <= 100 or not 1 <= max_age <= 86400:
         raise ValueError("Bounds: 1..100 steps, 1..86400 max-age seconds")
@@ -52,11 +54,14 @@ def pilot_run(
         command.append("--execute")
     if reposition:
         command.append("--reposition")
+    if recover_contracts:
+        command.append("--recover-contracts")
     record: dict[str, Any] = {
         "id": str(uuid4()),
         "system": system,
         "execute": run.execute,
         "reposition": reposition,
+        "recover_contracts": recover_contracts,
         "steps": steps,
         "max_age": max_age,
         "started_at": datetime.now(UTC).isoformat(),
@@ -98,9 +103,94 @@ def pilot_run(
                 raise SafetyStop(
                     "Action budget exhausted; resume from live state"
                 )
-            decision = earn_run(
-                run, system, cycles=1, max_age=max_age, reposition=reposition
-            )
+            original = None
+            if recover_contracts:
+                state = run.refresh()
+                if run.store.pending(run.scope):
+                    raise SafetyStop(
+                        "Pending action requires explicit reconciliation"
+                    )
+                positions = [
+                    p
+                    for p in run.store.latest(run.scope, "position")
+                    if p["data"].get("status") != "closed"
+                ]
+                if any(p["key"].startswith("procurement:") for p in positions):
+                    if (
+                        len(positions) != 1
+                        or positions[0]["data"].get("status") != "open"
+                    ):
+                        raise SafetyStop(
+                            "Multiple/unknown positions; inspect recovery"
+                        )
+                    original = positions[0]["data"].get("plan")
+                    if (
+                        not isinstance(original, dict)
+                        or any(
+                            not isinstance(original.get(k), str)
+                            or not original[k].strip()
+                            for k in ("ship", "source", "contract")
+                        )
+                        or positions[0]["key"]
+                        != f"procurement:{original['contract']}"
+                    ):
+                        raise SafetyStop(
+                            "Invalid original procurement identity"
+                        )
+                    contracts = state["contracts"]
+                    if (
+                        sum(
+                            c.get("id") == original["contract"]
+                            for c in contracts
+                        )
+                        != 1
+                        or sum(
+                            s.get("symbol") == original["ship"]
+                            for s in state["ships"]
+                        )
+                        != 1
+                        or any(
+                            type(c.get(k)) is not bool
+                            for c in contracts
+                            for k in ("accepted", "fulfilled")
+                        )
+                    ):
+                        raise SafetyStop(
+                            "Ambiguous procurement ship/contracts or statuses"
+                        )
+                    if any(
+                        c["accepted"]
+                        and not c["fulfilled"]
+                        and c["id"] != original["contract"]
+                        for c in contracts
+                    ):
+                        raise SafetyStop(
+                            "Other accepted contracts need review"
+                        )
+            if original is not None:
+                result = contract_run(
+                    run,
+                    original["ship"],
+                    original["contract"],
+                    original["source"],
+                )
+                if run.execute and result.get("status") != "fulfilled":
+                    raise SafetyStop(
+                        "Unexpected contract outcome; inspect run"
+                    )
+                decision = {
+                    "status": "recovery only" if run.execute else "dry run",
+                    "kind": "contract recovery",
+                    "result": result,
+                }
+            else:
+                decision = earn_run(
+                    run,
+                    system,
+                    cycles=1,
+                    max_age=max_age,
+                    reposition=reposition,
+                )
             record.update(
                 completed_steps=record["completed_steps"] + 1,
                 last_decision=decision,

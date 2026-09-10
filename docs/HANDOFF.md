@@ -1,5 +1,137 @@
 # FOS-63 Handoff
 
+## Current Checkout and New Nightly Attempt
+
+The owner consolidated the repository after the previous run. The normal root
+checkout is now on `aron/fos-63-review`, continued from `c6be829`;
+`tmp/astra` no longer exists.
+The existing `.env`, `.venv`, STOP, authoritative `.state/intelligence.sqlite3`,
+backups and screenshots are all rooted here. Use `.venv/bin/python` directly;
+no alternate checkout or PYTHONPATH workaround is needed. Do not recreate the
+old worktree. Keep temporary work inside ignored `.cache/nightly` and do not
+request access to parent directories or global configuration.
+
+The new nightly attempt started with a clean checkout and independently verified
+**1,021 passed, 10 skipped**, Black/Ruff/mypy passing. Current offline verification
+is **1,543 passed, 10 skipped**, plus **73 passed** with explicit synthetic Chrome
+dashboard tests. Test artifacts are under `.cache/nightly` and use the existing
+`.venv`. No new worktree, parent-directory access request, live gameplay or runtime
+ledger migration was needed.
+
+### September 10 Owner-Requested Delivery
+
+The owner requested a commit/push of the accumulated changes and an updated
+FOS-63 ticket. This delivery includes the earlier September 10 work and the
+unsupervised continuation below. The exact published revision and push result are
+recorded in Linear; identify this delivery locally with `git log -1 --format=%H`.
+
+Pre-delivery Python 3.12 `ST_LIVE_TESTS=0 make ci` was independently repeated:
+**1,543 passed, 10 skipped**, Black/Ruff/mypy clean. The latest full explicit
+synthetic dashboard suite passed **73 tests**. Only source, tests and repository
+documentation belong in this delivery; credentials and runtime data stay local.
+
+Also included: bounded GET-only `auto infrastructure SYSTEM` for jump gates,
+shipyards and construction observations, with partial-progress reporting and
+shared scoped exports. It enables no construction supplies, ship purchases or
+inter-system travel. See OPERATIONS for bounds and visibility limitations.
+
+The owner-requested delivery is the current task boundary. The preceding turn
+ended at a verified checkpoint; no token exhaustion or external blocker was
+established, so the full-budget unattended requirement remains unmet.
+
+### September 10 Unsupervised Continuation
+
+The owner explicitly requested continued unsupervised engineering. This continuation
+started from the existing uncommitted tree on `aron/fos-63-review` (HEAD `c6be829`),
+independently verified **1,449 passed, 10 skipped**, and added **94 regression and
+diagnostic cases**. Prior work was preserved rather than reconstructed.
+
+- Procurement now shares strict contract identity/status admission. Duplicate
+  IDs, including conflicting same-ID observations, cannot select a first result
+  and authorize acquisition. Multi-good malformed evidence yields recovery stops.
+- Multi-good abandonment inspects both original and latest per-good progress;
+  empty current cargo cannot erase saved acquisition/delivery evidence.
+- Remote acquisition rechecks contracts, ship cargo/fuel/navigation, destination
+  observer, pending actions, positions and credits after quote reads. Goods/fuel
+  quotes must be unique with positive integer prices and volume. Transport waits
+  honor quote expiry, acceptance expiry and the delivery-planning margin.
+- Remote recovery rejects contradictory fulfillment/quantities, discards contract
+  evidence from before arrival polling, and refreshes obligations after navigation
+  and docking. Delivery/fulfillment waits honor the actual contract deadline.
+  Closed, unrecognized or mismatched remote intents cannot regain acquisition
+  authority from a later unfulfilled contract observation.
+- `auto doctor` and its shared dashboard endpoint join scoped procurement progress
+  to recorded ship/contract observations. They show per-good outstanding/held/
+  to-acquire/excess quantities, provenance, deadline state and the next step to
+  review. Missing evidence stays unknown; these results never authorize dispatch.
+- Runner, doctor and dashboard agree that any STOP directory entry requests a
+  stop, including a dangling symlink. Dashboard pause uses exclusive creation and
+  cannot follow an existing link or change its target. Filesystem control failures
+  return an explicit unavailable response while preserving the sentinel.
+
+Full offline checks pass: **1,543 passed, 10 skipped**, Black/Ruff/mypy clean
+(180 checked source files). Full explicit synthetic dashboard suite: **73 passed**,
+including desktop/mobile recovery display, deadline rendering, scoped-response
+races, STOP controls and text-only handling of markup in stored data. Regression
+tests reproduced unsafe behavior before fixes; tests never used the game API.
+
+Before the owner's delivery request, no live requests, live-ledger writes, STOP
+changes, schema migration, commit or push were performed in this continuation.
+The historical live snapshot below remains
+the latest recorded game evidence. The open-ended overnight mandate remains in
+progress; these results are engineering verification, not a claim of a completed
+overnight run or live proof of the new recovery paths.
+
+Next live validation should test one supported original remote intent with a fresh
+GET-only preview, then a small action budget and explicit restart after navigation.
+Use the authoritative ledger, back it up first, inspect pending/exposure and STOP,
+and retain the 50,000-credit floor plus all obligations. Example command shape:
+
+```sh
+.venv/bin/python -m py_st auto doctor --scope RESET:AGENT
+# GET-only preview, with actual identifiers from fresh state:
+.venv/bin/python -m py_st auto contract SHIP CONTRACT_ID --source SOURCE --seconds 300 --actions 2
+# After reviewing the preview, execute one bounded increment:
+.venv/bin/python -m py_st auto contract SHIP CONTRACT_ID --source SOURCE --execute --seconds 300 --actions 2
+```
+
+Choose an experiment that validates recovery rather than repeating earnings. Remote
+multi-load/multi-good execution and broader fleet scheduling remain next product
+opportunities. No automated retry of uncertain outcomes is permitted.
+
+### September 10 Application Increments
+
+- `auto contract` now executes multiple distinct goods at one marketplace when
+  the ship is already there. Whole-obligation funding, per-good immutable price
+  ceilings, owned-cargo completion, status validation and transport-enforced
+  evidence deadlines have synthetic regression proof. See LOCAL_PROCUREMENT.md.
+- Local single-good procurement now refuses unrelated nonclosed exposure. Trade,
+  fleet and refuel also respect an unaccepted procurement execution intent's
+  reserved funds. Remote refill funding includes the recovery command's own
+  headroom at the original ceiling; old price ceilings remain unchanged.
+- `auto pilot --recover-contracts` explicitly recovers one saved procurement
+  intent, sharing the original runner bounds. It does not choose or negotiate
+  offers. With `--execute`, it can accept the original unaccepted execution intent.
+- `auto abandon-procurement` previews safe local retirement; `--execute` and a
+  reviewed reason append an abandoned position without game POST permission.
+  Acceptance receipts in the active scope, pending actions, cargo, changed
+  identity or competing obligations block closure. Abandoned intents cannot
+  silently resume through a different dispatcher path.
+- The dashboard shows multi-good recovery quantities and unrecognized positions,
+  and displays the correct return destination. Doctor recognizes procurement
+  recovery. These are stored observations, never live execution authority.
+- Ordinary live CLI commands require an existing compatible WAL ledger and
+  recorded agent identity before loading credentials or contacting the API.
+  A locked non-recording identity preflight rejects a different reset/agent;
+  only explicit `auto observe` permits new live-history initialization. Return
+  to the authoritative workspace instead of creating an empty replacement.
+
+STOP remains in place during offline development; old live balances below are
+historical. New contract execution/recovery/admission paths have not been tested
+live. Before deployment, review their fresh previews and existing pending/exposure
+state. Do not downgrade while a new `local-multi` intent is open. The existing
+database schema is unchanged; normal version-1 WAL ledgers require no migration.
+
 ## September 9 Morning Handoff
 
 **Application development is primary.** The owner clarified this explicitly

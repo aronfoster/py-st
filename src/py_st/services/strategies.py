@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from py_st.services.automation import SafetyStop, Session
+from py_st.services.contract_state import select_contract
 
 CREDIT_FLOOR = 50_000
 FUEL_ALLOWANCE = 1_000
@@ -25,6 +26,7 @@ def fleet_run(
         raise ValueError("Use 1..20 cycles")
     state = run.refresh()
     run.check_reposition()
+    run.check_procurement()
     positions = [
         p
         for p in run.store.latest(run.scope, "position")
@@ -200,6 +202,7 @@ def refuel_run(
     run.check()
     state = run.refresh()
     run.check_reposition()
+    run.check_procurement()
     if run.store.pending(run.scope):
         raise SafetyStop("Pending action requires explicit reconciliation")
     if any(c["accepted"] and not c["fulfilled"] for c in state["contracts"]):
@@ -357,6 +360,7 @@ def trade_run(
     started = time.monotonic()
     state = run.refresh()
     run.check_reposition()
+    run.check_procurement()
     initial_credits = state["agent"]["credits"]
     if any(c["accepted"] and not c["fulfilled"] for c in state["contracts"]):
         raise SafetyStop(
@@ -643,11 +647,7 @@ def contract_run(
     state = run.refresh()
     run.check_reposition()
     initial_credits = state["agent"]["credits"]
-    contract = next(
-        (c for c in state["contracts"] if c["id"] == contract_id), None
-    )
-    if contract is None:
-        raise SafetyStop("Contract not found")
+    contract = select_contract(state["contracts"], contract_id)
     remote = next(
         (
             p["data"]
@@ -656,6 +656,23 @@ def contract_run(
         ),
         None,
     )
+    if remote and remote.get("stage") == "abandoned":
+        raise SafetyStop("Abandoned procurement cannot be resumed")
+    if remote is None and contract.get("fulfilled") is True:
+        return {"status": "already fulfilled", "contract": contract_id}
+    if not isinstance(contract.get("terms"), dict):
+        raise SafetyStop("Invalid contract terms")
+    deliveries = contract["terms"].get("deliver", [])
+    if len(deliveries) > 1 or (
+        remote
+        and (
+            remote.get("strategy") == "local-multi"
+            or remote.get("plan", {}).get("strategy") == "local-multi"
+        )
+    ):
+        from py_st.services.local_procurement import local_contract_run
+
+        return local_contract_run(run, ship_symbol, contract_id, source)
     if remote:
         if source and source != remote["plan"]["source"]:
             raise SafetyStop("Resume original procurement source")
@@ -694,7 +711,16 @@ def contract_run(
     plan = None
     while True:
         run.check()
-        contract = run.get(f"/my/contracts/{contract_id}")
+        if run.store.pending(run.scope) or any(
+            p["data"].get("status") != "closed"
+            for p in run.store.latest(run.scope, "position")
+        ):
+            raise SafetyStop(
+                "Resolve pending actions/nonclosed positions first"
+            )
+        contract = select_contract(
+            [run.get(f"/my/contracts/{contract_id}")], contract_id
+        )
         run.store.observe(run.scope, "contract", contract_id, contract)
         if contract["fulfilled"]:
             break

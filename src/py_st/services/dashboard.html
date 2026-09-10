@@ -156,7 +156,13 @@ async function checkDoctor(){
    const item=node('li',f.code.replaceAll('_',' ')+': '+f.next_step);
    for(const a of f.actions||[])item.append(node('div',`Pending #${a.id}${a.path?' / '+a.path:''}`));
    if(f.key)item.append(node('div',f.key));
-   if(f.keys)item.append(node('div',f.keys.join(', ')));
+    if(f.keys)item.append(node('div',f.keys.join(', ')));
+    if(f.procurement){
+     const p=f.procurement;item.append(node('div',`Recorded procurement: ${p.status}. ${p.next_step}`));
+     for(const g of p.goods||[])item.append(node('div',`${g.good}: ${g.delivered}/${g.required} delivered / ${g.held} held / ${g.to_acquire} to acquire / ${g.excess} excess`));
+     for(const [kind,stamp] of Object.entries(p.observations||{}))item.append(node('div',`${kind} observed: ${stamp}`));
+     for(const [kind,d] of Object.entries(p.deadlines||{}))item.append(node('div',`${kind} deadline: ${d.state} / ${d.at??'unknown'}`));
+    }
    $('doctor-findings').append(item);
   }
  }catch(e){if(version===doctorVersion&&scope===$('scope').value)$('doctor-status').textContent='Recorded safety check failed: '+e.message;}
@@ -277,6 +283,21 @@ function buildDraft(event){
  invalidateModel();$('builder-status').textContent='Draft replaced from form. Review it or calculate the offline model.';$('model-submit').focus();
 }
 function invalidateModel(){modelVersion++;$('model-result').replaceChildren();$('model-error').textContent='';$('model-submit').disabled=false;}
+function renderPositions(records){
+ const target=$('positions');target.replaceChildren();
+ records.forEach(r=>{
+  const data=r.data||{},plan=data.plan||{};
+  if(data.status==='closed')return;
+  const card=node('article',undefined,'ship');
+  const returning=r.key.startsWith('reposition:');
+  const goods=plan.good||Object.keys(plan.purchase_ceilings||{}).join(', ')||'goods unknown';
+  const destination=(returning?plan.source:plan.destination)||'destination unknown';
+  card.append(node('p',`${data.status==='open'?'OPEN':'UNRECOGNIZED'} POSITION: ${r.key} / ${goods} -> ${destination}`,'warn'));
+  card.append(node('p',`Recorded ${r.observed_at}; stage ${data.stage||'not recorded'}. Inspect current state before recovery.`,'small'));
+  Object.entries(data.goods||{}).forEach(([good,g])=>card.append(node('p',`${good}: ${g?.remaining??'unknown'} remaining / ${g?.held??'unknown'} held / ${g?.to_buy??'unknown'} to acquire`,'small')));
+  const detail=node('details');detail.append(node('summary','Recorded recovery intent'),node('pre',JSON.stringify(data,null,2)));card.append(detail);target.append(card);
+ });
+}
 function renderRuns(records){
  const target=$('automation-runs');target.replaceChildren();
  if(!records.length){target.append(node('p','No recorded pilot runs in this scope.','empty'));return;}
@@ -314,7 +335,7 @@ function render(d){
  $('contracts').replaceChildren();(d.contracts||[]).forEach(r=>{const c=r.data,card=node('article',undefined,'ship');card.append(node('div',c.fulfilled?'FULFILLED':c.accepted?'ACCEPTED':'AVAILABLE','eyebrow'),node('p',c.id));(c.terms.deliver||[]).forEach(g=>card.append(node('div',`${g.tradeSymbol}: ${g.unitsFulfilled}/${g.unitsRequired} -> ${g.destinationSymbol}`,'small')));card.append(node('p',`Payout ${fmt(c.terms.payment.onAccepted+c.terms.payment.onFulfilled)} / due ${c.terms.deadline}`,'small'));$('contracts').append(card)});
  $('plans').replaceChildren();(d.plans||[]).forEach(r=>{const el=node('details');el.append(node('summary',r.key),node('pre',JSON.stringify(r.data,null,2)));$('plans').append(el)});
  $('routes').replaceChildren();(d.routes||[]).slice(0,20).forEach(r=>row($('routes'),[`${r.good}: ${r.source} -> ${r.destination}`,r.units,`${r.buy} / ${r.sell}`,fmt(r.net_estimate),`${Math.floor(r.age_seconds/60)}m ${r.stale?'STALE':'observed'}`]));if(!(d.routes||[]).length)row($('routes'),['No positive priced routes yet. Scout a counterparty market.','','','','']);
- $('cash').replaceChildren();const economics=d.economics||{};(economics.goods||[]).forEach(g=>row($('cash'),[g.good,`${g.bought_units} / ${g.sold_units}`,fmt(g.spent),fmt(g.received),fmt(g.received-g.spent)]));$('audit').textContent=`Contract receipts ${fmt(economics.contract_receipts||0)} / journal net ${fmt(economics.journal_net_cash||0)} / unexplained credit change ${fmt(economics.unexplained_credit_change||0)}`;$('audit').classList.toggle('warn',Boolean(economics.unexplained_credit_change));$('positions').replaceChildren();(d.positions||[]).filter(r=>r.data.status==='open').forEach(r=>$('positions').append(node('p',`OPEN POSITION: ${r.key} / ${r.data.plan.good} -> ${r.data.plan.destination}`,'warn')));
+  $('cash').replaceChildren();const economics=d.economics||{};(economics.goods||[]).forEach(g=>row($('cash'),[g.good,`${g.bought_units} / ${g.sold_units}`,fmt(g.spent),fmt(g.received),fmt(g.received-g.spent)]));$('audit').textContent=`Contract receipts ${fmt(economics.contract_receipts||0)} / journal net ${fmt(economics.journal_net_cash||0)} / unexplained credit change ${fmt(economics.unexplained_credit_change||0)}`;$('audit').classList.toggle('warn',Boolean(economics.unexplained_credit_change));renderPositions(d.positions||[]);
  $('markets').replaceChildren();(d.markets||[]).forEach(r=>row($('markets'),[r.key,r.data.exports.map(g=>g.symbol).join(', ')||'--',age(r.observed_at)+' ago']));
   $('journal').replaceChildren();(d.actions||[]).slice(0,40).forEach(a=>{const el=node('div',undefined,'entry '+a.status);el.append(node('strong',`#${a.id} ${a.status.toUpperCase()} `),node('span',a.path),node('div',a.started_at));$('journal').append(el)});
   if(d.scope){$('export').href='/api/report?scope='+encodeURIComponent(d.scope);$('export').removeAttribute('aria-disabled');}else{$('export').removeAttribute('href');$('export').setAttribute('aria-disabled','true');}

@@ -36,6 +36,7 @@ and `RESET:AGENT` with your own identifiers, not historical example values.
 | Diagnose mining blockers | `auto mining SHIP` | **LIVE GET**, no extraction or `--execute` |
 | Preview the next earning decision | `auto earn SYSTEM` / `auto pilot SYSTEM` | **LIVE GET dry run**, not offline |
 | Run bounded earning decisions | `auto pilot SYSTEM --execute` | **LIVE mutations**, explicit authorization |
+| Recover an original contract execution intent | `auto pilot SYSTEM --recover-contracts --steps 1` | **LIVE GET preview**; add `--execute` only after review |
 
 `auto scout SYSTEM --offline --scope RESET:AGENT` previews stored discovery;
 without `--offline`, scouting uses live GETs and `--execute` permits navigation.
@@ -43,7 +44,18 @@ Direct `auto contract`, `trade`, `fleet`, `move`, `refuel` and `negotiate` remai
 available for specific tasks; see [operations](docs/OPERATIONS.md) for their
 guards and recovery. Legacy manual commands do not share all automation guards.
 
+`auto contract` also supports multiple distinct goods at one marketplace when
+the ship is already there, with whole-obligation funding and journaled recovery.
+See [stationary multi-good procurement](docs/LOCAL_PROCUREMENT.md) for limits.
+
 ## Optional Live Observation
+
+Run live commands from the authoritative repository directory. Previews and
+execution now require its existing initialized ledger and matching recorded
+agent identity; they will not silently create new history in another folder.
+Only `auto observe` permits deliberate live-session initialization. If you see
+a missing-history error, return to the correct directory rather than creating
+an empty replacement ledger.
 
 Configure `ST_TOKEN` in ignored `.env`, then run `python -m py_st auto observe`
 to fetch current agent/fleet/contracts into the local ledger. This makes live

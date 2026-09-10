@@ -1,13 +1,19 @@
+import json
 from collections.abc import Iterator
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 
+from py_st.client import SpaceTradersClient
 from py_st.services.automation import SafetyStop, Session
 from py_st.services.intelligence import Intelligence
+from py_st.services.procurement_recovery import abandon_procurement
+from py_st.services.remote_procurement import remote_contract_run
 from py_st.services.strategies import contract_run, refuel_run
 
 
@@ -181,6 +187,351 @@ def test_remote_recovery_aggregates_full_load(
     assert ship["fuel"]["current"] == 400
 
 
+@pytest.mark.parametrize("field", ["accepted", "fulfilled"])
+@pytest.mark.parametrize("value", ["false", 1, None])
+def test_remote_invalid_flags_preserve_recovery_intent(
+    remote: tuple[Any, ...], field: str, value: Any
+) -> None:
+    # Arrange: a saved accepted position must never close on a truthy non-bool.
+    run, _, contract, _, _, _, posts = remote
+    run.remaining = 1
+    with pytest.raises(SafetyStop, match="budget"):
+        contract_run(run, "S", "C", "X-A-S")
+    contract[field] = value
+    before = run.store.latest(run.scope, "position")
+    count = len(posts)
+    run.remaining = 30
+
+    # Act / Assert: exercise the remote loop's own admission.
+    with pytest.raises(SafetyStop, match="flags"):
+        remote_contract_run(run, "S", "C", "X-A-S")
+    assert run.store.latest(run.scope, "position") == before
+    assert len(posts) == count
+
+
+@pytest.mark.parametrize("accepted", [False, True])
+@pytest.mark.parametrize(
+    "change", ["cargo", "fuel", "observer", "terms", "obligation", "position"]
+)
+def test_remote_acquisition_rechecks_eligibility_after_quotes(
+    remote: tuple[Any, ...], accepted: bool, change: str
+) -> None:
+    # Arrange: mutate fake state while market observation is in progress.
+    run, _, contract, ship, probe, _, posts = remote
+    if accepted:
+        run.remaining = 1
+        with pytest.raises(SafetyStop, match="budget"):
+            contract_run(run, "S", "C", "X-A-S")
+        run.remaining = 30
+        ship["nav"]["status"] = "DOCKED"
+    request = run.client.request.side_effect
+    changed = False
+    count = len(posts)
+
+    def observe(method: str, path: str, **kwargs: Any) -> Any:
+        nonlocal changed
+        if path == "/systems/X-A/waypoints/X-A-S/market" and not changed:
+            changed = True
+            if change == "cargo":
+                ship["cargo"].update(
+                    units=1, inventory=[{"symbol": "EQUIPMENT", "units": 1}]
+                )
+            elif change == "fuel":
+                ship["fuel"]["current"] = 1
+            elif change == "observer":
+                probe["nav"]["waypointSymbol"] = "X-A-OTHER"
+            elif change == "terms":
+                contract["terms"]["payment"]["onFulfilled"] = 0
+            elif change == "position":
+                run.store.observe(
+                    run.scope, "position", "trade:OTHER", {"status": "open"}
+                )
+        result = request(method, path, **kwargs)
+        if changed and change == "obligation" and path == "/my/contracts":
+            result.append(
+                {"id": "OTHER", "accepted": True, "fulfilled": False}
+            )
+        return result
+
+    run.client.request.side_effect = observe
+
+    # Act / Assert: no acceptance, preparation or goods spending after drift.
+    with pytest.raises(SafetyStop):
+        remote_contract_run(run, "S", "C", "X-A-S")
+    assert changed
+    assert len(posts) == count
+
+
+@pytest.mark.parametrize(
+    "limiter,stage",
+    [
+        ("quote", "accept"),
+        ("expiry", "accept"),
+        ("lead", "accept"),
+        ("actual", "deliver"),
+        ("actual", "fulfill"),
+    ],
+)
+@pytest.mark.parametrize("retry", [False, True])
+def test_remote_transport_stops_at_acquisition_evidence_deadline(
+    remote: tuple[Any, ...], limiter: str, stage: str, retry: bool
+) -> None:
+    # Arrange: real transport waits against a fake clock and HTTP peer.
+    old, _, contract, _, _, _, posts = remote
+    if stage != "accept":
+        old.remaining = 7 if stage == "deliver" else 8
+        with pytest.raises(SafetyStop, match="budget"):
+            contract_run(old, "S", "C", "X-A-S")
+    count = len(posts)
+    old.close()
+    start = datetime(2098, 1, 1, tzinfo=UTC)
+    clock = 0.0
+    contract["deadlineToAccept"] = (
+        start + timedelta(seconds=5 if limiter == "expiry" else 3600)
+    ).isoformat()
+    contract["terms"]["deadline"] = (
+        start
+        + timedelta(seconds={"lead": 3816, "actual": 65}.get(limiter, 7200))
+    ).isoformat()
+    response = old.client.request.side_effect
+    dispatches = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/":
+            return httpx.Response(200, json={"resetDate": "r"})
+        if request.method == "POST":
+            dispatches.append(request.url.path)
+            return httpx.Response(
+                429,
+                json={"error": {"code": 429}},
+                headers={"Retry-After": "71"},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "data": response(
+                    request.method,
+                    request.url.path,
+                    body=(
+                        json.loads(request.content)
+                        if request.content
+                        else None
+                    ),
+                )
+            },
+        )
+
+    def sleep(seconds: float) -> None:
+        nonlocal clock
+        clock += seconds
+
+    with (
+        SpaceTradersClient(
+            "synthetic",
+            client=httpx.Client(
+                transport=httpx.MockTransport(handler), base_url="https://test"
+            ),
+        ) as client,
+        patch(
+            "py_st.services.remote_procurement.time.monotonic",
+            side_effect=lambda: clock,
+        ),
+        patch("py_st.services.automation.time.sleep", side_effect=sleep),
+        patch(
+            "py_st.services.remote_procurement.datetime", wraps=datetime
+        ) as now,
+    ):
+        now.now.side_effect = lambda _: start + timedelta(seconds=clock)
+        client._transport._interval = 0
+        run = Session(client, old.store, execute=True, root=old.root)
+        budget = run.deadline
+        store: Intelligence = old.store
+        begin_action = store.begin_action
+
+        def begin(scope: str, path: str, body: Any) -> int:
+            if not retry:
+                client._transport._next_request = clock + 71
+            return begin_action(scope, path, body)
+
+        try:
+            # Act
+            with (
+                patch.object(old.store, "begin_action", side_effect=begin),
+                pytest.raises(SafetyStop),
+            ):
+                remote_contract_run(run, "S", "C", "X-A-S")
+
+            # Assert: no stale dispatch or retry, with resumable local intent.
+            assert clock == pytest.approx(
+                {"quote": 60, "actual": 65}.get(limiter, 5)
+            )
+            assert dispatches == (
+                [f"/my/contracts/C/{stage}"] if retry else []
+            )
+            assert old.store.actions("r:A")[0]["status"] == (
+                "rejected" if retry else "not_sent"
+            )
+            assert not old.store.pending("r:A")
+            assert run.deadline == budget
+            assert len(posts) == count
+            position = old.store.latest("r:A", "position")[0]["data"]
+            assert position["status"] == "open"
+        finally:
+            run.close()
+
+
+@pytest.mark.parametrize("change", ["obligation", "destination"])
+def test_remote_refreshes_obligations_after_navigation(
+    remote: tuple[Any, ...], change: str
+) -> None:
+    # Arrange: acquire cargo, then change evidence during the navigation POST.
+    run, _, contract, _, _, _, posts = remote
+    run.remaining = 4
+    with pytest.raises(SafetyStop, match="budget"):
+        contract_run(run, "S", "C", "X-A-S")
+    run.remaining = 30
+    request = run.client.request.side_effect
+    navigated = False
+    count = len(posts)
+
+    def changed(method: str, path: str, **kwargs: Any) -> Any:
+        nonlocal navigated
+        result = request(method, path, **kwargs)
+        if path.endswith("/navigate") and method == "POST":
+            navigated = True
+            if change == "destination":
+                delivery = contract["terms"]["deliver"][0]
+                delivery["destinationSymbol"] = "X-A-OTHER"
+        if navigated and change == "obligation" and path == "/my/contracts":
+            result.append(
+                {"id": "OTHER", "accepted": True, "fulfilled": False}
+            )
+        return result
+
+    run.client.request.side_effect = changed
+
+    # Act / Assert: confirm arrival, then reobserve before dock or delivery.
+    with pytest.raises(SafetyStop):
+        remote_contract_run(run, "S", "C", "X-A-S")
+    assert navigated
+    assert [p.rsplit("/", 1)[-1] for p, _ in posts[count:]] == [
+        "orbit",
+        "navigate",
+    ]
+
+
+@pytest.mark.parametrize("change", ["false_completion", "negative", "bool"])
+def test_remote_conflicting_progress_never_releases_saved_intent(
+    remote: tuple[Any, ...], change: str
+) -> None:
+    run, _, contract, _, _, _, posts = remote
+    run.remaining = 1
+    with pytest.raises(SafetyStop, match="budget"):
+        contract_run(run, "S", "C", "X-A-S")
+    run.remaining = 30
+    if change == "false_completion":
+        contract["fulfilled"] = True
+    else:
+        contract["terms"]["deliver"][0]["unitsFulfilled"] = (
+            -1 if change == "negative" else True
+        )
+    before = run.store.latest(run.scope, "position")
+    count = len(posts)
+
+    with pytest.raises(SafetyStop, match="progress|quantities"):
+        remote_contract_run(run, "S", "C", "X-A-S")
+    assert run.store.latest(run.scope, "position") == before
+    assert len(posts) == count
+
+
+def test_remote_arrival_polling_discards_pre_wait_contract(
+    remote: tuple[Any, ...],
+) -> None:
+    run, _, contract, ship, _, _, posts = remote
+    run.remaining = 4
+    with pytest.raises(SafetyStop, match="budget"):
+        contract_run(run, "S", "C", "X-A-S")
+    run.remaining = 30
+    ship["nav"]["status"] = "IN_TRANSIT"
+    request = run.client.request.side_effect
+    count = len(posts)
+
+    def arrive(method: str, path: str, **kwargs: Any) -> Any:
+        if path == "/my/ships/S":
+            ship["nav"].update(status="IN_ORBIT", waypointSymbol="X-A-D")
+            contract["terms"]["deliver"][0]["destinationSymbol"] = "X-A-OTHER"
+        return request(method, path, **kwargs)
+
+    run.client.request.side_effect = arrive
+
+    with pytest.raises(SafetyStop, match="terms changed"):
+        remote_contract_run(run, "S", "C", "X-A-S")
+    assert len(posts) == count
+    assert ship["cargo"]["units"] == 26
+
+
+@pytest.mark.parametrize("market_kind", ["source", "fuel"])
+@pytest.mark.parametrize(
+    "change", ["duplicate", "boolean_price", "boolean_volume", "fractional"]
+)
+def test_remote_requires_unique_positive_integer_quotes(
+    remote: tuple[Any, ...], market_kind: str, change: str
+) -> None:
+    run, _, _, _, _, markets, posts = remote
+    waypoint, good = (
+        ("X-A-S", "EQUIPMENT")
+        if market_kind == "source"
+        else ("X-A-D", "FUEL")
+    )
+    goods = markets[waypoint]["tradeGoods"]
+    quote = next(q for q in goods if q["symbol"] == good)
+    if change == "duplicate":
+        goods.append(quote | {"purchasePrice": 999_999})
+    elif change == "boolean_price":
+        quote["purchasePrice"] = True
+    elif change == "boolean_volume":
+        quote["tradeVolume"] = True
+    else:
+        quote["purchasePrice"] = 1.5
+
+    with pytest.raises(SafetyStop, match="quote|price/volume"):
+        remote_contract_run(run, "S", "C", "X-A-S")
+    assert posts == []
+    assert run.store.latest("r:A", "position") == []
+
+
+@pytest.mark.parametrize(
+    "change", ["closed", "unknown", "contract", "missing_contract", "strategy"]
+)
+def test_remote_saved_intent_cannot_regain_authority_from_invalid_identity(
+    remote: tuple[Any, ...], change: str
+) -> None:
+    run, _, _, _, _, _, posts = remote
+    run.remaining = 1
+    with pytest.raises(SafetyStop, match="budget"):
+        contract_run(run, "S", "C", "X-A-S")
+    run.remaining = 30
+    position = run.store.latest(run.scope, "position")[0]["data"]
+    if change == "closed":
+        position.update(status="closed", stage="fulfilled")
+    elif change == "unknown":
+        position["status"] = "review"
+    elif change == "contract":
+        position["plan"]["contract"] = "OTHER"
+    elif change == "missing_contract":
+        position["plan"].pop("contract")
+    else:
+        position["strategy"] = "unrecognized"
+    run.store.observe(run.scope, "position", "procurement:C", position)
+    before = run.store.latest(run.scope, "position")
+    count = len(posts)
+
+    with pytest.raises(SafetyStop, match="identity/status"):
+        remote_contract_run(run, "S", "C", "X-A-S")
+    assert run.store.latest(run.scope, "position") == before
+    assert len(posts) == count
+
+
 def test_remote_dryrun_costs_full_obligation_without_mutating(
     remote: tuple[Any, ...],
 ) -> None:
@@ -189,11 +540,41 @@ def test_remote_dryrun_costs_full_obligation_without_mutating(
     plan = contract_run(run, "S", "C", "X-A-S")
     assert plan["feasible"]
     assert plan["purchase_batches"] == 2
-    assert plan["full_refill_credit_reserve"] == 348
-    assert plan["protected_credits"] == 116140
-    assert plan["conservative_net"] == 87598
+    assert plan["full_refill_credit_reserve"] == 420
+    assert plan["protected_credits"] == 116212
+    assert plan["conservative_net"] == 87526
     assert not posts
     assert not run.store.latest(run.scope, "position")
+
+
+@pytest.mark.parametrize("capacity", [400, 401])
+@pytest.mark.parametrize("fuel_price", [72, 73])
+def test_remote_reserved_refill_funds_recovery_at_original_ceiling(
+    remote: tuple[Any, ...], capacity: int, fuel_price: int
+) -> None:
+    # Arrange
+    run, agent, contract, ship, _, markets, posts = remote
+    run.execute = False
+    ship["fuel"]["capacity"] = capacity
+    markets["X-A-D"]["tradeGoods"][1]["purchasePrice"] = fuel_price
+    plan = contract_run(run, "S", "C", "X-A-S")
+    contract.update(accepted=True, fulfilled=True)
+    ship["nav"]["waypointSymbol"] = "X-A-D"
+    ship["fuel"]["current"] = 0
+    markets["X-A-D"]["tradeGoods"][1]["purchasePrice"] = plan[
+        "fuel_price_ceiling"
+    ]
+    # No assumed fulfillment income finances this reserve boundary.
+    agent["credits"] = 51000 + plan["full_refill_credit_reserve"]
+
+    # Act
+    refill = refuel_run(run, "S")
+
+    # Assert
+    assert (
+        refill["maximum_estimated_cost"] == plan["full_refill_credit_reserve"]
+    )
+    assert posts == []
 
 
 @pytest.mark.parametrize(
@@ -214,6 +595,7 @@ def test_remote_dryrun_costs_full_obligation_without_mutating(
         "pending",
         "other_contract",
         "open_trade",
+        "unknown_position",
         "stale",
     ],
 )
@@ -258,6 +640,8 @@ def test_remote_preaccept_guards(remote: tuple[Any, ...], guard: str) -> None:
         run.client.request.side_effect = request
     elif guard == "open_trade":
         run.store.observe("r:A", "position", "trade:S", {"status": "open"})
+    elif guard == "unknown_position":
+        run.store.observe("r:A", "position", "unknown", {"status": "review"})
     if guard == "stale":
         with patch("py_st.services.remote_procurement.time") as clock:
             clock.monotonic.side_effect = [0, 61]
@@ -339,3 +723,30 @@ def test_remote_interruption_after_fulfillment_closes_without_replay(
         run.store.latest(run.scope, "position")[0]["data"]["status"]
         == "closed"
     )
+
+
+@pytest.mark.parametrize("changed_destination", [False, True])
+def test_remote_abandonment_cannot_reopen_on_resume(
+    remote: tuple[Any, ...], changed_destination: bool
+) -> None:
+    # Arrange: no acceptance was ever dispatched.
+    run, _, contract, _, _, _, posts = remote
+    run.remaining = 0
+    with pytest.raises(SafetyStop, match="budget"):
+        contract_run(run, "S", "C", "X-A-S")
+    abandon_procurement(
+        run,
+        "C",
+        execute=True,
+        reason="Operator abandoned the unaccepted procurement plan.",
+    )
+    run.remaining = 30
+    if changed_destination:
+        contract["terms"]["deliver"][0]["destinationSymbol"] = "X-A-S"
+    before = run.store.latest(run.scope, "position")
+
+    # Act / Assert
+    with pytest.raises(SafetyStop, match="Abandoned procurement"):
+        contract_run(run, "S", "C")
+    assert posts == []
+    assert run.store.latest(run.scope, "position") == before

@@ -76,8 +76,8 @@ This plan enables no live actions and changes no safety guard or allowlist.
 
 * **Automation Loop**
 
-  * Live-validate the implemented pilot and opt-in original-source repositioning;
-    expand beyond the modeled multi-load/multi-good obligations. Resolve workspace
+  * Live-validate pilot recovery and stationary multi-good contract execution;
+    expand to costed remote multi-load/multi-good obligations. Resolve workspace
     permission stalls before claiming reliable unattended execution.
 * **Client generation**
 
@@ -110,8 +110,10 @@ This plan enables no live actions and changes no safety guard or allowlist.
   unproved live; arbitrary historical-route optimization is still deferred.
   See `docs/HANDOFF.md` for verification, measured economics, safety limits
   and remaining work. Remote single-good/single-load procurement now has live
-  proof; multi-load/multi-good procurement, extraction optimization and
-  cross-system discovery remain opportunities, not completed features.
+  proof. Stationary same-market multi-good procurement and explicit pilot recovery
+  are now implemented with offline regression coverage, not live proof. Remote
+  multi-load/multi-good procurement, extraction optimization and cross-system
+  discovery remain opportunities, not completed features.
 
 * **Agent Register Command**: Added `py-st agent register` CLI command to create a new agent using an account token. Supports CLI flags `--account-token`, `--symbol`, `--faction`, and `--clear-cache`. Sends POST to `/v2/register`, saves the returned agent token to `.env` (ST_TOKEN), and prints a success summary. Non-interactive implementation with clean error handling.
 * **CLI Table Alignment**: Fixed column alignment in `contracts list` and `systems waypoints` to handle mixed-digit indexes correctly. Contract columns (IDX, ID6, T, A/F, DUE(REL), DELIVER) now align properly when indexes expand from single to double digits. Waypoint indexes are right-aligned within brackets with fixed-width type fields ensuring "Traits:" column aligns vertically across all rows. Added comprehensive alignment tests.

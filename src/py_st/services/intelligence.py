@@ -16,6 +16,8 @@ class Intelligence:
         path: Path = Path(".state/intelligence.sqlite3"),
         *,
         read_only: bool = False,
+        existing_only: bool = False,
+        existing_or_create: bool = False,
     ) -> None:
         if read_only:
             self.db = sqlite3.connect(
@@ -26,37 +28,75 @@ class Intelligence:
                 self.db.close()
                 raise ValueError("Unsupported intelligence schema version")
             return
+        if existing_or_create and not existing_only:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                # Only our exclusively claimed file may receive a new schema.
+                with path.open("xb"):
+                    pass
+            except FileExistsError:
+                existing_only = True
+        if existing_only:
+            self.db = sqlite3.connect(
+                path.resolve().as_uri() + "?mode=rw", uri=True, timeout=10
+            )
+            try:
+                self.db.row_factory = sqlite3.Row
+                if self.db.execute("PRAGMA user_version").fetchone()[0] != 1:
+                    raise ValueError("Unsupported intelligence schema version")
+                # Validate the existing tables without repairing an empty DB.
+                self.db.execute(
+                    "SELECT id,scope,kind,key,observed_at,source,data "
+                    "FROM observations LIMIT 0"
+                )
+                self.db.execute(
+                    "SELECT id,scope,started_at,finished_at,path,body,status,"
+                    "result FROM actions LIMIT 0"
+                )
+                mode = self.db.execute("PRAGMA journal_mode").fetchone()[0]
+                if mode != "wal":
+                    raise ValueError("Intelligence ledger requires WAL")
+                self.db.execute("PRAGMA synchronous=FULL")
+                if self.db.execute("PRAGMA synchronous").fetchone()[0] != 2:
+                    raise ValueError("Intelligence ledger requires FULL sync")
+            except BaseException:
+                self.db.close()
+                raise
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, timeout=10)
-        self.db.row_factory = sqlite3.Row
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute("PRAGMA synchronous=FULL")
-        version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version not in (0, 1):
+        try:
+            self.db.row_factory = sqlite3.Row
+            self.db.execute("PRAGMA journal_mode=WAL")
+            self.db.execute("PRAGMA synchronous=FULL")
+            version = self.db.execute("PRAGMA user_version").fetchone()[0]
+            if version not in (0, 1):
+                raise ValueError("Unsupported intelligence schema version")
+            with self.db:
+                self.db.executescript(
+                    """
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE IF NOT EXISTS observations (
+                        id INTEGER PRIMARY KEY, scope TEXT NOT NULL,
+                        kind TEXT NOT NULL, key TEXT NOT NULL,
+                        observed_at TEXT NOT NULL, source TEXT NOT NULL,
+                        data TEXT NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS observation_lookup
+                        ON observations(scope, kind, key, id DESC);
+                    CREATE TABLE IF NOT EXISTS actions (
+                        id INTEGER PRIMARY KEY, scope TEXT NOT NULL,
+                        started_at TEXT NOT NULL, finished_at TEXT,
+                        path TEXT NOT NULL, body TEXT NOT NULL,
+                        status TEXT NOT NULL, result TEXT
+                    );
+                    PRAGMA user_version=1;
+                    COMMIT;
+                    """
+                )
+        except BaseException:
             self.db.close()
-            raise ValueError("Unsupported intelligence schema version")
-        with self.db:
-            self.db.executescript(
-                """
-                BEGIN IMMEDIATE;
-                CREATE TABLE IF NOT EXISTS observations (
-                    id INTEGER PRIMARY KEY, scope TEXT NOT NULL,
-                    kind TEXT NOT NULL, key TEXT NOT NULL,
-                    observed_at TEXT NOT NULL, source TEXT NOT NULL,
-                    data TEXT NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS observation_lookup
-                    ON observations(scope, kind, key, id DESC);
-                CREATE TABLE IF NOT EXISTS actions (
-                    id INTEGER PRIMARY KEY, scope TEXT NOT NULL,
-                    started_at TEXT NOT NULL, finished_at TEXT,
-                    path TEXT NOT NULL, body TEXT NOT NULL,
-                    status TEXT NOT NULL, result TEXT
-                );
-                PRAGMA user_version=1;
-                COMMIT;
-                """
-            )
+            raise
 
     def close(self) -> None:
         self.db.close()
@@ -207,6 +247,9 @@ class Intelligence:
             "contracts": self.latest(scope, "contract"),
             "markets": self.latest(scope, "market"),
             "waypoints": self.latest(scope, "waypoint"),
+            "jump_gates": self.latest(scope, "jump_gate"),
+            "shipyards": self.latest(scope, "shipyard"),
+            "construction": self.latest(scope, "construction"),
             "actions": self.actions(scope),
             "plans": self.latest(scope, "plan"),
             "prices": self.latest(scope, "market", priced_only=True),

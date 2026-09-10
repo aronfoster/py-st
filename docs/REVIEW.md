@@ -28,6 +28,9 @@ Do not copy live credentials or journal databases into a PR or repository.
 | Transport and cache reliability | `client/transport.py`, `client/client.py`, `cache.py` | `test_reliability.py` |
 | Mutation bounds and recovery | `services/automation.py` | `test_automation.py`, `test_fuel_navigation.py` |
 | Trading and procurement | `services/strategies.py`, `services/remote_procurement.py` | `test_strategies.py`, `test_remote_procurement.py` |
+| Multi-good execution and intent retirement | `services/local_procurement.py`, `services/procurement_recovery.py`, `services/contract_state.py` | `test_local_procurement.py`, `test_procurement_recovery.py` |
+| Offline recovery progress and deadlines | `services/procurement_status.py`, `services/doctor.py` | `test_procurement_status.py`, `test_doctor.py` |
+| Shared STOP semantics | `services/stop_control.py`, `services/automation.py`, `services/dashboard.py` | `test_automation.py`, `test_dashboard.py` |
 | Offline contract portfolio model | `services/contract_planning.py`, `cli/auto_cmd.py` | `test_contract_planning.py` |
 | Source discovery and restart diagnosis | `services/contract_sources.py`, `services/doctor.py` | `test_contract_sources.py`, `test_doctor.py` |
 | Recorded market history and mining diagnostics | `services/market_history.py`, `services/mining.py` | `test_market_history.py`, `test_mining.py` |
@@ -42,6 +45,15 @@ CLI adapters live in `src/py_st/cli/auto_cmd.py`. Full architecture and operatio
 guides are linked from [HANDOFF.md](HANDOFF.md#usage-and-data).
 
 ## Evidence Versus Limitations
+
+September 10 continuation in the consolidated checkout: current full offline CI
+is **1,543 passed, 10 skipped**, Black/Ruff/mypy clean. The full explicit synthetic
+dashboard suite passed **73 tests**. This includes further procurement identity,
+quote/eligibility/expiry, completion recovery and STOP regressions. The changes
+are included in the owner-requested delivery on `aron/fos-63-review`, based on
+`c6be829`; see HANDOFF and FOS-63 for the published revision and continuation
+details. No new gameplay evidence or schema migration is
+claimed. The September 9 delivery evidence below remains historical.
 
 - Final clean Python 3.12 installation: **1,021 passed, 10 skipped**, with Black,
   Ruff and mypy passing. Explicit synthetic Chrome dashboard suite: **70 passed**.

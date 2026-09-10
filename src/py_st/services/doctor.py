@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any
 
 from py_st.services.intelligence import Intelligence
+from py_st.services.procurement_status import procurement_status
+from py_st.services.stop_control import stop_requested
 
 
 def diagnose(
@@ -53,12 +55,7 @@ def diagnose(
         root = Path.cwd() if root is None else root
         if not root.is_dir():
             raise ValueError("STOP root must be an existing directory")
-        try:
-            (root / "STOP").lstat()
-            stopped = True
-        except FileNotFoundError:
-            stopped = False
-        if stopped:
+        if stop_requested(root):
             concern(
                 "stop_present", "Review STOP with the owner; leave it intact."
             )
@@ -106,7 +103,9 @@ def diagnose(
         ]
         if len(positions) > 1 or any(
             r["data"].get("status") != "open"
-            or not r["key"].startswith(("trade:", "reposition:"))
+            or not r["key"].startswith(
+                ("trade:", "reposition:", "procurement:")
+            )
             for r in positions
         ):
             concern(
@@ -116,11 +115,21 @@ def diagnose(
             )
         elif positions:
             kind = positions[0]["key"].split(":")[0]
+            details = (
+                {
+                    "procurement": procurement_status(
+                        positions[0], rows["contract"], rows["ship"], now=now
+                    )
+                }
+                if kind == "procurement"
+                else {}
+            )
             concern(
                 f"{kind}_recovery",
                 "Review original intent with current recovery code and fresh "
                 "state; do not infer executable arguments from this record.",
                 key=positions[0]["key"],
+                **details,
             )
         active = [
             r["key"]
@@ -142,6 +151,17 @@ def diagnose(
             concern(
                 "contract_state_unknown",
                 "Acceptance/fulfillment flags incomplete; inspect contracts.",
+            )
+        if rows["agent"] and not any(
+            r["key"] == scope.split(":")[1]
+            and r["data"].get("symbol") == r["key"]
+            for r in rows["agent"]
+        ):
+            concern(
+                "agent_identity_unknown",
+                "No matching recorded agent identity for live admission. "
+                "Return to the authoritative workspace; "
+                "do not replace history.",
             )
         freshness: dict[str, Any] = {}
         for kind in ("agent", "ship", "contract"):

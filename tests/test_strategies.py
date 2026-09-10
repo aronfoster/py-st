@@ -83,6 +83,7 @@ def test_contract_workflow_two_batches_and_completed_resume() -> None:
     run = MagicMock()
     run.execute = True
     run.refresh.return_value = {"agent": agent, "contracts": [contract]}
+    run.store.pending.return_value = False
     run.market.return_value = {
         "symbol": "X-A-1",
         "tradeGoods": [
@@ -888,6 +889,29 @@ def test_procurement_delivers_owned_cargo_before_reserving_purchases(
     else:
         assert result["plan"]["remaining"] == 20
         assert result["plan"]["reserve_after_acquisition"] == 50600
+
+
+@pytest.mark.parametrize(
+    "position", ["trade:S", "procurement:OTHER", "unknown"]
+)
+@pytest.mark.parametrize("accepted", [False, True])
+def test_local_procurement_preserves_unrelated_exposure(
+    procurement_run: MagicMock, position: str, accepted: bool
+) -> None:
+    # Arrange: matching trade cargo must not become contract cargo.
+    run = procurement_run
+    run.refresh.return_value["agent"]["credits"] = 90000
+    run.refresh.return_value["contracts"][0]["accepted"] = accepted
+    if not accepted:
+        run.ship.return_value["cargo"].update(units=0, inventory=[])
+    run.store.observe(run.scope, "position", position, {"status": "open"})
+    before = run.store.latest(run.scope, "position")
+
+    # Act / Assert
+    with pytest.raises(SafetyStop, match="positions"):
+        contract_run(run, "S", "C")
+    run.mutate.assert_not_called()
+    assert run.store.latest(run.scope, "position") == before
 
 
 @pytest.mark.parametrize("delivered", [False, True])

@@ -6,6 +6,15 @@ validate capabilities, then return to building the tools. Profitable manual
 play is not a substitute for application development. Continue engineering
 through the available overnight token/runtime budget, not just green tests.
 
+## Workspace
+
+Work in this normal repository checkout on `aron/fos-63-review`. The former
+`tmp/astra` worktree was removed and its runtime state moved to root `.state`.
+Do not create another worktree or request parent-directory access. Keep new
+temporary work under ignored `.cache/nightly`; use `.venv/bin/python` here.
+Subagents must use the same boundaries and explicit in-project test temp paths.
+Historical worktree instructions in the logs are not current setup instructions.
+
 Read this file, ROADMAP.md, docs/ASTRA_LOG.md and docs/HANDOFF.md first.
 This is Python 3.11+; use the owner's Python 3.12 virtual environment.
 Preserve CLI -> services/automation -> client/transport layering. Generated

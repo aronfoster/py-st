@@ -94,7 +94,12 @@ class HttpTransport:
                     raise APIError("Pagination budget exhausted")
 
             payload = self._send_with_retries(
-                method, path, params=request_params, json=json
+                method,
+                path,
+                params=(
+                    None if params is None and not paginate else request_params
+                ),
+                json=json,
             )
 
             data = payload.get("data")

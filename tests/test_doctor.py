@@ -21,11 +21,11 @@ SCOPE = "reset:AGENT"
 def ledger(tmp_path: Path) -> Iterator[Intelligence]:
     store = Intelligence(tmp_path / "ledger.sqlite3")
     for kind, data in (
-        ("agent", {"credits": 100000}),
+        ("agent", {"symbol": "AGENT", "credits": 100000}),
         ("ship", {"symbol": "AGENT-1"}),
         ("contract", {"accepted": True, "fulfilled": True}),
     ):
-        store.observe(SCOPE, kind, kind, data)
+        store.observe(SCOPE, kind, "AGENT" if kind == "agent" else kind, data)
     with store.db:
         store.db.execute(
             "UPDATE observations SET observed_at=?", (NOW.isoformat(),)
@@ -157,11 +157,39 @@ def test_absent_contract_not_fresh_empty(
     assert result["exit_code"] == 1
 
 
+@pytest.mark.parametrize("change", ["missing", "symbol", "key"])
+def test_doctor_explains_invalid_recorded_agent_identity(
+    ledger: Intelligence, tmp_path: Path, change: str
+) -> None:
+    # Arrange: freshness alone is insufficient for live ledger admission.
+    if change == "key":
+        with ledger.db:
+            ledger.db.execute(
+                "UPDATE observations SET key='OTHER' WHERE kind='agent'"
+            )
+    else:
+        data: dict[str, Any] = {"credits": 100000}
+        if change == "symbol":
+            data["symbol"] = "OTHER"
+        ledger.observe(SCOPE, "agent", "AGENT", data)
+        with ledger.db:
+            ledger.db.execute(
+                "UPDATE observations SET observed_at=? WHERE kind='agent'",
+                (NOW.isoformat(),),
+            )
+
+    # Act / Assert
+    result = report(ledger, tmp_path)
+    assert codes(result) == ["agent_identity_unknown"]
+    assert result["exit_code"] == 1
+
+
 @pytest.mark.parametrize(
     "keys,status,expected",
     [
         (["trade:A"], "open", "trade_recovery"),
         (["reposition:A"], "open", "reposition_recovery"),
+        (["procurement:C"], "open", "procurement_recovery"),
         (["contract:A"], "open", "unknown_or_multiple_positions"),
         (["trade:A"], "weird", "unknown_or_multiple_positions"),
         (["trade:A", "reposition:B"], "open", "unknown_or_multiple_positions"),

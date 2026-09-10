@@ -8,7 +8,24 @@ from datetime import UTC, datetime
 from typing import Any
 
 from py_st.services.automation import SafetyStop, Session
+from py_st.services.contract_state import select_contract
 from py_st.services.strategies import CREDIT_FLOOR, FUEL_ALLOWANCE
+
+
+def _quote(market: dict[str, Any], good: str) -> dict[str, Any] | None:
+    goods = market.get("tradeGoods")
+    if not isinstance(goods, list) or any(
+        not isinstance(q, dict) for q in goods
+    ):
+        return None
+    matches = [q for q in goods if q.get("symbol") == good]
+    if len(matches) != 1 or any(
+        type(matches[0].get(k)) is not int or matches[0][k] <= 0
+        for k in ("purchasePrice", "tradeVolume")
+    ):
+        return None
+    quote: dict[str, Any] = matches[0]
+    return quote
 
 
 def remote_contract_run(
@@ -20,14 +37,33 @@ def remote_contract_run(
         run.check()
         state = run.refresh()
         run.check_reposition()
+        positions = run.store.latest(run.scope, "position")
         if run.store.pending(run.scope) or any(
-            p["data"].get("status") == "open" and p["key"] != key
-            for p in run.store.latest(run.scope, "position")
+            p["data"].get("status") != "closed" and p["key"] != key
+            for p in positions
         ):
             raise SafetyStop("Resolve pending actions/open positions first")
-        contract = next(
-            c for c in state["contracts"] if c["id"] == contract_id
-        )
+        contract = select_contract(state["contracts"], contract_id)
+        terms = contract.get("terms")
+        if not isinstance(terms, dict):
+            raise SafetyStop("Invalid contract terms")
+        deliveries = terms.get("deliver")
+        if not isinstance(deliveries, list) or len(deliveries) != 1:
+            raise SafetyStop("Remote procurement requires one delivery good")
+        delivery = deliveries[0]
+        if (
+            not isinstance(delivery, dict)
+            or type(delivery.get("unitsRequired")) is not int
+            or type(delivery.get("unitsFulfilled")) is not int
+            or delivery["unitsRequired"] <= 0
+            or not 0 <= delivery["unitsFulfilled"] <= delivery["unitsRequired"]
+        ):
+            raise SafetyStop("Invalid contract delivery quantities")
+        if contract["fulfilled"] and (
+            not contract["accepted"]
+            or delivery["unitsFulfilled"] != delivery["unitsRequired"]
+        ):
+            raise SafetyStop("Fulfilled contract has conflicting progress")
         if any(
             c["accepted"] and not c["fulfilled"] and c["id"] != contract_id
             for c in state["contracts"]
@@ -36,14 +72,28 @@ def remote_contract_run(
                 "Other obligations need a separate costed reserve"
             )
         previous = next(
-            (
-                p["data"]
-                for p in run.store.latest(run.scope, "position")
-                if p["key"] == key
-            ),
+            (p["data"] for p in positions if p["key"] == key),
             None,
         )
-        if previous:
+        if previous is not None:
+            if (
+                not isinstance(previous, dict)
+                or previous.get("status") not in ("open", "closed")
+                or previous.get("strategy") is not None
+                or not isinstance(previous.get("plan"), dict)
+                or previous["plan"].get("strategy") is not None
+                or previous["plan"].get("contract") != contract_id
+                or (
+                    previous["status"] == "closed"
+                    and previous.get("stage") != "abandoned"
+                    and not contract["fulfilled"]
+                )
+            ):
+                raise SafetyStop(
+                    "Original remote procurement identity/status needs review"
+                )
+            if previous.get("stage") == "abandoned":
+                raise SafetyStop("Abandoned procurement cannot be resumed")
             original = previous["plan"]
             if (original["ship"], original["source"]) != (ship_symbol, source):
                 raise SafetyStop("Resume original procurement ship/source")
@@ -62,7 +112,6 @@ def remote_contract_run(
                 "recovery": "Run guarded auto refuel at destination before "
                 "onward travel; full refill was reserved, not yet spent.",
             }
-        delivery = contract["terms"]["deliver"][0]
         destination = delivery["destinationSymbol"]
         good = delivery["tradeSymbol"]
         if original and (original["destination"], original["good"]) != (
@@ -89,9 +138,25 @@ def remote_contract_run(
                         "delivered": delivery["unitsFulfilled"],
                     },
                 )
-            run.mutate(f"/my/contracts/{contract_id}/fulfill")
+            budget = run.deadline
+            run.deadline = min(
+                budget,
+                time.monotonic()
+                + (deadline - datetime.now(UTC)).total_seconds(),
+            )
+            try:
+                run.mutate(f"/my/contracts/{contract_id}/fulfill")
+            finally:
+                run.deadline = budget
             continue
         ship = run.arrive(ship_symbol)
+        if any(
+            s.get("symbol") == ship_symbol
+            and s.get("nav", {}).get("status") == "IN_TRANSIT"
+            for s in state["ships"]
+        ):
+            # Arrival polling may take minutes; discard the pre-wait contract.
+            continue
         held = sum(
             g["units"]
             for g in ship["cargo"]["inventory"]
@@ -141,16 +206,29 @@ def remote_contract_run(
                     "plan": original,
                 },
             )
-            run.navigate(ship_symbol, destination)
-            run.dock(ship_symbol)
-            run.mutate(
-                f"/my/contracts/{contract_id}/deliver",
-                {
-                    "shipSymbol": ship_symbol,
-                    "tradeSymbol": good,
-                    "units": held,
-                },
+            budget = run.deadline
+            run.deadline = min(
+                budget,
+                time.monotonic()
+                + (deadline - datetime.now(UTC)).total_seconds(),
             )
+            try:
+                if nav["waypointSymbol"] != destination:
+                    run.navigate(ship_symbol, destination)
+                elif nav["status"] != "DOCKED":
+                    run.mutate(f"/my/ships/{ship_symbol}/dock")
+                else:
+                    run.mutate(
+                        f"/my/contracts/{contract_id}/deliver",
+                        {
+                            "shipSymbol": ship_symbol,
+                            "tradeSymbol": good,
+                            "units": held,
+                        },
+                    )
+            finally:
+                run.deadline = budget
+            # Every completed leg/preparation action gets fresh obligations.
             continue
         if nav["waypointSymbol"] != source:
             raise SafetyStop(
@@ -179,16 +257,8 @@ def remote_contract_run(
             raise SafetyStop("Destination must have a fuel marketplace")
         observed = time.monotonic()
         market = run.market(destination)
-        fuel = next(
-            (g for g in market.get("tradeGoods", []) if g["symbol"] == "FUEL"),
-            None,
-        )
-        if (
-            market.get("symbol") != destination
-            or not fuel
-            or fuel.get("purchasePrice", 0) <= 0
-            or fuel.get("tradeVolume", 0) <= 0
-        ):
+        fuel = _quote(market, "FUEL")
+        if market.get("symbol") != destination or fuel is None:
             raise SafetyStop("No fresh usable destination fuel quote")
         fuel_ceiling = (
             original["fuel_price_ceiling"]
@@ -197,18 +267,13 @@ def remote_contract_run(
         )
         if fuel["purchasePrice"] > fuel_ceiling:
             raise SafetyStop("Destination fuel exceeds original ceiling")
-        refill = math.ceil(ship["fuel"]["capacity"] / 100) * fuel_ceiling
-        seller = run.market(source)
-        quote = next(
-            (g for g in seller.get("tradeGoods", []) if g["symbol"] == good),
-            None,
+        # Fund refuel_run's own headroom even at the original price ceiling.
+        refill = math.ceil(ship["fuel"]["capacity"] / 100) * math.ceil(
+            fuel_ceiling * 1.2
         )
-        if (
-            seller.get("symbol") != source
-            or not quote
-            or quote.get("purchasePrice", 0) <= 0
-            or quote.get("tradeVolume", 0) <= 0
-        ):
+        seller = run.market(source)
+        quote = _quote(seller, good)
+        if seller.get("symbol") != source or quote is None:
             raise SafetyStop("No live acquisition price/volume")
         ceiling = (
             original["max_unit_price"]
@@ -226,17 +291,84 @@ def remote_contract_run(
             raise SafetyStop(
                 "Insufficient acquisition/delivery deadline margin"
             )
-        expiration = contract.get(
-            "deadlineToAccept", contract.get("expiration")
-        )
-        if (
-            not contract["accepted"]
-            and expiration
-            and datetime.fromisoformat(expiration) <= datetime.now(UTC)
-        ):
-            raise SafetyStop("Contract acceptance expired")
+        expiration = None
+        if not contract["accepted"]:
+            try:
+                value = contract.get(
+                    "deadlineToAccept", contract.get("expiration")
+                )
+                if not isinstance(value, str):
+                    raise ValueError
+                expiration = datetime.fromisoformat(value)
+                now = datetime.now(UTC)
+                if expiration.tzinfo is None or expiration <= now:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise SafetyStop(
+                    "Contract acceptance expired or invalid"
+                ) from None
         credits = run.get("/my/agent")["credits"]
         protected = CREDIT_FLOOR + FUEL_ALLOWANCE + refill + needed * ceiling
+        if run.execute:
+            fresh = run.refresh()
+            current = select_contract(fresh["contracts"], contract_id)
+            if any(
+                current.get(k) != contract.get(k)
+                for k in (
+                    "id",
+                    "accepted",
+                    "fulfilled",
+                    "terms",
+                    "deadlineToAccept",
+                    "expiration",
+                )
+            ) or any(
+                c["accepted"] and not c["fulfilled"] and c["id"] != contract_id
+                for c in fresh["contracts"]
+            ):
+                raise SafetyStop(
+                    "Contract obligations changed before acquisition"
+                )
+            fleet = [
+                s for s in fresh["ships"] if s.get("symbol") == ship_symbol
+            ]
+            fresh_ship = run.ship(ship_symbol)
+            if len(fleet) != 1 or any(
+                s.get("symbol") != ship_symbol
+                or s.get("cargo") != ship["cargo"]
+                or s.get("fuel") != ship["fuel"]
+                or not isinstance(s.get("nav"), dict)
+                or any(
+                    s["nav"].get(k) != nav.get(k)
+                    for k in (
+                        "status",
+                        "flightMode",
+                        "waypointSymbol",
+                        "systemSymbol",
+                    )
+                )
+                for s in [*fleet, fresh_ship]
+            ):
+                raise SafetyStop("Ship state changed before acquisition")
+            if not any(
+                s["symbol"] != ship_symbol
+                and s.get("frame", {}).get("symbol") == "FRAME_PROBE"
+                and s.get("fuel", {}).get("capacity") == 0
+                and s.get("nav", {}).get("waypointSymbol") == destination
+                and s["nav"].get("status") in ("DOCKED", "IN_ORBIT")
+                for s in fresh["ships"]
+            ):
+                raise SafetyStop(
+                    "Destination observer changed before acquisition"
+                )
+            if (
+                run.store.pending(run.scope)
+                or run.store.latest(run.scope, "position") != positions
+            ):
+                raise SafetyStop(
+                    "Procurement exposure changed before acquisition"
+                )
+            credits = fresh["agent"]["credits"]
         payment = contract["terms"]["payment"]
         revenue = payment["onFulfilled"] + (
             0 if contract["accepted"] else payment["onAccepted"]
@@ -269,7 +401,7 @@ def remote_contract_run(
             return plan
         if not plan["feasible"]:
             raise SafetyStop("Contract fails conservative profit/reserve test")
-        if time.monotonic() - observed > 60:
+        if time.monotonic() - observed >= 60:
             raise SafetyStop("Destination fuel quote expired; replan")
         if original is None:
             original = plan
@@ -285,15 +417,31 @@ def remote_contract_run(
                 "plan": original,
             },
         )
-        if not contract["accepted"]:
-            run.mutate(f"/my/contracts/{contract_id}/accept")
-        elif nav["status"] != "DOCKED":
-            run.dock(ship_symbol)
-        else:
-            run.mutate(
-                f"/my/ships/{ship_symbol}/purchase",
-                {
-                    "symbol": good,
-                    "units": min(needed, quote["tradeVolume"]),
-                },
+        # Evidence and contract cutoffs also bound transport pacing/retries.
+        budget = run.deadline
+        monotonic = time.monotonic()
+        now = datetime.now(UTC)
+        run.deadline = min(
+            budget,
+            observed + 60,
+            monotonic + (deadline - now).total_seconds() - 3600 - travel,
+        )
+        if expiration is not None:
+            run.deadline = min(
+                run.deadline, monotonic + (expiration - now).total_seconds()
             )
+        try:
+            if not contract["accepted"]:
+                run.mutate(f"/my/contracts/{contract_id}/accept")
+            elif nav["status"] != "DOCKED":
+                run.mutate(f"/my/ships/{ship_symbol}/dock")
+            else:
+                run.mutate(
+                    f"/my/ships/{ship_symbol}/purchase",
+                    {
+                        "symbol": good,
+                        "units": min(needed, quote["tradeVolume"]),
+                    },
+                )
+        finally:
+            run.deadline = budget

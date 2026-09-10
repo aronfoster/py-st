@@ -100,8 +100,12 @@ def desk_ledger(tmp_path: Path) -> Path:
             contract | {"id": key, "fulfilled": fulfilled},
             "synthetic",
         )
-    store.observe("r:a", "agent", "a", {"credits": 200000}, "synthetic")
-    store.observe("r:b", "agent", "b", {"credits": 100000}, "synthetic")
+    store.observe(
+        "r:a", "agent", "a", {"symbol": "a", "credits": 200000}, "synthetic"
+    )
+    store.observe(
+        "r:b", "agent", "b", {"symbol": "b", "credits": 100000}, "synthetic"
+    )
     store.observe(
         "r:a",
         "automation_run",
@@ -205,6 +209,57 @@ def model_body(client: httpx.Client) -> dict[str, Any]:
             ],
         },
     }
+
+
+@pytest.mark.parametrize("target_exists", [False, True])
+def test_stop_symlink_is_a_sentinel_not_a_write_target(
+    desk_http: httpx.Client, desk_ledger: Path, target_exists: bool
+) -> None:
+    # Arrange: STOP remains a request even if its symlink target moved.
+    target = desk_ledger / "owner-note"
+    if target_exists:
+        target.write_text("preserve this note")
+    before = target.stat().st_mtime_ns if target_exists else None
+    stop = desk_ledger / "STOP"
+    stop.symlink_to(target)
+    csrf = model_body(desk_http)["csrf"]
+
+    # Act / Assert: report agrees with doctor; pause never follows the link.
+    assert desk_http.get("/api/report?scope=r:a").json()["paused"] is True
+    findings = desk_http.get("/api/doctor?scope=r:a").json()["findings"]
+    assert any(f["code"] == "stop_present" for f in findings)
+    response = desk_http.post(
+        "/api/control", json={"action": "pause", "csrf": csrf}
+    )
+    assert response.json()["paused"] is True
+    assert stop.is_symlink()
+    assert target.exists() is target_exists
+    if target_exists:
+        assert target.read_text() == "preserve this note"
+        assert target.stat().st_mtime_ns == before
+    response = desk_http.post(
+        "/api/control", json={"action": "resume", "csrf": csrf}
+    )
+    assert response.json()["paused"] is False
+    assert not stop.is_symlink()
+    assert target.exists() is target_exists
+
+
+def test_stop_control_reports_filesystem_failure_without_clearing(
+    desk_http: httpx.Client, desk_ledger: Path
+) -> None:
+    stop = desk_ledger / "STOP"
+    stop.mkdir()
+    csrf = model_body(desk_http)["csrf"]
+
+    response = desk_http.post(
+        "/api/control", json={"action": "resume", "csrf": csrf}
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "STOP control unavailable"}
+    assert stop.is_dir()
+    assert desk_http.get("/api/report?scope=r:a").json()["paused"] is True
 
 
 def test_desk_shared_services_read_only(
@@ -880,11 +935,39 @@ def test_doctor_browser(
                             "path": "/<script>bad()</script>",
                         }
                     ],
+                    "procurement": {
+                        "status": "recorded",
+                        "next_step": "Review owned cargo; not live readiness.",
+                        "goods": [
+                            {
+                                "good": "<script>IRON</script>",
+                                "required": 10,
+                                "delivered": 4,
+                                "held": 3,
+                                "to_acquire": 3,
+                                "excess": 0,
+                            }
+                        ],
+                        "observations": {"ship": "2026-09-10T00:02:00Z"},
+                        "deadlines": {
+                            "delivery": {"state": "unknown", "at": None}
+                        },
+                    },
                 }
             ]
             held[1].fulfill(json=synthetic)
             browser_api.expect(findings).to_contain_text(
                 "Pending #<b>pending</b> / /<script>bad()</script>"
+            )
+            browser_api.expect(findings).to_contain_text(
+                "<script>IRON</script>: 4/10 delivered / 3 held / "
+                "3 to acquire / 0 excess"
+            )
+            browser_api.expect(findings).to_contain_text(
+                "ship observed: 2026-09-10T00:02:00Z"
+            )
+            browser_api.expect(findings).to_contain_text(
+                "delivery deadline: unknown / unknown"
             )
             assert findings.locator("script, b").count() == 0
             held[0].fulfill(status=503, json={"error": "OLD ERROR"})
@@ -943,6 +1026,44 @@ def test_contract_desk_browser(
         )
         store.observe(
             "r:a",
+            "position",
+            "procurement:C-MULTI",
+            {
+                "status": "open",
+                "stage": "acquiring",
+                "plan": {
+                    "strategy": "local-multi",
+                    "destination": "X-A-D",
+                    "purchase_ceilings": {"IRON": 120, "COPPER": 240},
+                },
+                "goods": {
+                    "IRON": {"remaining": 5, "held": 2, "to_buy": 3},
+                    "COPPER": {"remaining": 3, "held": 0, "to_buy": 3},
+                },
+            },
+            "synthetic",
+        )
+        store.observe(
+            "r:a",
+            "position",
+            "unknown-intent",
+            {"status": "review", "goods": {"UNKNOWN": None}},
+        )
+        store.observe(
+            "r:a",
+            "position",
+            "reposition:A-1",
+            {
+                "status": "open",
+                "plan": {
+                    "good": "IRON",
+                    "source": "X-A-S",
+                    "destination": "X-A-D",
+                },
+            },
+        )
+        store.observe(
+            "r:a",
             "waypoint",
             "X-A-D",
             {"x": 0, "y": 0, "traits": [{"symbol": "MARKETPLACE"}]},
@@ -979,6 +1100,21 @@ def test_contract_desk_browser(
                 )
                 page.goto(str(desk_http.base_url))
                 page.locator("#scope").select_option("r:a")
+                browser_api.expect(page.locator("#positions")).to_contain_text(
+                    "procurement:C-MULTI / IRON, COPPER -> X-A-D"
+                )
+                browser_api.expect(page.locator("#positions")).to_contain_text(
+                    "IRON: 5 remaining / 2 held / 3 to acquire"
+                )
+                browser_api.expect(page.locator("#positions")).to_contain_text(
+                    "reposition:A-1 / IRON -> X-A-S"
+                )
+                browser_api.expect(page.locator("#positions")).to_contain_text(
+                    "UNRECOGNIZED POSITION: unknown-intent"
+                )
+                browser_api.expect(
+                    page.locator("#positions")
+                ).not_to_contain_text("undefined")
                 browser_api.expect(
                     page.locator("#contract-select option")
                 ).to_have_count(3)

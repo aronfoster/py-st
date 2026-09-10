@@ -22,15 +22,20 @@ def test_history_and_scope_isolation(tmp_path: Path) -> None:
     store.close()
 
 
-@pytest.mark.parametrize("guard", ["stop", "dry", "budget", "pending"])
+@pytest.mark.parametrize(
+    "guard", ["stop", "dangling_stop", "dry", "budget", "pending"]
+)
 def test_mutation_guards(tmp_path: Path, guard: str) -> None:
     # Arrange
     client = MagicMock()
+    client.request.return_value = {}
     store = Intelligence(tmp_path / "db")
     run = Session(client, store, execute=guard != "dry", root=tmp_path)
     run.scope = "r:a"
     if guard == "stop":
         (tmp_path / "STOP").touch()
+    elif guard == "dangling_stop":
+        (tmp_path / "STOP").symlink_to(tmp_path / "missing-target")
     elif guard == "budget":
         run.remaining = 0
     elif guard == "pending":
