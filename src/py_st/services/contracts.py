@@ -10,8 +10,9 @@ from pydantic import ValidationError
 
 from py_st import cache
 from py_st._generated.models import Agent, Contract, ShipCargo
-from py_st.client import SpaceTradersClient
-from py_st.services.cache_keys import key_for_contract_list
+from py_st.client.client import get_client as SpaceTradersClient
+from py_st.services.cache_keys import key_for_agent, key_for_contract_list
+from py_st.services.ships import _mark_ship_list_dirty
 
 
 def _mark_contract_list_dirty() -> None:
@@ -22,10 +23,13 @@ def _mark_contract_list_dirty() -> None:
     is already treated as dirty by list_contracts).
     """
     full_cache = cache.load_cache()
+    agent_removed = full_cache.pop(key_for_agent(), None) is not None
 
     cached_entry = full_cache.get(key_for_contract_list())
     if cached_entry is not None and isinstance(cached_entry, dict):
         cached_entry["is_dirty"] = True
+        cache.save_cache(full_cache)
+    elif agent_removed:
         cache.save_cache(full_cache)
 
 
@@ -75,8 +79,8 @@ def negotiate_contract(token: str, ship_symbol: str) -> Contract:
     Negotiates a new contract using the specified ship.
     """
     client = SpaceTradersClient(token=token)
-    new_contract = client.contracts.negotiate_contract(ship_symbol)
     _mark_contract_list_dirty()
+    new_contract = client.contracts.negotiate_contract(ship_symbol)
     return new_contract
 
 
@@ -91,10 +95,11 @@ def deliver_contract(
     Delivers cargo to fulfill part of a contract.
     """
     client = SpaceTradersClient(token=token)
+    _mark_contract_list_dirty()
+    _mark_ship_list_dirty()
     contract, cargo = client.contracts.deliver_contract(
         contract_id, ship_symbol, trade_symbol, units
     )
-    _mark_contract_list_dirty()
     return contract, cargo
 
 
@@ -103,8 +108,8 @@ def fulfill_contract(token: str, contract_id: str) -> tuple[Agent, Contract]:
     Fulfills a contract.
     """
     client = SpaceTradersClient(token=token)
-    agent, contract = client.contracts.fulfill_contract(contract_id)
     _mark_contract_list_dirty()
+    agent, contract = client.contracts.fulfill_contract(contract_id)
     return agent, contract
 
 
@@ -113,8 +118,8 @@ def accept_contract(token: str, contract_id: str) -> tuple[Agent, Contract]:
     Accepts a contract.
     """
     client = SpaceTradersClient(token=token)
+    _mark_contract_list_dirty()
     result = client.contracts.accept_contract(contract_id)
     agent: Agent = cast(Agent, result["agent"])
     contract: Contract = cast(Contract, result["contract"])
-    _mark_contract_list_dirty()
     return agent, contract

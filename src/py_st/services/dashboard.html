@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Ledger | SpaceTraders</title>
+<style>
+:root{--paper:#efede5;--ink:#202b29;--muted:#65716a;--line:#c8cec3;--accent:#c4f478;--dark:#152a27;--amber:#a85b20}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px system-ui,sans-serif}
+header{background:var(--dark);color:var(--paper);padding:22px 5vw;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.brand{font:20px Georgia,serif;letter-spacing:.03em}.brand span{font:11px monospace;display:block;color:var(--accent);margin-top:5px;letter-spacing:.15em}
+button,select{font:12px monospace;border:1px solid var(--line);padding:11px 14px;background:transparent;color:inherit;cursor:pointer;border-radius:3px}button:hover{background:var(--accent);color:var(--ink)}button:focus-visible,select:focus-visible{outline:3px solid #f2a844;outline-offset:3px}header select{max-width:240px;background:var(--dark)}
+main{max-width:1500px;margin:auto;padding:36px 5vw}h1{font:clamp(32px,4vw,54px) Georgia,serif;margin:0 0 10px;font-weight:400;letter-spacing:-.04em}h2{font:22px Georgia,serif;margin:0 0 18px}p{line-height:1.6}.eyebrow{font:11px monospace;text-transform:uppercase;letter-spacing:.15em;color:var(--muted)}.lead{display:flex;justify-content:space-between;gap:30px;align-items:end;margin-bottom:30px}.lead p{color:var(--muted);margin:0;max-width:620px}.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.status{font:11px monospace;border:1px solid var(--line);padding:8px 10px;white-space:nowrap}.warn{color:var(--amber)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);margin-bottom:30px}.metric{padding:24px;border-right:1px solid var(--line)}.metric:last-child{border:0}.value{font:32px Georgia,serif;margin:10px 0}.small{font:11px monospace;color:var(--muted)}.grid{display:grid;grid-template-columns:1.15fr 1fr;gap:28px}.panel{border-top:2px solid var(--ink);padding-top:18px;margin-bottom:30px;min-width:0}.chart{width:100%;height:180px;display:block}.chart text{font:10px monospace;fill:var(--muted)}.chart polyline{fill:none;stroke:#3c7152;stroke-width:2.5}.chart circle{fill:#6d8c63}.fleet{display:grid;gap:10px}.ship{border:1px solid var(--line);padding:18px;background:#f6f4ed}.ship-top{display:flex;justify-content:space-between;gap:10px;font:13px monospace}.ship p{font:12px monospace;margin-bottom:10px}.bar{height:5px;background:#d8ddd0;margin:8px 0 12px}.bar i{height:100%;background:#708b59;display:block}.ship details{font:11px monospace;margin-top:8px}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px}.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font:12px monospace;white-space:nowrap}th{text-align:left;font-weight:400;color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase}td,th{border-bottom:1px solid var(--line);padding:12px 12px 12px 0}td:last-child,th:last-child{padding-right:0}.log{background:var(--dark);color:#ced9cf;padding:20px;max-height:340px;overflow:auto;font:11px monospace}.entry{padding:10px 0;border-bottom:1px solid #38504a;overflow-wrap:anywhere}.entry strong{color:var(--accent);font-weight:400}.entry.pending strong{color:#ffc082}footer{padding:22px 0;color:var(--muted);font:11px monospace;border-top:1px solid var(--line)}#error{color:var(--amber);font:12px monospace;margin:12px 0}a{color:inherit}.empty{color:var(--muted);font:12px monospace;padding:18px 0}
+@media(max-width:800px){header{align-items:start;flex-direction:column;padding:20px}.lead{display:block}.lead .controls{margin-top:20px}main{padding:26px 20px}.metrics{grid-template-columns:1fr 1fr}.metric{padding:18px}.metric:nth-child(2){border-right:0}.metric:nth-child(-n+2){border-bottom:1px solid var(--line)}.grid{grid-template-columns:1fr;gap:0}.value{font-size:28px}}
+.desk{background:#f6f4ed;border:1px solid var(--line);padding:22px;margin-bottom:30px;overflow-wrap:anywhere}.desk h3{font:19px Georgia,serif}.desk select{max-width:100%;min-width:0}.desk label{display:block;margin:14px 0 8px;font:12px monospace}.desk textarea{display:block;width:100%;min-height:340px;resize:vertical;background:var(--paper);color:var(--ink);border:1px solid var(--line);padding:14px;font:12px/1.6 monospace}.desk textarea:focus-visible{outline:3px solid #f2a844;outline-offset:3px}.desk button{margin:12px 0}.desk button:disabled{opacity:.5;cursor:not-allowed}.desk .ship{margin:10px 0}.desk .controls>*{min-width:0}.ship-top{overflow-wrap:anywhere}
+.builder-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:0 18px}.builder-fields>div{min-width:0}.desk input[type=number]{width:100%;min-width:0;padding:11px;background:var(--paper);color:var(--ink);border:1px solid var(--line);font:13px monospace}.desk input:focus-visible{outline:3px solid #f2a844;outline-offset:3px}.desk input[type=checkbox]{width:20px;height:20px;vertical-align:middle;accent-color:#3c7152;margin:0 10px 0 0}.builder-route{border:1px solid var(--line);padding:14px;margin-top:14px;min-width:0}.builder-route fieldset{border:0;padding:0;margin:0;min-width:0}.builder-route fieldset:disabled{opacity:.55}.builder-route>label{line-height:1.7;margin:0}.desk input[aria-invalid=true]{border-color:var(--amber)}
+.builder-route fieldset[hidden]{display:none}
+#market-trend[hidden]{display:none}
+</style>
+</head>
+<body>
+<header><div class="brand">Flight Ledger<span>SPACE TRADERS / OPERATIONS</span></div><div class="controls"><label class="small" for="scope">UNIVERSE / AGENT</label><select id="scope" aria-label="Universe and agent"></select><span id="state" class="status">CONNECTING</span></div></header>
+<main>
+<section class="lead"><div><div class="eyebrow">Local intelligence / no live requests from this page</div><h1>Keep the fleet earning.</h1><p>Observed economics, fleet readiness and an accountable action trail. Decisions are bounded. The credit reserve is not negotiable.</p></div><div class="controls"><button id="refresh">Refresh ledger</button><button id="pause">Pause automation</button><button id="resume">Clear stop</button></div></section>
+<div id="error" role="alert"></div>
+<section class="metrics" aria-label="Account summary"><div class="metric"><div class="eyebrow">Credits on hand</div><div id="credits" class="value">--</div><div id="observed" class="small">No observation yet</div></div><div class="metric"><div class="eyebrow">Scope cash change</div><div id="profit" class="value">--</div><div class="small">Cash flow, not inventory-adjusted profit</div></div><div class="metric"><div class="eyebrow">Above fixed floor</div><div id="reserve" class="value">--</div><div class="small">Before fuel and contract obligations</div></div><div class="metric"><div class="eyebrow">Market coverage</div><div id="coverage" class="value">--</div><div class="small">Priced / advertised markets</div></div></section>
+<div class="grid"><section class="panel"><h2>The credit trail</h2><svg id="chart" class="chart" viewBox="0 0 600 180" role="img" aria-label="Observed credit history"></svg><div class="small">All observations are scoped to the selected reset and agent.</div></section><section class="panel"><h2>Local system</h2><svg id="map" class="chart" viewBox="0 0 600 180" role="img" aria-label="Fleet and market positions"></svg><div class="small">Market positions and last observed ship locations, not live telemetry.</div></section></div>
+<div class="grid"><section class="panel"><h2>Fleet readiness</h2><div id="fleet" class="fleet"></div></section><section class="panel"><h2>Contract desk</h2><div id="contracts"></div><h2 style="margin-top:24px">Strategy notes</h2><div id="plans"></div></section></div>
+<section class="desk" aria-labelledby="market-title">
+<div class="eyebrow">Market desk / cached evidence only</div><h2 id="market-title">Inspect the recorded market.</h2>
+<p>No live requests. Buy and sell are credits per unit; volume is a transaction batch limit, not available inventory. Unknown values are gaps, never zero-price offers.</p>
+<div class="builder-fields"><div><label for="market-select">Cached market</label><select id="market-select"></select></div><div><label for="good-select">Good history</label><select id="good-select"></select></div></div>
+<p id="market-asof" class="small"></p>
+<div class="scroll" role="region" aria-label="Cached market prices" tabindex="0"><table><caption>Last retained detailed market observation</caption><thead><tr><th>Good</th><th>Buy</th><th>Sell</th><th>Volume</th><th>Supply</th><th>Activity</th></tr></thead><tbody id="market-prices"></tbody></table></div>
+<p id="market-status" class="small" role="status" aria-live="polite">Select a cached market to inspect prices.</p>
+<svg id="market-trend" class="chart" viewBox="0 0 600 180" role="img" aria-label="Cached buy and sell prices by observation time" hidden></svg>
+<div class="scroll" role="region" aria-label="Historical price observations" tabindex="0"><table><caption>Good history: newest 50 observations, oldest first</caption><thead><tr><th>Original timestamp</th><th>Buy</th><th>Sell</th><th>Volume</th><th>Supply / activity</th><th>Provenance / visibility</th></tr></thead><tbody id="market-history"></tbody></table></div>
+</section>
+<section class="desk" aria-labelledby="desk-title">
+<div class="eyebrow">Contract desk / offline only</div><h2 id="desk-title">Cost the whole obligation.</h2>
+<p>Choose an unfulfilled contract from this ledger. Sources are cached discovery evidence, not available inventory or live quotes. Nothing here accepts, buys, delivers, or launches automation.</p>
+<label for="contract-select">Unfulfilled contract</label><select id="contract-select"><option value="">Select a contract</option></select>
+<button id="source-reload" type="button">Reload sources and reset draft</button>
+<p id="desk-status" class="small" role="status" aria-live="polite">Waiting for ledger.</p>
+<div id="sources"></div>
+<div id="model-editor" hidden>
+<label for="model-ship">Observed ship snapshot</label><select id="model-ship"></select>
+<button id="prefill" type="button">Reset draft from cached evidence</button>
+<p id="snapshot" class="small"></p>
+<details><summary>Cached contract, agent and ship evidence</summary><pre id="snapshot-json"></pre></details>
+<form id="builder-form" novalidate aria-labelledby="builder-title">
+<h3 id="builder-title">Choose routes and enter costs</h3>
+<p class="small">Select only the source routes you want to model. None are selected automatically; selection does not authorize execution. Review observed defaults and supply missing prices. Fuel and travel are required for each selected route, even when zero. Available units is a shared source/good ceiling, not trade volume; blank means unbounded modeled supply.</p>
+<div class="builder-fields">
+<div><label for="builder-credits">Credits (required)</label><input id="builder-credits" type="number" min="0" step="1" required></div>
+<div><label for="builder-capacity">Free cargo units (required)</label><input id="builder-capacity" type="number" min="1" step="1" required></div>
+</div>
+<div id="builder-routes"></div>
+<p class="small">Build explicitly replaces the entire JSON draft with the selected contract, form inputs, and default reserves/margins. It does not calculate or send a request. Use Calculate offline model afterward. Form edits do not change an existing JSON draft or result.</p>
+<button type="submit">Build draft from form</button>
+<div id="builder-error" class="warn" role="alert"></div>
+<p id="builder-status" class="small" role="status" aria-live="polite"></p>
+</form>
+<h3>Advanced JSON editor</h3>
+<form id="model-form">
+<label for="model-input">Editable offline model (JSON)</label>
+<p id="model-help" class="small">Enter fuel_cost (credits) and travel_seconds for every complete per-trip route; both start as null, even for a same-market route. Review credits and usable cargo capacity. Stale or unknown prices remain null. Remove unused quotes or supply your own explicit assumptions. Trade volume is a purchase batch limit, not inventory. Without available_units the model assumes unlimited supply. This model does not prove ship eligibility, approach travel, carried fuel, or other contract obligations.</p>
+<textarea id="model-input" aria-describedby="model-help" spellcheck="false" required></textarea>
+<button id="model-submit" type="submit">Calculate offline model</button>
+</form>
+<div id="model-error" class="warn" role="alert"></div>
+<div id="model-result" role="status" aria-live="polite"></div>
+</div>
+</section>
+<section class="panel"><h2>Automation runs</h2><p class="small">Recorded pilot progress, not a process monitor. A RUNNING record may belong to an interrupted process. Check the journal and original positions before restarting. Pause requests STOP; this page never launches or restarts a run.</p><div id="automation-runs" class="fleet"></div></section>
+<section class="panel"><h2>Recorded safety</h2><p class="small">Offline records only. Live scope and readiness unverified; process liveness unknown. No execution authority. This check never clears STOP, reconciles actions or starts a run.</p><button id="doctor-check" type="button">Check recorded safety</button><p id="doctor-status" role="status" class="small"></p><ul id="doctor-findings" class="small" style="overflow-wrap:anywhere"></ul></section>
+<section class="panel"><h2>Route watchlist</h2><p class="small">Indicative round-trip margin after estimated fuel. Recheck prices, cargo, fuel and obligations before execution. Quotes older than 15 minutes are marked stale.</p><div class="scroll"><table><thead><tr><th>Good / route</th><th>Units</th><th>Buy / sell</th><th>Est. net</th><th>Quote age</th></tr></thead><tbody id="routes"></tbody></table></div></section>
+<section class="panel"><h2>Cash reconciliation</h2><p id="audit" class="small"></p><div class="scroll"><table><thead><tr><th>Good</th><th>Bought / sold</th><th>Spent</th><th>Received</th><th>Net cash</th></tr></thead><tbody id="cash"></tbody></table></div><p class="small">Contract receipts are separate from goods. Fuel units are 100-unit packs. Open cargo is not valued as realized profit.</p><div id="positions"></div></section>
+<div class="grid"><section class="panel"><h2>Market intelligence</h2><div class="scroll"><table><thead><tr><th>Waypoint</th><th>Exports</th><th>Observed</th></tr></thead><tbody id="markets"></tbody></table></div></section><section class="panel"><h2>Mutation journal</h2><div id="journal" class="log"></div><p class="small">Pending means the outcome may be unknown. Inspect fresh state before reconciliation; never replay blindly.</p></section></div>
+<footer>LOCAL ONLY / Pause creates STOP. Clear stop only removes it; it never starts a live process. Resume a reviewed CLI plan explicitly. <a id="export" role="link" aria-disabled="true">Export JSON</a></footer>
+</main>
+<script nonce="__NONCE__">
+const $=id=>document.getElementById(id), fmt=n=>Number(n).toLocaleString(), csrf='__NONCE__';
+function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n}
+function age(date){const s=Math.max(0,Math.floor((Date.now()-Date.parse(date))/1000));return s<60?s+'s':Math.floor(s/60)+'m'}
+function svg(tag,attrs,text){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,v));if(text)n.textContent=text;return n}
+function row(parent,values){const tr=node('tr');values.forEach(v=>tr.append(node('td',v)));parent.append(tr)}
+let marketVersion=0;
+const knownPrice=value=>Number.isSafeInteger(value)&&value>0?value:'unknown';
+function marketTimeState(date){
+ const seconds=(Date.now()-Date.parse(date))/1000;
+ if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(date)||!Number.isFinite(seconds)||new Date(date.slice(0,10)+'T00:00:00Z').toISOString().slice(0,10)!==date.slice(0,10))return 'INVALID timestamp';
+ return seconds<0?'FUTURE timestamp':seconds>900?'STALE (over 15 minutes)':'recent cached detail, not live';
+}
+function clearMarketHistory(message){marketVersion++;$('market-history').replaceChildren();$('market-trend').replaceChildren();$('market-trend').setAttribute('hidden','');$('market-status').textContent=message;}
+function syncMarket(d){
+ const select=$('market-select'),prior=select.value;
+ select.replaceChildren(new Option('Select a cached market',''));
+ (d.prices||[]).forEach(r=>select.append(new Option(r.key,r.key)));
+ select.value=prior;select.disabled=select.options.length===1;
+ showMarket();
+}
+function showMarket(){
+ const select=$('good-select'),prior=select.value,market=(ledger.prices||[]).find(r=>r.key===$('market-select').value);
+ select.replaceChildren(new Option('Select a good',''));$('market-prices').replaceChildren();$('market-asof').textContent='';
+ if(market){
+  const latest=(ledger.markets||[]).find(r=>r.key===market.key);
+  $('market-asof').textContent=`Cached as of ${market.observed_at} / #${market.id} / ${market.source}. ${latest?.id===market.id?'Current stored detail':'Retained history; newer market record, current visibility unknown'}. ${marketTimeState(market.observed_at)}. Latest market record: ${latest?.observed_at||'unknown'} (${marketTimeState(latest?.observed_at)}).`;
+  const goods=Array.isArray(market.data.tradeGoods)?market.data.tradeGoods.filter(g=>g&&typeof g.symbol==='string'):[];
+  [...new Set(goods.map(g=>g.symbol))].sort().forEach(symbol=>{
+   const matches=goods.filter(g=>g.symbol===symbol),g=matches.length===1?matches[0]:{};
+   select.append(new Option(symbol,symbol));
+   row($('market-prices'),[symbol,knownPrice(g.purchasePrice),knownPrice(g.sellPrice),knownPrice(g.tradeVolume),typeof g.supply==='string'?g.supply:'unknown',typeof g.activity==='string'?g.activity:'unknown']);
+  });
+ }
+ select.value=prior;select.disabled=select.options.length===1;
+ loadMarketHistory();
+}
+async function loadMarketHistory(){
+ const scope=$('scope').value,waypoint=$('market-select').value,good=$('good-select').value;
+ clearMarketHistory(!waypoint?'Select a cached market. No detailed markets means no stored prices in this scope.':!good?'Select a good to inspect its original price observations.':'Loading cached history...');
+ const version=marketVersion;if(!scope||!waypoint||!good)return;
+ try{
+  const d=await requestJSON('/api/market-history?'+new URLSearchParams({scope,waypoint,good}));
+  if(version!==marketVersion||scope!==$('scope').value||waypoint!==$('market-select').value||good!==$('good-select').value)return;
+  const points=d.points;
+  $('market-status').textContent=`${good} / ${waypoint}: ${points.length} cached observations${d.truncated?' (older observations omitted)':''}. Evaluated ${d.evaluated_at}. Skipped: ${d.skipped.invalid_timestamp} invalid timestamps, ${d.skipped.future_timestamp} future timestamps, ${d.skipped.invalid_data} malformed records. ${d.note}`;
+  points.forEach(p=>row($('market-history'),[p.observed_at,p.purchase_price??'unknown',p.sell_price??'unknown',p.trade_volume??'unknown',`${p.supply??'unknown'} / ${p.activity??'unknown'}`,`#${p.id} / ${p.source} / ${p.visibility} / ${p.stale?'STALE':'recent, not live'} / ${p.quote_status}`]));
+  const times=points.map(p=>Number.isFinite(p.observed_at_ms)&&Math.abs(p.observed_at_ms)<=8640000000000000?p.observed_at_ms:null),validTimes=times.filter(Number.isFinite),values=points.flatMap((p,i)=>times[i]===null?[]:[p.purchase_price,p.sell_price]).filter(v=>Number.isFinite(v)&&v>0),chart=$('market-trend');
+  if(validTimes.length!==times.length)$('market-status').textContent+=` ${times.length-validTimes.length} observations have invalid plotting times; shown only in the table.`;
+  if(new Set(validTimes).size<2||!['purchase_price','sell_price'].some(key=>new Set(points.filter((p,i)=>times[i]!==null&&Number.isFinite(p[key])&&p[key]>0).map(p=>p.observed_at_ms)).size>=2)){$('market-status').textContent+=' At least two distinct times with known prices are required for a trend.';return;}
+  $('market-status').textContent+=' Trend: buy green, sell amber; horizontal spacing is elapsed time. Gaps are not interpolated.';
+  const start=Math.min(...validTimes),end=Math.max(...validTimes),low=Math.min(...values),high=Math.max(...values);
+  chart.removeAttribute('hidden');
+  for(const [key,color] of [['purchase_price','#3c7152'],['sell_price','#a85b20']]){
+   let path='',connected=false;
+   points.forEach((p,i)=>{if(times[i]===null||!Number.isFinite(p[key])||p[key]<=0){connected=false;return;}const x=20+(times[i]-start)/(end-start)*560,y=140-(p[key]-low)/Math.max(1,high-low)*115;path+=(connected?'L':'M')+x+','+y+' ';connected=true;chart.append(svg('circle',{cx:x,cy:y,r:3,style:'fill:'+color}));});
+   chart.append(svg('path',{d:path,fill:'none',stroke:color,'stroke-width':2}));
+  }
+  chart.append(svg('text',{x:20,y:163},`${low} - ${high} credits / buy green / sell amber`),svg('text',{x:20,y:177},`${new Date(start).toISOString()} to ${new Date(end).toISOString()}`));
+ }catch(e){if(version===marketVersion)$('market-status').textContent='History unavailable: '+e.message;}
+}
+let ledger={}, deskEvidence=null, deskSnapshot=null, builderBase=null, deskVersion=0, reportVersion=0, modelVersion=0, doctorVersion=0;
+function clearDoctor(){doctorVersion++;$('doctor-status').textContent='';$('doctor-findings').replaceChildren();}
+async function checkDoctor(){
+ clearDoctor();const version=doctorVersion, scope=$('scope').value;
+ if(!scope){$('doctor-status').textContent='Select an explicit reset/agent scope; an existing ledger is required.';return;}
+ $('doctor-status').textContent='Checking recorded safety for '+scope+'...';
+ try{
+  const response=await fetch('/api/doctor?'+new URLSearchParams({scope})), d=await response.json();
+  if(version!==doctorVersion||scope!==$('scope').value)return;
+  if(!response.ok&&!d.findings)throw Error(d.error||'Check unavailable');
+  $('doctor-status').textContent=`${scope}: ${d.status.replaceAll('_',' ')}. Offline; readiness unverified; process liveness unknown. Execution authorized: false.`;
+  for(const f of d.findings){
+   const item=node('li',f.code.replaceAll('_',' ')+': '+f.next_step);
+   for(const a of f.actions||[])item.append(node('div',`Pending #${a.id}${a.path?' / '+a.path:''}`));
+   if(f.key)item.append(node('div',f.key));
+    if(f.keys)item.append(node('div',f.keys.join(', ')));
+    if(f.procurement){
+     const p=f.procurement;item.append(node('div',`Recorded procurement: ${p.status}. ${p.next_step}`));
+     for(const g of p.goods||[])item.append(node('div',`${g.good}: ${g.delivered}/${g.required} delivered / ${g.held} held / ${g.to_acquire} to acquire / ${g.excess} excess`));
+     for(const [kind,stamp] of Object.entries(p.observations||{}))item.append(node('div',`${kind} observed: ${stamp}`));
+     for(const [kind,d] of Object.entries(p.deadlines||{}))item.append(node('div',`${kind} deadline: ${d.state} / ${d.at??'unknown'}`));
+    }
+   $('doctor-findings').append(item);
+  }
+ }catch(e){if(version===doctorVersion&&scope===$('scope').value)$('doctor-status').textContent='Recorded safety check failed: '+e.message;}
+}
+function clearDesk(message){
+ deskVersion++;modelVersion++;deskEvidence=null;deskSnapshot=null;
+ builderBase=null;$('builder-form').reset();
+ ['builder-routes','builder-error','builder-status'].forEach(id=>$(id).replaceChildren());
+ $('builder-form').querySelectorAll('[aria-invalid]').forEach(input=>input.removeAttribute('aria-invalid'));
+ $('sources').replaceChildren();$('model-editor').hidden=true;
+ ['model-ship','snapshot','snapshot-json'].forEach(id=>$(id).replaceChildren());
+ $('model-input').value='';$('model-result').replaceChildren();$('model-error').textContent='';
+ $('desk-status').textContent=message;$('model-submit').disabled=false;
+}
+function clearScope(){
+ clearMarketHistory('Loading selected scope...');['market-select','good-select','market-prices','market-asof'].forEach(id=>$(id).replaceChildren());
+ clearDoctor();
+ clearDesk('Loading selected scope...');ledger={};
+ ['credits','profit','reserve','coverage'].forEach(id=>$(id).textContent='--');
+  ['chart','map','fleet','contracts','plans','routes','cash','audit','positions','markets','journal','contract-select','automation-runs'].forEach(id=>$(id).replaceChildren());
+ $('audit').classList.remove('warn');$('error').textContent='';
+ $('observed').textContent='Loading selected scope...';
+ $('export').removeAttribute('href');$('export').setAttribute('aria-disabled','true');
+}
+function syncDesk(d){
+ ledger=d;
+ const select=$('contract-select'), prior=select.value;
+ select.replaceChildren(node('option','Select a contract'));select.firstChild.value='';
+ (d.contracts||[]).filter(r=>!r.data.fulfilled).forEach(r=>{
+  const option=node('option',r.data.id+' / '+(r.data.accepted?'accepted':'offered'));
+  option.value=r.key;select.append(option);
+ });
+ select.value=prior;
+ if(!select.value){select.value='';clearDesk(select.options.length>1?'Select an unfulfilled contract to inspect cached sources.':'No unfulfilled contracts in this scope. Refresh ledger only reloads stored observations.');}
+}
+async function requestJSON(url,options){
+ const response=await fetch(url,options), data=await response.json();
+ if(!response.ok)throw Error(data.error||'Request rejected ('+response.status+')');
+ return data;
+}
+async function loadSources(){
+ clearDesk('Loading cached source shortlist...');
+ const version=deskVersion, scope=$('scope').value, contract=$('contract-select').value;
+ if(!contract){$('desk-status').textContent='Select an unfulfilled contract.';return;}
+ const snapshot=ledger;
+ try{
+  const d=await requestJSON('/api/sources?'+new URLSearchParams({scope,contract}));
+  if(version!==deskVersion)return;
+  deskEvidence=d;deskSnapshot=snapshot;
+  $('desk-status').textContent=`Cached contract observed ${d.contract_observed_at}; evaluated ${d.evaluated_at}. ${d.sourcing_blockers.join('; ')||'No stored deadline blockers.'} Execution authorized: false.`;
+  for(const delivery of d.deliveries){
+   const section=node('section');section.append(node('h3',`${delivery.trade_symbol}: ${delivery.remaining_units} remaining -> ${delivery.destination}`));
+   if(!delivery.sources.length)section.append(node('p','No same-system source adverts. Add explicit quotes only if you have evidence.','empty'));
+   for(const s of delivery.sources){
+    const card=node('article',undefined,'ship');
+    const state={fresh:'CURRENT stored detail at evaluation (not live)',fresh_historical:'HISTORICAL detail; current visibility unknown',stale:'STALE detail',missing:'UNKNOWN / no detailed quote',invalid_timestamp:'UNKNOWN / invalid detailed timestamp',invalid_price_or_volume:'UNKNOWN / invalid price or volume'}[s.quote_status]||s.quote_status;
+    card.append(node('strong',s.source+' / '+s.category),node('p',state,'small'),node('p',`Detailed timestamp: ${s.quote_observed_at||'unknown'} / age at evaluation: ${s.quote_age_seconds===null?'unknown':Math.floor(s.quote_age_seconds)+'s'} / freshness limit: ${d.max_age_seconds}s`,'small'),node('p',`Advertisement: ${s.advertised_at}. Purchase price: ${s.purchase_price??'unknown'} / batch volume: ${s.trade_volume??'unknown'} / geometric distance: ${s.distance??'unknown'}.`,'small'));
+    section.append(card);
+   }
+   $('sources').append(section);
+  }
+  const ships=$('model-ship');ships.replaceChildren(node('option','No ship selected'));ships.firstChild.value='';
+  (snapshot.ships||[]).forEach(r=>{const o=node('option',r.key);o.value=r.key;ships.append(o)});
+  const hauler=(snapshot.ships||[]).find(r=>r.data.cargo.capacity>0);if(hauler)ships.value=hauler.key;
+  $('model-editor').hidden=false;prefillModel();
+ }catch(e){if(version===deskVersion)$('desk-status').textContent='Source shortlist failed: '+e.message;}
+}
+function prefillModel(){
+ if(!deskEvidence||!deskSnapshot)return;
+ const c=deskEvidence.contract_observation;
+ const ship=(deskSnapshot.ships||[]).find(r=>r.key===$('model-ship').value);
+ const agent=(deskSnapshot.agents||[]).reduce((a,r)=>!a||r.id>a.id?r:a,null);
+ const quotes=deskEvidence.deliveries.flatMap(d=>d.sources.map(s=>({
+  source:s.source,trade_symbol:d.trade_symbol,destination:d.destination,
+  purchase_price:s.purchase_price,trade_volume:s.trade_volume,fuel_cost:null,travel_seconds:null
+ })));
+ builderBase={contract:c.data,ship_capacity:ship?Math.max(0,ship.data.cargo.capacity-ship.data.cargo.units):null,credits:agent?.data.credits??null,credit_floor:50000,fuel_allowance:1000,price_margin:0.2,deadline_margin_seconds:3600};
+ $('model-input').value=JSON.stringify({...builderBase,quotes},null,2);
+ $('builder-credits').value=builderBase.credits??'';$('builder-capacity').value=builderBase.ship_capacity??'';
+ $('builder-form').querySelectorAll('[aria-invalid]').forEach(input=>input.removeAttribute('aria-invalid'));
+ ['builder-routes','builder-error','builder-status'].forEach(id=>$(id).replaceChildren());
+ quotes.forEach((q,i)=>{
+  const route=node('div',undefined,'builder-route'),label=node('label'),check=node('input'),fields=node('fieldset',undefined,'builder-fields');
+  route.dataset.quote=JSON.stringify(q);check.type='checkbox';check.id=`builder-route-${i}`;label.htmlFor=check.id;
+  label.append(check,node('span',`${q.source} / ${q.trade_symbol} -> ${q.destination}`));
+  fields.disabled=true;fields.hidden=true;check.onchange=()=>{fields.disabled=!check.checked;fields.hidden=!check.checked;};
+  for(const [key,title,min] of [['purchase_price','Purchase price per unit (required)',1],['trade_volume','Trade volume per batch (required)',1],['fuel_cost','Fuel credits per trip (required)',0],['travel_seconds','Travel seconds per trip (required)',0],['available_units','Available units (optional; blank = unbounded)',0]]){
+   const box=node('div'),name=node('label',title),input=node('input');
+   input.id=`builder-route-${i}-${key}`;input.name=key;input.type='number';input.min=min;input.step='1';input.required=key!=='available_units';input.value=q[key]??'';name.htmlFor=input.id;
+   box.append(name,input);fields.append(box);
+  }
+  route.append(label,fields);$('builder-routes').append(route);
+ });
+ if(!quotes.length)$('builder-routes').append(node('p','No cached source routes. Use the advanced JSON editor to supply explicit quotes.','empty'));
+ $('snapshot').textContent=`Cached evidence only. Contract: ${c.observed_at} (${c.source||'unknown source'}), from the same snapshot as the source shortlist. Agent: ${agent?.observed_at||'unknown'} (${agent?.source||'unknown source'}). Ship: ${ship?.observed_at||'unknown'} (${ship?.source||'unknown source'}). Agent and ship are separately dated report observations and may be older than the contract. Capacity is observed free hold, not a live cargo or eligibility check. Background refresh does not overwrite this draft. Use Reload sources and reset draft to replace the evidence.`;
+ $('snapshot-json').textContent=JSON.stringify({contract:c,agent:agent||null,ship:ship||null},null,2);
+ invalidateModel();
+}
+function buildDraft(event){
+ event.preventDefault();if(!builderBase)return;
+ $('builder-error').textContent='';$('builder-status').textContent='';
+ const routes=[...$('builder-routes').querySelectorAll('.builder-route')].filter(route=>route.querySelector('input[type=checkbox]').checked);
+ if(!routes.length){$('builder-error').textContent='Select at least one source route, or use the advanced JSON editor for custom quotes.';($('builder-routes').querySelector('input')||$('source-reload')).focus();return;}
+ for(const input of $('builder-form').querySelectorAll('input[type=number]')){
+  if(input.matches(':disabled')||(!input.required&&input.value===''))continue;
+  if(input.value===''||!input.validity.valid||!Number.isSafeInteger(input.valueAsNumber)){
+   const route=input.closest('.builder-route'),name=(route?route.querySelector('span').textContent+': ':'')+input.labels[0].textContent;
+   $('builder-error').textContent=name+(input.value===''?' is missing.':` must be a whole number from ${input.min} to ${Number.MAX_SAFE_INTEGER}.`);
+   input.setAttribute('aria-invalid','true');input.focus();return;
+  }
+ }
+ const quotes=routes.map(route=>{
+  const quote=JSON.parse(route.dataset.quote);
+  route.querySelectorAll('input[type=number]').forEach(input=>{if(input.value!=='')quote[input.name]=input.valueAsNumber;});
+  return quote;
+ });
+ $('model-input').value=JSON.stringify({...builderBase,credits:$('builder-credits').valueAsNumber,ship_capacity:$('builder-capacity').valueAsNumber,quotes},null,2);
+ invalidateModel();$('builder-status').textContent='Draft replaced from form. Review it or calculate the offline model.';$('model-submit').focus();
+}
+function invalidateModel(){modelVersion++;$('model-result').replaceChildren();$('model-error').textContent='';$('model-submit').disabled=false;}
+function renderPositions(records){
+ const target=$('positions');target.replaceChildren();
+ records.forEach(r=>{
+  const data=r.data||{},plan=data.plan||{};
+  if(data.status==='closed')return;
+  const card=node('article',undefined,'ship');
+  const returning=r.key.startsWith('reposition:');
+  const goods=plan.good||Object.keys(plan.purchase_ceilings||{}).join(', ')||'goods unknown';
+  const destination=(returning?plan.source:plan.destination)||'destination unknown';
+  card.append(node('p',`${data.status==='open'?'OPEN':'UNRECOGNIZED'} POSITION: ${r.key} / ${goods} -> ${destination}`,'warn'));
+  card.append(node('p',`Recorded ${r.observed_at}; stage ${data.stage||'not recorded'}. Inspect current state before recovery.`,'small'));
+  Object.entries(data.goods||{}).forEach(([good,g])=>card.append(node('p',`${good}: ${g?.remaining??'unknown'} remaining / ${g?.held??'unknown'} held / ${g?.to_buy??'unknown'} to acquire`,'small')));
+  const detail=node('details');detail.append(node('summary','Recorded recovery intent'),node('pre',JSON.stringify(data,null,2)));card.append(detail);target.append(card);
+ });
+}
+function renderRuns(records){
+ const target=$('automation-runs');target.replaceChildren();
+ if(!records.length){target.append(node('p','No recorded pilot runs in this scope.','empty'));return;}
+ [...records].sort((a,b)=>b.id-a.id).slice(0,20).forEach(r=>{
+  const run=r.data,card=node('article',undefined,'ship');
+  card.append(node('strong',`${run.system} / ${run.execute?'EXECUTION':'DRY RUN'} / recorded ${String(run.status).toUpperCase()}`));
+  card.append(node('p',`${run.completed_steps}/${run.steps} returned decisions; ${run.actions_used}/${run.action_limit} actions used. Last saved ${r.observed_at}.`,'small'));
+  card.append(node('p',String(run.outcome)));
+  const details=node('details');details.append(node('summary','Last decision and reviewed restart command'),node('pre',JSON.stringify(run.last_decision,null,2)),node('p',run.resume_instructions,'small'),node('pre',run.resume_command));
+  card.append(details);target.append(card);
+ });
+}
+async function calculateModel(event){
+ event.preventDefault();invalidateModel();const version=modelVersion, desk=deskVersion;
+ try{
+  const model=JSON.parse($('model-input').value);$('model-submit').disabled=true;
+  const d=await requestJSON('/api/contract-model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf,model})});
+  if(version!==modelVersion||desk!==deskVersion)return;
+  const out=$('model-result');out.append(node('h3',d.feasible?'Feasible under supplied assumptions':'Not feasible under supplied assumptions'),node('p','Execution authorized: false. Offline counterfactual, not a live launch.','warn'));
+  const reasons=node('ul');d.reasons.forEach(r=>reasons.append(node('li',r)));out.append(reasons);
+  out.append(node('p',`Remaining units ${fmt(d.remaining_units)} / cargo trips ${fmt(d.cargo_trips)} / goods ${fmt(d.conservative_goods_cost)} / fuel ${fmt(d.fuel_cost)} / allowance ${fmt(d.fuel_allowance)} credits.`),node('p',`Future revenue ${fmt(d.future_revenue)} / conservative net ${fmt(d.conservative_net)} / required credits ${fmt(d.required_credits)} / credits after reserves ${fmt(d.credits_after_reserves)} / modeled travel ${fmt(d.estimated_travel_seconds)}s.`));
+  d.steps.forEach(s=>out.append(node('p',`${s.trade_symbol}: ${s.source} -> ${s.destination}; ${s.units} units, ${s.purchase_batches} purchase batches, ${s.cargo_trips} cargo trips; price ceiling ${s.max_unit_price}.`,'small')));
+  const details=node('details');details.append(node('summary','Full model JSON'),node('pre',JSON.stringify(d,null,2)));out.append(details);
+ }catch(e){if(version===modelVersion&&desk===deskVersion)$('model-error').textContent='Model rejected: '+e.message;}
+ finally{if(version===modelVersion&&desk===deskVersion)$('model-submit').disabled=false;}
+}
+function render(d){
+ const select=$('scope'), prior=select.value;select.replaceChildren();(d.scopes||[]).forEach(s=>{const opt=node('option',s);opt.value=s;select.append(opt)});select.value=d.scope||prior;
+ if(select.value!==prior)clearDoctor();
+ $('state').textContent=d.paused?'STOP REQUESTED':'STOP CLEAR';$('state').classList.toggle('warn',d.paused);
+ const history=d.credits||[],last=history.at(-1);$('credits').textContent=last?fmt(last.credits):'--';$('profit').textContent=fmt(d.credit_change||0);$('reserve').textContent=last?fmt(last.credits-50000):'--';$('observed').textContent=last?'Observed '+age(last.observed_at)+' ago':'Select a universe / agent';$('coverage').textContent=(d.prices||[]).length+' / '+(d.markets||[]).length;
+ const chart=$('chart');chart.replaceChildren();if(history.length){const min=Math.min(...history.map(x=>x.credits)),max=Math.max(...history.map(x=>x.credits)),span=Math.max(1,max-min);chart.append(svg('polyline',{points:history.map((p,i)=>`${15+i*570/Math.max(1,history.length-1)},${145-(p.credits-min)/span*120}`).join(' ')}));chart.append(svg('text',{x:15,y:174},fmt(min)+' - '+fmt(max)+' credits'))}
+ const map=$('map');map.replaceChildren();const points=(d.waypoints||[]).filter(w=>w.data.traits.some(t=>t.symbol==='MARKETPLACE'));if(points.length){const xs=points.map(p=>p.data.x),ys=points.map(p=>p.data.y),xmin=Math.min(...xs),ymin=Math.min(...ys),dx=Math.max(1,Math.max(...xs)-xmin),dy=Math.max(1,Math.max(...ys)-ymin);points.forEach(p=>{const x=30+(p.data.x-xmin)/dx*520,y=15+(p.data.y-ymin)/dy*145;map.append(svg('circle',{cx:x,cy:y,r:3}));const ships=(d.ships||[]).filter(s=>s.data.nav.waypointSymbol===p.key);ships.forEach((s,i)=>{map.append(svg('circle',{cx:x,cy:y,r:6,style:'fill:#d39143'}));map.append(svg('text',{x:x+9,y:y+4+i*12},s.key))})})}
+ $('fleet').replaceChildren();(d.ships||[]).forEach(r=>{const s=r.data,card=node('article',undefined,'ship'),top=node('div',undefined,'ship-top');top.append(node('strong',s.symbol),node('span',s.nav.status));card.append(top,node('p',s.nav.waypointSymbol+' / '+s.nav.flightMode+' / observed '+age(r.observed_at)+' ago'));const fuel=s.fuel,bar=node('div',undefined,'bar'),fill=node('i');fill.style.width=(fuel.capacity?100*fuel.current/fuel.capacity:100)+'%';bar.append(fill);card.append(node('div',`Fuel ${fuel.current}/${fuel.capacity}   Cargo ${s.cargo.units}/${s.cargo.capacity}`,'small'),bar,node('div',`Cooldown ${s.cooldown.remainingSeconds}s (at observation)`,'small'));const details=node('details');details.append(node('summary','Cargo and navigation details'),node('pre',JSON.stringify({cargo:s.cargo.inventory,route:s.nav.route},null,2)));card.append(details);$('fleet').append(card)});
+ $('contracts').replaceChildren();(d.contracts||[]).forEach(r=>{const c=r.data,card=node('article',undefined,'ship');card.append(node('div',c.fulfilled?'FULFILLED':c.accepted?'ACCEPTED':'AVAILABLE','eyebrow'),node('p',c.id));(c.terms.deliver||[]).forEach(g=>card.append(node('div',`${g.tradeSymbol}: ${g.unitsFulfilled}/${g.unitsRequired} -> ${g.destinationSymbol}`,'small')));card.append(node('p',`Payout ${fmt(c.terms.payment.onAccepted+c.terms.payment.onFulfilled)} / due ${c.terms.deadline}`,'small'));$('contracts').append(card)});
+ $('plans').replaceChildren();(d.plans||[]).forEach(r=>{const el=node('details');el.append(node('summary',r.key),node('pre',JSON.stringify(r.data,null,2)));$('plans').append(el)});
+ $('routes').replaceChildren();(d.routes||[]).slice(0,20).forEach(r=>row($('routes'),[`${r.good}: ${r.source} -> ${r.destination}`,r.units,`${r.buy} / ${r.sell}`,fmt(r.net_estimate),`${Math.floor(r.age_seconds/60)}m ${r.stale?'STALE':'observed'}`]));if(!(d.routes||[]).length)row($('routes'),['No positive priced routes yet. Scout a counterparty market.','','','','']);
+  $('cash').replaceChildren();const economics=d.economics||{};(economics.goods||[]).forEach(g=>row($('cash'),[g.good,`${g.bought_units} / ${g.sold_units}`,fmt(g.spent),fmt(g.received),fmt(g.received-g.spent)]));$('audit').textContent=`Contract receipts ${fmt(economics.contract_receipts||0)} / journal net ${fmt(economics.journal_net_cash||0)} / unexplained credit change ${fmt(economics.unexplained_credit_change||0)}`;$('audit').classList.toggle('warn',Boolean(economics.unexplained_credit_change));renderPositions(d.positions||[]);
+ $('markets').replaceChildren();(d.markets||[]).forEach(r=>row($('markets'),[r.key,r.data.exports.map(g=>g.symbol).join(', ')||'--',age(r.observed_at)+' ago']));
+  $('journal').replaceChildren();(d.actions||[]).slice(0,40).forEach(a=>{const el=node('div',undefined,'entry '+a.status);el.append(node('strong',`#${a.id} ${a.status.toUpperCase()} `),node('span',a.path),node('div',a.started_at));$('journal').append(el)});
+  if(d.scope){$('export').href='/api/report?scope='+encodeURIComponent(d.scope);$('export').removeAttribute('aria-disabled');}else{$('export').removeAttribute('href');$('export').setAttribute('aria-disabled','true');}
+  renderRuns(d.automation_runs||[]);syncDesk(d);syncMarket(d);
+}
+async function refresh(){const version=++reportVersion;try{const d=await requestJSON('/api/report?scope='+encodeURIComponent($('scope').value));if(version!==reportVersion)return;render(d);$('error').textContent=''}catch(e){if(version===reportVersion){$('error').textContent=e.message;if(!ledger.scope){$('observed').textContent='Scope data unavailable. Refresh ledger to retry.';$('desk-status').textContent='Scope data unavailable. Refresh ledger to retry.';}}}}
+async function control(action){try{const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,csrf})});if(!r.ok)throw Error('Control rejected');await refresh()}catch(e){$('error').textContent=e.message}}
+$('contract-select').onchange=loadSources;$('source-reload').onclick=loadSources;$('model-ship').onchange=prefillModel;$('prefill').onclick=prefillModel;$('model-form').onsubmit=calculateModel;$('model-input').oninput=invalidateModel;
+$('builder-form').onsubmit=buildDraft;$('builder-form').oninput=event=>{event.target.removeAttribute('aria-invalid');$('builder-error').textContent='';$('builder-status').textContent='Form changed. Build draft from form to apply; JSON is unchanged.';};
+$('refresh').onclick=refresh;$('scope').onchange=()=>{clearScope();refresh()};$('pause').onclick=()=>control('pause');$('resume').onclick=()=>control('resume');refresh();setInterval(refresh,10000);
+$('doctor-check').onclick=checkDoctor;
+$('market-select').onchange=()=>{$('good-select').value='';showMarket();};$('good-select').onchange=loadMarketHistory;
+</script>
+</body>
+</html>

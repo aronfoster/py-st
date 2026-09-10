@@ -9,6 +9,12 @@ All cache data is stored in `.cache/data.json` at the project root. The
 cache file is a single JSON object where keys are cache entry identifiers
 and values are cache entry objects.
 
+Writes use fsync and same-directory atomic replacement. `ST_CACHE_DIR` can
+override the disposable cache directory. Durable reset/agent-scoped observations
+and action state live separately in `.state/intelligence.sqlite3`; see
+`docs/OPERATIONS.md`. Do not clear that database as a cache recovery step.
+The legacy JSON cache is single-agent: clear it when changing tokens/resets.
+
 ## Cache Entry Types
 
 ### 1. Agent Info (`agent_info`)
@@ -40,7 +46,10 @@ and values are cache entry objects.
 
 **Invalidation Triggers:**
 - Time-based: automatic refresh after 1 hour
-- Not explicitly invalidated by other operations
+- Invalidated before ship/contract mutations, including uncertain failures
+
+Ship mutations also discard disposable market/shipyard prices. Historical
+prices in SQLite are retained with their original observation timestamps.
 
 **Service Functions:**
 - Read: `services/agent.py::get_agent_info()`

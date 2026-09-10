@@ -16,7 +16,7 @@ fmt:
 check:
 	@{ \
 	  black --check .; rc1=$$?; \
-	  ruff check .;   rc2=$$?; \
+	  ruff check --no-fix .;   rc2=$$?; \
 	  exit $$((rc1||rc2)); \
 	}
 
@@ -26,7 +26,7 @@ type: ## Run static type checking
 test: ## Run tests
 	PYTHONPATH=src python3 -m pytest -q
 
-ci: fmt check type test ## Run all checks for continuous integration
+ci: check type test ## Run non-mutating checks for continuous integration
 
 # ==============================================================================
 # API Spec & Model Generation
@@ -67,7 +67,7 @@ build-model-aliases: tools/gen_model_aliases.py ## Generate model aliases
 	./tools/gen_model_aliases.py
 
 clear-cache: ## Remove the local JSON cache
-	@rm -f src/.cache/data.json
+	@PYTHONPATH=src python3 -c 'from py_st.cache import clear_cache; clear_cache()'
 	@echo "Cache cleared."
 
 # ==============================================================================

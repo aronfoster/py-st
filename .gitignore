@@ -1,4 +1,6 @@
 tmp/
+.state/
+STOP
 
 # Cache directory
 src/.cache/

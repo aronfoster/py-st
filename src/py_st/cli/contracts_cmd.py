@@ -167,7 +167,12 @@ def negotiate_contract_cli(
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
     """
-    Negotiate a new contract.
+    Request a new contract offer, without accepting it.
+
+    Requires a ship at a waypoint with a faction and room under the server's
+    offered/ongoing contract limit. Review payout, goods, deadline and costs
+    before accepting. This is a live POST, not a read-only opportunity lookup,
+    and is not protected by the auto session's STOP/journal.
     """
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,

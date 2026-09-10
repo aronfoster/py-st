@@ -11,13 +11,29 @@ dependencies = [
   "responses>=0.25.0",
 ]
 
+[project.optional-dependencies]
+# Keep formatters aligned with .pre-commit-config.yaml.
+dev = ["black==24.8.0", "ruff==0.6.9", "mypy", "pytest", "pre-commit"]
+browser = ["playwright"]
+
+[project.scripts]
+py-st = "py_st.cli.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+py_st = ["services/*.html"]
+
 [tool.black]
 line-length = 79
+target-version = ["py311"]
 extend-exclude = "src/py_st/_generated"
 
 [tool.ruff]
 line-length = 79
-fix = true
+fix = false
 target-version = "py311"
 exclude = [
   "src/py_st/_generated",
@@ -31,7 +47,12 @@ testpaths = ["tests"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
+exclude = ["^build/", "^dist/"]
 
 [[tool.mypy.overrides]]
 module = "py_st._generated.*"
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "playwright.*"
+ignore_missing_imports = true

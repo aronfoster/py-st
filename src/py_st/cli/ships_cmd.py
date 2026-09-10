@@ -160,7 +160,13 @@ def extract_resources_cli(
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
     """
-    Extract resources from a waypoint.
+    Mine ore with an installed Mining Laser at an extractable asteroid.
+
+    Requires IN_ORBIT (not docked or in transit), free cargo space and an
+    expired cooldown. Check waypoint traits/modifiers for depleted resources.
+    This command does not navigate, orbit or use a survey automatically.
+    A Surveyor is only needed to create surveys, not for basic extraction.
+    Manual live mutation: not protected by the auto session's STOP/journal.
     """
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
@@ -169,9 +175,6 @@ def extract_resources_cli(
     t = _get_token(token)
     resolved_symbol = resolve_ship_id(t, ship_symbol)
     extraction = ships.extract_resources(t, resolved_symbol)
-    if extraction is None:
-        print("Extraction failed or aborted.")
-        return
     print("⛏️ Extraction successful!")
     print(json.dumps(extraction.model_dump(mode="json"), indent=2))
 

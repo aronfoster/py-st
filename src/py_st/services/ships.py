@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
+from typing import overload
 
 from pydantic import ValidationError
 
@@ -23,8 +24,8 @@ from py_st._generated.models import (
     TradeSymbol,
 )
 from py_st._manual_models import RefineResult
-from py_st.client import APIError, SpaceTradersClient
-from py_st.services.cache_keys import key_for_ship_list
+from py_st.client.client import get_client as SpaceTradersClient
+from py_st.services.cache_keys import key_for_agent, key_for_ship_list
 
 
 def _mark_ship_list_dirty() -> None:
@@ -35,10 +36,18 @@ def _mark_ship_list_dirty() -> None:
     is already treated as dirty by list_ships).
     """
     full_cache = cache.load_cache()
+    agent_removed = full_cache.pop(key_for_agent(), None) is not None
+    price_keys = [
+        key for key in full_cache if key.startswith(("market_", "shipyard_"))
+    ]
+    for key in price_keys:
+        del full_cache[key]
 
     cached_entry = full_cache.get(key_for_ship_list())
     if cached_entry is not None and isinstance(cached_entry, dict):
         cached_entry["is_dirty"] = True
+        cache.save_cache(full_cache)
+    elif agent_removed or price_keys:
         cache.save_cache(full_cache)
 
 
@@ -135,8 +144,8 @@ def navigate_ship(
         ShipNav object containing updated navigation information.
     """
     client = SpaceTradersClient(token=token)
-    result = client.ships.navigate_ship(ship_symbol, waypoint_symbol)
     _mark_ship_list_dirty()
+    result = client.ships.navigate_ship(ship_symbol, waypoint_symbol)
     return result
 
 
@@ -152,8 +161,8 @@ def orbit_ship(token: str, ship_symbol: str) -> ShipNav:
         ShipNav object with updated status showing the ship is in orbit.
     """
     client = SpaceTradersClient(token=token)
-    result = client.ships.orbit_ship(ship_symbol)
     _mark_ship_list_dirty()
+    result = client.ships.orbit_ship(ship_symbol)
     return result
 
 
@@ -169,9 +178,21 @@ def dock_ship(token: str, ship_symbol: str) -> ShipNav:
         ShipNav object with updated status showing the ship is docked.
     """
     client = SpaceTradersClient(token=token)
-    result = client.ships.dock_ship(ship_symbol)
     _mark_ship_list_dirty()
+    result = client.ships.dock_ship(ship_symbol)
     return result
+
+
+@overload
+def extract_resources(
+    token: str, ship_symbol: str, survey_json: None = None
+) -> Extraction: ...
+
+
+@overload
+def extract_resources(
+    token: str, ship_symbol: str, survey_json: str
+) -> Extraction | None: ...
 
 
 def extract_resources(
@@ -188,24 +209,23 @@ def extract_resources(
     Returns:
         Extraction object on success, None on failure or invalid input.
     """
-    try:
-        client = SpaceTradersClient(token=token)
-        survey_to_use = None
-        if survey_json:
-            try:
-                survey_data = json.loads(survey_json)
-                survey_to_use = Survey.model_validate(survey_data)
-            except (json.JSONDecodeError, TypeError):
-                print("Error: Invalid survey JSON provided. Aborting.")
-                return None
+    client = SpaceTradersClient(token=token)
+    survey_to_use = None
+    if survey_json:
+        try:
+            survey_data = json.loads(survey_json)
+            survey_to_use = Survey.model_validate(survey_data)
+        except (json.JSONDecodeError, TypeError):
+            print("Error: Invalid survey JSON provided. Aborting.")
+            return None
 
-        extraction = client.ships.extract_resources(
+    try:
+        return client.ships.extract_resources(
             ship_symbol, survey=survey_to_use
         )
-        return extraction
-    except APIError as e:
-        print(f"Extraction failed: {e}")
-        return None
+    finally:
+        # Also invalidate on uncertain outcomes: the server may have mutated.
+        _mark_ship_list_dirty()
 
 
 def create_survey(token: str, ship_symbol: str) -> list[Survey]:
@@ -220,6 +240,7 @@ def create_survey(token: str, ship_symbol: str) -> list[Survey]:
         List of Survey objects generated at the waypoint.
     """
     client = SpaceTradersClient(token=token)
+    _mark_ship_list_dirty()
     surveys = client.ships.create_survey(ship_symbol)
     return surveys
 
@@ -240,8 +261,8 @@ def refuel_ship(
         Tuple of (Agent, ShipFuel, MarketTransaction) with updated state.
     """
     client = SpaceTradersClient(token=token)
-    agent, fuel, transaction = client.ships.refuel_ship(ship_symbol, units)
     _mark_ship_list_dirty()
+    agent, fuel, transaction = client.ships.refuel_ship(ship_symbol, units)
     return agent, fuel, transaction
 
 
@@ -261,8 +282,8 @@ def jettison_cargo(
         ShipCargo object with updated cargo hold information.
     """
     client = SpaceTradersClient(token=token)
-    cargo = client.ships.jettison_cargo(ship_symbol, trade_symbol, units)
     _mark_ship_list_dirty()
+    cargo = client.ships.jettison_cargo(ship_symbol, trade_symbol, units)
     return cargo
 
 
@@ -281,8 +302,8 @@ def set_flight_mode(
         ShipNav object with updated flight mode information.
     """
     client = SpaceTradersClient(token=token)
-    nav = client.ships.set_flight_mode(ship_symbol, flight_mode)
     _mark_ship_list_dirty()
+    nav = client.ships.set_flight_mode(ship_symbol, flight_mode)
     return nav
 
 
@@ -301,8 +322,8 @@ def refine_materials(
         RefineResult object containing produced/consumed items and cargo.
     """
     client = SpaceTradersClient(token=token)
-    result = client.ships.refine_materials(ship_symbol, produce)
     _mark_ship_list_dirty()
+    result = client.ships.refine_materials(ship_symbol, produce)
     return result
 
 
@@ -322,8 +343,8 @@ def sell_cargo(
         Tuple of (Agent, ShipCargo, MarketTransaction) with updated state.
     """
     client = SpaceTradersClient(token=token)
-    result = client.ships.sell_cargo(ship_symbol, trade_symbol, units)
     _mark_ship_list_dirty()
+    result = client.ships.sell_cargo(ship_symbol, trade_symbol, units)
     return result
 
 
@@ -343,8 +364,8 @@ def purchase_cargo(
         Tuple of (Agent, ShipCargo, MarketTransaction) with updated state.
     """
     client = SpaceTradersClient(token=token)
-    result = client.ships.purchase_cargo(ship_symbol, trade_symbol, units)
     _mark_ship_list_dirty()
+    result = client.ships.purchase_cargo(ship_symbol, trade_symbol, units)
     return result
 
 
@@ -363,10 +384,10 @@ def purchase_ship(
         Tuple of (Agent, Ship, ShipyardTransaction) with updated state.
     """
     client = SpaceTradersClient(token=token)
+    _mark_ship_list_dirty()
     agent, ship, transaction = client.ships.purchase_ship(
         ship_type, waypoint_symbol
     )
-    _mark_ship_list_dirty()
     return agent, ship, transaction
 
 
@@ -391,8 +412,8 @@ def transfer_cargo(
         ShipCargo object with updated cargo hold for the source ship.
     """
     client = SpaceTradersClient(token=token)
+    _mark_ship_list_dirty()
     cargo = client.ships.transfer_cargo(
         from_ship, to_ship, trade_symbol.value, units
     )
-    _mark_ship_list_dirty()
     return cargo

@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: src
+      ST_LIVE_TESTS: '0'
     steps:
       - uses: actions/checkout@v4
 
@@ -21,10 +22,10 @@ jobs:
 
       - name: Install tools & libs (match local)
         run: |
-          pip install black ruff mypy pytest python-dotenv httpx pydantic tenacity typer
+          pip install -e '.[dev]'
 
       - name: Ruff
-        run: ruff check .
+        run: ruff check --no-fix .
 
       - name: Black (79 cols)
         run: black --check .
