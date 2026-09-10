@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
+from typing import overload
 
 from pydantic import ValidationError
 
@@ -180,6 +181,18 @@ def dock_ship(token: str, ship_symbol: str) -> ShipNav:
     _mark_ship_list_dirty()
     result = client.ships.dock_ship(ship_symbol)
     return result
+
+
+@overload
+def extract_resources(
+    token: str, ship_symbol: str, survey_json: None = None
+) -> Extraction: ...
+
+
+@overload
+def extract_resources(
+    token: str, ship_symbol: str, survey_json: str
+) -> Extraction | None: ...
 
 
 def extract_resources(

@@ -236,11 +236,18 @@ class HttpTransport:
                             - datetime.now(UTC)
                         ).total_seconds()
                     except (ValueError, TypeError):
-                        delay = float(
-                            (error.get("data") or {}).get(
-                                "retryAfter", _RATE_LIMIT_SLEEP_SEC
-                            )
+                        data = error.get("data")
+                        fallback = (
+                            data.get("retryAfter", _RATE_LIMIT_SLEEP_SEC)
+                            if isinstance(data, dict)
+                            else _RATE_LIMIT_SLEEP_SEC
                         )
+                        try:
+                            delay = float(fallback)
+                        except (TypeError, ValueError):
+                            raise APIError(
+                                "Invalid Retry-After", status=429
+                            ) from None
                 if not math.isfinite(delay):
                     raise APIError("Invalid Retry-After", status=429)
                 self._wait_before_dispatch(
@@ -250,7 +257,11 @@ class HttpTransport:
 
             # Other errors — raise with payload if available
             if response.status_code >= 400:
-                message = error.get("message") or "API request failed"
+                message = (
+                    error.get("message")
+                    or response.text
+                    or "API request failed"
+                )
                 raise APIError(
                     message, status=response.status_code, payload=payload
                 )

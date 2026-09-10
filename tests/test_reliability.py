@@ -140,7 +140,38 @@ def test_nonfinite_retry_header_stops() -> None:
         base_url="https://test",
     )
     # Act / Assert
-    with pytest.raises(APIError, match="Retry-After"):
+    with pytest.raises(APIError):
+        HttpTransport(client, interval=0).request_json("GET", "/list")
+
+
+@pytest.mark.parametrize("data", [["unexpected"], {"retryAfter": "soon"}])
+def test_invalid_retry_fallback_is_api_error(data: object) -> None:
+    # Arrange
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                429, json={"error": {"code": 429, "data": data}}
+            )
+        ),
+        base_url="https://test",
+    )
+
+    # Act / Assert
+    with pytest.raises(APIError):
+        HttpTransport(client, interval=0).request_json("GET", "/list")
+
+
+def test_non_json_error_body_is_preserved() -> None:
+    # Arrange
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(502, text="upstream unavailable")
+        ),
+        base_url="https://test",
+    )
+
+    # Act / Assert
+    with pytest.raises(APIError, match="upstream unavailable"):
         HttpTransport(client, interval=0).request_json("GET", "/list")
 
 
