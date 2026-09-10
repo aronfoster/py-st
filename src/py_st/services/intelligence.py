@@ -90,8 +90,7 @@ class Intelligence:
             if version not in (0, 1):
                 raise ValueError("Unsupported intelligence schema version")
             with self.db:
-                self.db.executescript(
-                    """
+                schema = """
                     BEGIN IMMEDIATE;
                     CREATE TABLE IF NOT EXISTS observations (
                         id INTEGER PRIMARY KEY, scope TEXT NOT NULL,
@@ -110,7 +109,7 @@ class Intelligence:
                     PRAGMA user_version=1;
                     COMMIT;
                     """
-                )
+                self.db.executescript(schema)
         except BaseException:
             self.db.close()
             raise
