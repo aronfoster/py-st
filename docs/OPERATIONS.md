@@ -61,6 +61,23 @@ Open http://127.0.0.1:8765 (use the IP, not localhost). The dashboard reads
 SQLite, not the game API. Refresh ledger reloads stored data; `auto observe`
 refreshes live fleet/agent/contracts. `auto scan` records a system's markets
 and waypoints. Detailed prices generally require one of your ships present.
+
+### Synthetic System Explorer demo
+
+A fresh checkout can create a clearly synthetic, separate ledger without a game
+token. The command refuses to overwrite an existing destination:
+
+```sh
+.venv/bin/python tools/populate_dashboard_demo.py
+cd .cache/nightly/system-explorer-demo
+../../../.venv/bin/python -m py_st auto dashboard --port 8765
+```
+
+Open `http://127.0.0.1:8765`. The demo contains overlapping waypoints, market,
+shipyard and jump-gate observations, one stationary ship, one ship in transit,
+and deliberately missing waypoint traits/market/shipyard details. Remove the
+demo directory or provide a new root argument before regenerating it; the tool
+never opens or changes the normal `.state/intelligence.sqlite3`.
 The dashboard distinguishes observation age from live telemetry. Route figures
 are estimates after round-trip fuel, not guaranteed profit or executable orders.
 
