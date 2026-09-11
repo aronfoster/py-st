@@ -55,7 +55,6 @@ class HttpTransport:
         self._wait = wait
         self._next_request = 0.0
         self._auth_error: APIError | None = None
-        self.dispatch_guard: Callable[[str, str], None] | None = None
 
     def request_json(
         self,
@@ -171,19 +170,10 @@ class HttpTransport:
             self._wait_before_dispatch(
                 max(0, self._next_request - time.monotonic()), rejection_status
             )
-            if self.dispatch_guard is not None:
-                try:
-                    self.dispatch_guard(method, path)
-                except Exception as exc:
-                    raise RequestAborted(
-                        "Dispatch authority refused", status=rejection_status
-                    ) from exc
-            try:
-                response = self._client.request(
-                    method, path, params=params, json=json
-                )
-            finally:
-                self._next_request = time.monotonic() + self._interval
+            response = self._client.request(
+                method, path, params=params, json=json
+            )
+            self._next_request = time.monotonic() + self._interval
             content_type = response.headers.get("content-type", "")
             is_json = content_type.startswith("application/json")
 
@@ -222,9 +212,7 @@ class HttpTransport:
                         "Retry budget exhausted (cooldown)", status=409
                     )
                 cooldown = (error.get("data") or {}).get("cooldown") or {}
-                wait_seconds = float(cooldown.get("remainingSeconds", 1))
-                if not math.isfinite(wait_seconds):
-                    raise APIError("Invalid cooldown", status=409)
+                wait_seconds = int(cooldown.get("remainingSeconds", 1))
                 self._wait_before_dispatch(
                     max(1, wait_seconds) + 0.25, rejection_status
                 )

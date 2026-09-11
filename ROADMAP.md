@@ -1,19 +1,6 @@
 # Roadmap
 
-The goal is a browser-playable SpaceTraders application with persistent
-automation (FOS-63). FOS-71 tracks bounded end-to-end implementation tasks.
-
-## Current delivery sequence
-
-1. Stored-data system explorer: merged in PR #45.
-2. Browser flight operations: select, preview, navigate, confirm arrival, dock,
-   refuel; durable worker, local authentication and stateful offline proof.
-3. Browser trading, then contracts, then persistent pilot controls.
-4. Fleet purchase/outfitting, maintenance, industrial coordination, supply chains,
-   reconnaissance, seasons, multi-system progression and authenticated GCP hosting.
-
-Task 02 is being implemented locally. Complete its acceptance criteria before
-expanding scope. The sections below retain earlier backlog and dated evidence.
+The goal remains: make the CLI feel *alive*—fast, readable, forgiving—and keep the backend clean and unified.
 
 ---
 

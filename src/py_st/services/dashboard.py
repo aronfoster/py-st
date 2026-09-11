@@ -5,9 +5,6 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
-import threading
-import time
-from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
@@ -16,9 +13,6 @@ from urllib.parse import parse_qs, urlsplit
 from py_st.services.contract_planning import plan_contract_procurement
 from py_st.services.contract_sources import contract_sources
 from py_st.services.doctor import diagnose
-from py_st.services.flight_auth import verify_password
-from py_st.services.flight_queue import FlightQueue
-from py_st.services.flight_worker import preview
 from py_st.services.intelligence import Intelligence
 from py_st.services.market_history import market_history
 from py_st.services.stop_control import request_stop, stop_requested
@@ -29,21 +23,13 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
     root = root.resolve()
     csrf = secrets.token_hex(32)
     html = Path(__file__).with_name("dashboard.html").read_text()
-    managed = (root / ".state/flight.sqlite3").exists()
-    sessions: dict[str, float] = {}
-    auth_lock = threading.Lock()
-    attempts: list[float] = []
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
             pass
 
         def reply(
-            self,
-            status: int,
-            body: str,
-            kind: str = "application/json",
-            cookie: str = "",
+            self, status: int, body: str, kind: str = "application/json"
         ) -> None:
             data = body.encode()
             self.send_response(status)
@@ -52,8 +38,6 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
-            if cookie:
-                self.send_header("Set-Cookie", cookie)
             self.send_header(
                 "Content-Security-Policy",
                 "default-src 'self'; frame-ancestors 'none'; "
@@ -66,18 +50,6 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
             port = cast(ThreadingHTTPServer, self.server).server_port
             return self.headers.get("Host") == f"127.0.0.1:{port}"
 
-        def authenticated(self) -> bool:
-            if not managed:
-                return True
-            cookies = SimpleCookie()
-            try:
-                cookies.load(self.headers.get("Cookie", ""))
-                token = cookies["flight_session"].value
-            except (KeyError, ValueError):
-                return False
-            with auth_lock:
-                return sessions.get(token, 0) > time.monotonic()
-
         def do_GET(self) -> None:
             if not self.local():
                 self.reply(403, "{}")
@@ -85,33 +57,6 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
             url = urlsplit(self.path)
             if url.path == "/":
                 self.reply(200, html.replace("__NONCE__", csrf), "text/html")
-                return
-            if url.path == "/api/auth":
-                self.reply(
-                    200,
-                    json.dumps(
-                        {
-                            "managed": managed,
-                            "authenticated": self.authenticated(),
-                        }
-                    ),
-                )
-                return
-            if not self.authenticated():
-                self.reply(401, json.dumps({"error": "Owner login required"}))
-                return
-            if url.path == "/api/flight" and managed:
-                queue = None
-                try:
-                    queue = FlightQueue(root)
-                    self.reply(200, json.dumps(queue.report()))
-                except (OSError, ValueError, sqlite3.Error):
-                    self.reply(
-                        503, json.dumps({"error": "Flight state unavailable"})
-                    )
-                finally:
-                    if queue is not None:
-                        queue.close()
                 return
             if url.path not in (
                 "/api/report",
@@ -215,14 +160,7 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
             if not self.local() or self.headers.get("Origin") != origin:
                 self.reply(403, "{}")
                 return
-            if self.path not in (
-                "/api/control",
-                "/api/contract-model",
-                "/api/login",
-                "/api/logout",
-                "/api/flight",
-                "/api/flight-preview",
-            ):
+            if self.path not in ("/api/control", "/api/contract-model"):
                 self.reply(404, "{}")
                 return
             try:
@@ -232,116 +170,11 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                     raise ValueError("Invalid length or payload too large")
                 if self.headers.get("Transfer-Encoding"):
                     raise ValueError("Transfer-Encoding is not supported")
-                if (
-                    managed
-                    and self.headers.get_content_type() != "application/json"
-                ):
-                    raise ValueError("Expected application/json")
                 body = json.loads(self.rfile.read(length))
                 if not isinstance(body, dict) or not secrets.compare_digest(
                     str(body.get("csrf", "")), csrf
                 ):
                     self.reply(403, "{}")
-                    return
-                if managed and self.path == "/api/login":
-                    if set(body) != {"csrf", "password"} or not isinstance(
-                        body["password"], str
-                    ):
-                        raise ValueError("Expected owner password")
-                    with auth_lock:
-                        current = time.monotonic()
-                        attempts[:] = [t for t in attempts if t > current - 60]
-                        if len(attempts) >= 5:
-                            self.reply(
-                                429,
-                                json.dumps(
-                                    {"error": "Wait one minute before login"}
-                                ),
-                            )
-                            return
-                        attempts.append(current)
-                    if not verify_password(root, body["password"]):
-                        self.reply(
-                            401, json.dumps({"error": "Invalid owner login"})
-                        )
-                        return
-                    token = secrets.token_hex(32)
-                    with auth_lock:
-                        expired = [
-                            k for k, v in sessions.items() if v <= current
-                        ]
-                        for key in expired:
-                            del sessions[key]
-                        sessions[token] = current + 8 * 3600
-                    self.reply(
-                        200,
-                        "{}",
-                        cookie=f"flight_session={token}; Path=/; HttpOnly; "
-                        "SameSite=Strict; Max-Age=28800",
-                    )
-                    return
-                if not self.authenticated():
-                    self.reply(
-                        401, json.dumps({"error": "Owner login required"})
-                    )
-                    return
-                if managed and self.path == "/api/logout":
-                    cookies = SimpleCookie(self.headers.get("Cookie", ""))
-                    with auth_lock:
-                        if "flight_session" in cookies:
-                            sessions.pop(cookies["flight_session"].value, None)
-                    self.reply(
-                        200,
-                        "{}",
-                        cookie="flight_session=; Path=/; HttpOnly; "
-                        "SameSite=Strict; Max-Age=0",
-                    )
-                    return
-                if self.path in ("/api/flight", "/api/flight-preview"):
-                    if not managed:
-                        raise ValueError(
-                            "Initialize managed flight mode first"
-                        )
-                    queue = FlightQueue(root)
-                    try:
-                        if self.path == "/api/flight":
-                            if set(body) != {
-                                "csrf",
-                                "scope",
-                                "request_id",
-                                "payload",
-                            }:
-                                raise ValueError("Invalid command envelope")
-                            result = queue.enqueue(
-                                body["scope"],
-                                body["request_id"],
-                                body["payload"],
-                            )
-                        else:
-                            if (
-                                set(body)
-                                != {"csrf", "scope", "ship", "destination"}
-                                or body["scope"] != queue.scope
-                            ):
-                                raise ValueError(
-                                    "Invalid preview scope/fields"
-                                )
-                            store = Intelligence(
-                                root / ".state/intelligence.sqlite3",
-                                read_only=True,
-                            )
-                            try:
-                                result = preview(
-                                    store,
-                                    queue.scope,
-                                    body["ship"],
-                                    body["destination"],
-                                )
-                            finally:
-                                store.close()
-                        self.reply(200, json.dumps(result, allow_nan=False))
-                    finally:
-                        queue.close()
                     return
                 if model_request:
                     if self.headers.get_content_type() != "application/json":
@@ -379,19 +212,7 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                     return
                 if body.get("action") == "pause":
                     request_stop(root)
-                    if managed:
-                        queue = FlightQueue(root)
-                        try:
-                            queue.control(True)
-                        finally:
-                            queue.close()
                 elif body.get("action") == "resume":
-                    if managed:
-                        queue = FlightQueue(root)
-                        try:
-                            queue.control(False)
-                        finally:
-                            queue.close()
                     (root / "STOP").unlink(missing_ok=True)
                 else:
                     raise ValueError("action")
@@ -399,11 +220,6 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
             except OSError:
                 self.reply(
                     503, json.dumps({"error": "STOP control unavailable"})
-                )
-                return
-            except sqlite3.Error:
-                self.reply(
-                    503, json.dumps({"error": "Flight ledger unavailable"})
                 )
                 return
             except (

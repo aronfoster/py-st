@@ -1,13 +1,5 @@
 # Flight Ledger Operations
 
-## Current browser flight workflow
-
-Use [FLIGHT_OPERATIONS.md](FLIGHT_OPERATIONS.md) for authenticated browser flight,
-canonical state setup, independent worker and offline proof. Direct live CLI
-mutations described in this older guide are retired in this revision; legacy
-strategy code remains for offline tests and later browser workflows. The flight
-worker is the real-client gameplay authority. Explicit registration is separate.
-
 Run commands from the normal repository root; no extra worktree is needed.
 The local checkout and its `.state` ledger were consolidated here. Activate a
 Python 3.12 virtual environment
