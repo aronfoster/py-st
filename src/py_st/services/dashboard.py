@@ -19,7 +19,7 @@ from py_st.services.contract_sources import contract_sources
 from py_st.services.doctor import diagnose
 from py_st.services.flight_auth import verify_password
 from py_st.services.flight_queue import FlightQueue
-from py_st.services.flight_worker import preview
+from py_st.services.flight_worker import preview, trade_preview
 from py_st.services.intelligence import Intelligence
 from py_st.services.market_history import market_history
 from py_st.services.stop_control import request_stop, stop_requested
@@ -239,6 +239,7 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                 "/api/logout",
                 "/api/flight",
                 "/api/flight-preview",
+                "/api/trade-preview",
             ):
                 self.reply(404, "{}")
                 return
@@ -318,7 +319,11 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                         "SameSite=Strict; Max-Age=0",
                     )
                     return
-                if self.path in ("/api/flight", "/api/flight-preview"):
+                if self.path in (
+                    "/api/flight",
+                    "/api/flight-preview",
+                    "/api/trade-preview",
+                ):
                     if not managed:
                         raise ValueError(
                             "Initialize managed flight mode first"
@@ -338,7 +343,7 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                                 body["request_id"],
                                 body["payload"],
                             )
-                        else:
+                        elif self.path == "/api/flight-preview":
                             if (
                                 set(body)
                                 != {"csrf", "scope", "ship", "destination"}
@@ -357,6 +362,38 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                                     queue.scope,
                                     body["ship"],
                                     body["destination"],
+                                )
+                            finally:
+                                store.close()
+                        else:
+                            if (
+                                set(body)
+                                != {
+                                    "csrf",
+                                    "scope",
+                                    "ship",
+                                    "good",
+                                    "units",
+                                    "kind",
+                                }
+                                or body["scope"] != queue.scope
+                                or type(body["units"]) is not int
+                            ):
+                                raise ValueError(
+                                    "Invalid trade preview fields"
+                                )
+                            store = Intelligence(
+                                root / ".state/intelligence.sqlite3",
+                                read_only=True,
+                            )
+                            try:
+                                result = trade_preview(
+                                    store,
+                                    queue.scope,
+                                    body["ship"],
+                                    body["good"],
+                                    body["units"],
+                                    body["kind"],
                                 )
                             finally:
                                 store.close()

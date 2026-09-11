@@ -67,6 +67,32 @@ a:focus-visible {
   margin: 24px 0;
   min-width: 0;
 }
+.trade-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+}
+.trade-form label {
+  display: grid;
+  gap: 6px;
+  font: 12px monospace;
+}
+.trade-form input {
+  width: 110px;
+  padding: 11px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.trade-preview {
+  border-left: 4px solid #708b59;
+  padding: 14px;
+  margin-top: 18px;
+  background: #f6f4ed;
+}
+.trade-preview.attention {
+  border-left-color: var(--amber);
+}
 .ui-entity {
   border: 1px solid var(--line);
   background: #f6f4ed;

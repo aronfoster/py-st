@@ -10,7 +10,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-KINDS = {"refresh", "trip", "orbit", "dock", "refuel", "reconcile"}
+KINDS = {
+    "refresh",
+    "trip",
+    "orbit",
+    "dock",
+    "refuel",
+    "purchase",
+    "sell",
+    "reconcile",
+}
 STATES = {
     "queued",
     "running",
@@ -53,14 +62,27 @@ def validate(payload: Any) -> dict[str, Any]:
     fields = {"kind", "system"} if kind == "refresh" else {"kind", "ship"}
     if kind == "trip":
         fields |= {"destination", "dock", "refuel"}
+    if kind in ("purchase", "sell"):
+        fields |= {"good", "units", "waypoint", "quote", "observed_at"}
     if set(payload) != fields:
         raise ValueError("Unexpected or missing flight fields")
-    for key in fields - {"kind", "dock", "refuel"}:
+    for key in fields - {"kind", "dock", "refuel", "observed_at"}:
+        if key in {"units", "quote"}:
+            if type(payload[key]) is not int or payload[key] <= 0:
+                raise ValueError(f"Invalid {key}")
+            continue
         value = payload[key]
         if not isinstance(value, str) or not re.fullmatch(
             r"[A-Z0-9_-]{1,80}", value
         ):
             raise ValueError(f"Invalid {key}")
+    if kind in ("purchase", "sell"):
+        try:
+            stamp = datetime.fromisoformat(payload["observed_at"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid observed_at") from exc
+        if stamp.tzinfo is None:
+            raise ValueError("Invalid observed_at")
     if kind == "trip" and (
         type(payload["dock"]) is not bool
         or type(payload["refuel"]) is not bool
@@ -106,8 +128,7 @@ class FlightQueue:
                         "Explicit verified scope and mode required"
                     )
                 self.db.execute("PRAGMA journal_mode=WAL")
-                self.db.executescript(
-                    """
+                self.db.executescript("""
                     BEGIN IMMEDIATE;
                     CREATE TABLE settings (
                         id INTEGER PRIMARY KEY CHECK(id=1),
@@ -127,8 +148,7 @@ class FlightQueue:
                     );
                     PRAGMA user_version=1;
                     COMMIT;
-                """
-                )
+                """)
                 with self.db:
                     self.db.execute(
                         "INSERT INTO settings "

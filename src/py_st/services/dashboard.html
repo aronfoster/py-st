@@ -159,7 +159,7 @@ let explorerSystem='', explorerWaypoint='', explorerShip='';
 let flightManaged=false, flightLoggedIn=false, flightVersion=0, authReady=false;
 let flightReport=null, reportError='', flightError='', flightSubmitting=false;
 window.ledgerUI={snapshot:{}};
-function publishUI(){window.ledgerUI.snapshot={ledger,flight:flightReport,selectedShip:explorerShip,managed:flightManaged,authenticated:flightLoggedIn,pending:!!localStorage.getItem('flight-pending'),submitting:flightSubmitting,error:[reportError,flightError].filter(Boolean).join('; ')};document.dispatchEvent(new Event('ledger-ui'));}
+function publishUI(){window.ledgerUI={snapshot:{ledger,flight:flightReport,selectedShip:explorerShip,managed:flightManaged,authenticated:flightLoggedIn,pending:!!localStorage.getItem('flight-pending'),submitting:flightSubmitting,error:[reportError,flightError].filter(Boolean).join('; ')},previewTrade:body=>flightPost('/api/trade-preview',body),submitCommand:submitFlight};document.dispatchEvent(new Event('ledger-ui'));}
 publishUI();
 function flightSelection(){
  $('flight-selection').textContent=`Ship: ${explorerShip||'select below'} / Destination: ${explorerWaypoint||'select below'} / System: ${explorerSystem||'unknown'}`;

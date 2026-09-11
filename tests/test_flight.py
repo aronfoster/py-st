@@ -33,7 +33,7 @@ from py_st.services.flight_demo import (
     scenario,
 )
 from py_st.services.flight_queue import FlightQueue, canonical_root
-from py_st.services.flight_worker import FlightWorker, preview
+from py_st.services.flight_worker import FlightWorker, preview, trade_preview
 from py_st.services.intelligence import Intelligence
 from py_st.services.stop_control import request_stop
 
@@ -186,16 +186,14 @@ def test_browser_pending_journal_and_historical_scope(
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(viewport={"width": width, "height": 900})
-        page.add_init_script(
-            """window.panelFlash = false;
+        page.add_init_script("""window.panelFlash = false;
             new MutationObserver(() => {
                 if (document.querySelectorAll(
                     '#legacy-pages [data-page]:not([hidden])'
                 ).length > 1) window.panelFlash = true;
             }).observe(document, {subtree:true, childList:true,
                 attributes:true, attributeFilter:['hidden']});
-        """
-        )
+        """)
         page.goto(flight_http + "/#/fleet")
         expect(page.locator("#page-title")).to_have_text("Fleet")
         assert not page.evaluate("window.panelFlash")
@@ -262,6 +260,75 @@ def finish(worker: FlightWorker, command_id: int) -> dict[str, Any]:
         ):
             return command
     raise AssertionError(worker.queue.get(command_id))
+
+
+def test_purchase_and_sale_refresh_authoritative_cash_and_cargo(
+    runner: FlightWorker,
+) -> None:
+    # Arrange
+    purchase = trade_preview(
+        runner.store, SCOPE, "SYNTHETIC-1", "IRON_ORE", 5, "purchase"
+    )
+    assert purchase["feasible"]
+    payload = {
+        "ship": "SYNTHETIC-1",
+        "good": "IRON_ORE",
+        "waypoint": purchase["waypoint"],
+    }
+
+    # Act
+    purchase_id = submit(
+        runner,
+        {
+            **payload,
+            "kind": "purchase",
+            "units": 5,
+            "quote": purchase["unit_price"],
+            "observed_at": purchase["observed_at"],
+        },
+    )
+    assert finish(runner, purchase_id)["status"] == "completed"
+    sale = trade_preview(
+        runner.store, SCOPE, "SYNTHETIC-1", "IRON_ORE", 2, "sell"
+    )
+    sale_id = submit(
+        runner,
+        {
+            **payload,
+            "kind": "sell",
+            "units": 2,
+            "quote": sale["unit_price"],
+            "observed_at": sale["observed_at"],
+        },
+    )
+
+    # Assert
+    assert finish(runner, sale_id)["status"] == "completed"
+    state = world(runner.root)
+    assert state["agent"]["credits"] == 123216
+    assert state["ships"][0]["cargo"]["units"] == 3
+    assert state["mutations"][-2:] == [
+        "/my/ships/SYNTHETIC-1/purchase",
+        "/my/ships/SYNTHETIC-1/sell",
+    ]
+
+
+def test_trade_preview_rejects_capacity_and_unknown_price(
+    runner: FlightWorker,
+) -> None:
+    # Arrange / Act
+    too_large = trade_preview(
+        runner.store, SCOPE, "SYNTHETIC-1", "IRON_ORE", 41, "purchase"
+    )
+    unknown = trade_preview(
+        runner.store, SCOPE, "SYNTHETIC-1", "MISSING", 1, "purchase"
+    )
+
+    # Assert
+    assert not too_large["feasible"]
+    assert unknown["unit_price"] is None
+    assert unknown["total_price"] is None
+    assert not unknown["feasible"]
 
 
 def test_complete_trip_fuel_cash_and_shared_observations(

@@ -335,3 +335,12 @@ implementation of the shell and migration; it does not authorize wider gameplay.
 6. **Delivery:** build/typecheck/format frontend, run Python quality checks and
    explicit browser suite at desktop + 390px through the real loopback server.
    Package generated assets. No runtime Node or new hosted security boundary.
+# Trading implementation note
+
+The Markets slice implements the established downstream contract with a
+React-owned, dated estimate and guarded purchase/sale submission. It retains the
+legacy price/history panels as read-only evidence, uses the shared ship context,
+and links movement and command outcomes to Explorer and Operations. A preview is
+remembered only in component state and never becomes authority: the worker
+requires matching fresh server evidence before dispatch. Fixed-floor headroom,
+fuel reserve and protected contract cargo are displayed separately.
