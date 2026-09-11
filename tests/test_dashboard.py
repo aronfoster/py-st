@@ -648,6 +648,9 @@ def test_market_desk_browser(
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.on("request", lambda request: requests.append(request))
             page.goto(str(desk_http.base_url))
+            page.get_by_role("navigation").get_by_role(
+                "link", name="Markets", exact=True
+            ).click()
             page.locator("#scope").select_option("r:a")
             browser_api.expect(
                 page.locator("#market-select option")
@@ -808,6 +811,9 @@ def test_market_basic_iso_browser(
             errors: list[str] = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(str(desk_http.base_url))
+            page.get_by_role("navigation").get_by_role(
+                "link", name="Markets", exact=True
+            ).click()
             page.locator("#scope").select_option("r:a")
             page.get_by_label("Cached market", exact=True).select_option(
                 "X-A-BASIC"
@@ -901,6 +907,9 @@ def test_doctor_browser(
             assert not any("/api/doctor" in r.url for r in requests)
 
             # Act / Assert: real shared findings, with STOP left intact.
+            page.get_by_role("navigation").get_by_role(
+                "link", name="Operations", exact=True
+            ).click()
             button = page.get_by_role("button", name="Check recorded safety")
             button.click()
             findings = page.locator("#doctor-findings")
@@ -1099,6 +1108,9 @@ def test_contract_desk_browser(
                     lambda error, errors=errors: errors.append(str(error)),
                 )
                 page.goto(str(desk_http.base_url))
+                page.get_by_role("navigation").get_by_role(
+                    "link", name="Contracts", exact=True
+                ).click()
                 page.locator("#scope").select_option("r:a")
                 browser_api.expect(page.locator("#positions")).to_contain_text(
                     "procurement:C-MULTI / IRON, COPPER -> X-A-D"
@@ -1579,6 +1591,9 @@ def test_desk_uses_source_contract_snapshot(
                     lambda route: route.fulfill(json=earlier_report),
                 )
                 page.goto(str(desk_http.base_url))
+                page.get_by_role("navigation").get_by_role(
+                    "link", name="Contracts", exact=True
+                ).click()
                 browser_api.expect(
                     page.locator("#contract-select option")
                 ).to_have_count(3)

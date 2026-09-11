@@ -29,6 +29,14 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
     root = root.resolve()
     csrf = secrets.token_hex(32)
     html = Path(__file__).with_name("dashboard.html").read_text()
+    assets = Path(__file__).with_name("ui")
+    html = html.replace(
+        "__UI_SCRIPT__",
+        (assets / "shell.js").read_text().replace("</", r"<\/"),
+    ).replace(
+        "__UI_STYLE__",
+        (assets / "shell.css").read_text().replace("</", r"<\/"),
+    )
     managed = (root / ".state/flight.sqlite3").exists()
     sessions: dict[str, float] = {}
     auth_lock = threading.Lock()

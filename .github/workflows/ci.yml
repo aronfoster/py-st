@@ -13,6 +13,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Check and rebuild browser foundation
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run check
+          npm run build
+          git diff --exit-code -- ../src/py_st/services/ui
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

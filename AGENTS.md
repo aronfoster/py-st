@@ -1,14 +1,14 @@
 # Agent Instructions
 
 The primary goal is the best application for a human or automated process to
-play SpaceTraders. Current assignment: FOS-71 Task 02, browser flight operations
-on the merged system explorer. Deliver select/preview/navigate/arrival/dock/refuel,
-durable execution, local authentication and offline proof; stop at that workflow.
+play SpaceTraders. Current assignment: FOS-72, browser UI/UX foundation.
+Use docs/UI_UX.md for the design checkpoint, surface inventory and downstream
+UI contract. Flight operations and FOS-73 capability snapshots are merged.
 FOS-63 owns the wider product roadmap. Live verification is separate.
 
 ## Workspace
 
-Work in this normal repository checkout, based on `master` with PR #45. The former
+Work in this normal repository checkout, based on verified latest `master`. The former
 `tmp/astra` worktree was removed and its runtime state moved to root `.state`.
 Do not create another worktree or request parent-directory access. Keep new
 temporary work under ignored `.cache/nightly`; use `.venv/bin/python` here.
@@ -21,6 +21,12 @@ This is Python 3.11+; use the owner's Python 3.12 virtual environment.
 Preserve CLI -> services/automation -> client/transport layering. Generated
 models are not hand-edited. Use typed code, 79-column Black/Ruff formatting,
 pytest with Arrange/Act/Assert, and zero-based UI indexes.
+
+Frontend source is React/TypeScript under `frontend/`; see its README for the
+Node 22 build/check commands. Rebuild packaged assets after source changes.
+Preserve the explicit React/legacy DOM ownership boundary and run the actual
+browser-enabled suite for UI changes. The production Python app needs no Node
+process, and CSP/Host/Origin protections remain unchanged.
 
 Run non-mutating Black, Ruff --no-fix, mypy and pytest before commits.
 Manual edits use apply_patch. Stage intended files only, inspect status/diff

@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -762,6 +763,9 @@ def test_browser_preserves_review_draft_and_handles_auth_errors(
         assert reports == []
         page.locator("#owner-password").fill(PASSWORD)
         page.get_by_role("button", name="Log in", exact=True).click()
+        page.get_by_role("navigation").get_by_role(
+            "link", name="Operations", exact=True
+        ).click()
         textarea = page.get_by_role(
             "textbox", name=f"Outcome explanation for command {command['id']}"
         )
@@ -876,6 +880,9 @@ def test_browser_trip(flight_http: str, flight_root: Path, width: int) -> None:
             page.goto(flight_http)
             page.locator("#owner-password").fill(PASSWORD)
             page.get_by_role("button", name="Log in", exact=True).click()
+            page.get_by_role("navigation").get_by_role(
+                "link", name="Explorer", exact=True
+            ).click()
             page.locator("#flight-controls").wait_for(state="visible")
             page.locator("#explorer-ship").select_option("SYNTHETIC-1")
             page.locator("#waypoint-list button").filter(
@@ -907,6 +914,11 @@ def test_browser_trip(flight_http: str, flight_root: Path, width: int) -> None:
             )
             expect(page.locator("#fleet")).to_contain_text("Fuel 100/100")
             expect(page.locator("#credits")).to_have_text("123,384")
+            page.get_by_role("navigation").get_by_role(
+                "link", name="Fleet", exact=True
+            ).click()
+            expect(page.locator("#fleet")).to_be_visible()
+            expect(page.locator("#explorer-ship")).to_have_value("SYNTHETIC-1")
             assert page.evaluate(
                 "document.documentElement.scrollWidth <= window.innerWidth"
             )
@@ -918,3 +930,140 @@ def test_browser_trip(flight_http: str, flight_root: Path, width: int) -> None:
         stopped.set()
         thread.join(10)
     assert not errors, errors
+
+
+@pytest.mark.skipif(
+    os.environ.get("DASHBOARD_BROWSER_TESTS") != "1",
+    reason="Explicit offline browser suite",
+)
+@pytest.mark.parametrize("width", [1440, 390])
+def test_ui_shell_ownership_liveness_and_recovery(
+    flight_http: str, flight_root: Path, width: int
+) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    # Arrange: a real queue has owned work; no worker or live API is running.
+    queue = FlightQueue(flight_root)
+    command = queue.enqueue(SCOPE, uuid.uuid4().hex, TRIP)
+    queue.heartbeat("idle")
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": width, "height": 900})
+        errors: list[str] = []
+        violations: list[str] = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.on(
+            "console",
+            lambda message: (
+                violations.append(message.text)
+                if "Content Security Policy" in message.text
+                else None
+            ),
+        )
+        page.clock.install(time=datetime.now(UTC))
+        page.goto(flight_http)
+        page.locator("#owner-password").fill(PASSWORD)
+        page.get_by_role("button", name="Log in", exact=True).click()
+        expect(page.locator("#page-title")).to_have_text("Overview")
+        expect(page.locator("#page-overview")).to_contain_text("SYNTHETIC-1")
+        nav = page.get_by_role("navigation", name="Main navigation")
+        expect(nav.get_by_role("link")).to_have_count(8)
+
+        # Act / Assert: every previous panel remains reachable in its section.
+        inventory = {
+            "Explorer": ["map", "flight-controls"],
+            "Fleet": ["fleet"],
+            "Markets": ["market-select", "routes", "markets"],
+            "Contracts": ["contracts", "contract-select"],
+            "Automation": ["automation-runs", "plans"],
+            "Reports": ["chart", "cash", "positions"],
+            "Operations": ["flight-commands", "doctor-check", "journal"],
+        }
+        for name, ids in inventory.items():
+            nav.get_by_role("link", name=name, exact=True).click()
+            expect(page.locator("#page-title")).to_have_text(name)
+            expect(
+                nav.get_by_role("link", name=name, exact=True)
+            ).to_have_attribute("aria-current", "page")
+            for panel in ids:
+                assert (
+                    page.locator(f"#{panel}").evaluate(
+                        "el => el.closest('[data-page]').dataset.page"
+                    )
+                    == name.lower()
+                )
+            assert page.evaluate(
+                "document.documentElement.scrollWidth <= innerWidth"
+            ), name
+        nav.get_by_role("link", name="Explorer", exact=True).click()
+        page.locator("#explorer-ship").select_option("SYNTHETIC-1")
+        expect(page.locator("#ship-ownership")).to_contain_text(
+            f"worker command #{command['id']}"
+        )
+        expect(page.locator("#flight-trip")).to_be_disabled()
+        nav.get_by_role("link", name="Markets", exact=True).click()
+        expect(page.locator("#explorer-ship")).to_have_value("SYNTHETIC-1")
+        page.go_back()
+        expect(page.locator("#page-title")).to_have_text("Explorer")
+        expect(page.locator("#explorer-ship")).to_have_value("SYNTHETIC-1")
+
+        # STOP and unknown outcome are independent. Doctor remains functional.
+        queue.update(command["id"], "reconciliation_required", "Lost reply")
+        page.locator("#pause").click()
+        expect(page.locator("#state")).to_have_text("STOP REQUESTED")
+        certainty = page.locator(".ui-status").filter(
+            has_text="Mutation certainty"
+        )
+        expect(certainty).to_contain_text("1 reconciliation required")
+        nav.get_by_role("link", name="Operations", exact=True).click()
+        explanation = page.get_by_role(
+            "textbox", name=f"Outcome explanation for command {command['id']}"
+        )
+        explanation.fill(
+            "Observed ship evidence; still reviewing the receipt."
+        )
+        page.locator("#doctor-check").click()
+        expect(page.locator("#doctor-status")).to_contain_text("unverified")
+        nav.get_by_role("link", name="Overview", exact=True).click()
+        expect(page.locator("#shared-ship-context")).to_be_hidden()
+
+        # Fresh stored account evidence cannot stand in for a worker heartbeat.
+        worker = page.locator(".ui-status").filter(has_text="Worker liveness")
+        page.clock.fast_forward(20000)
+        expect(worker).to_contain_text("Unknown · stale")
+        expect(certainty).to_contain_text("1 reconciliation required")
+        expect(
+            page.locator(".ui-status").filter(has_text="Observation freshness")
+        ).to_contain_text("recent stored, not live")
+        page.route(
+            "**/api/report?**",
+            lambda route: route.fulfill(status=503, json={"error": "Offline"}),
+        )
+        page.locator("#refresh").click()
+        expect(page.locator("#ui-root")).to_contain_text("Update unavailable")
+        expect(certainty).to_contain_text("1 reconciliation required")
+        page.screenshot(
+            path=str(flight_root / f"overview-stale-{width}.png"),
+            full_page=True,
+        )
+        nav.get_by_role("link", name="Operations", exact=True).click()
+        expect(explanation).to_have_value(
+            "Observed ship evidence; still reviewing the receipt."
+        )
+        page.screenshot(
+            path=str(flight_root / f"operations-review-{width}.png"),
+            full_page=True,
+        )
+        page.locator("#flight-logout").click()
+        expect(page.locator("#flight-login")).to_be_visible()
+        expect(page.locator("#ui-root")).not_to_contain_text("SYNTHETIC-1")
+        assert not page.evaluate(
+            "Object.keys(localStorage).some(k=>k.startsWith('selected-ship:'))"
+        )
+        assert not errors, errors
+        assert not violations, violations
+        browser.close()
+    assert (flight_root / "STOP").exists()
+    assert queue.get(command["id"])["status"] == "reconciliation_required"
+    assert world(flight_root)["mutations"] == []
+    queue.close()

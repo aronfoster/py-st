@@ -19,19 +19,27 @@ main{max-width:1500px;margin:auto;padding:36px 5vw}h1{font:clamp(32px,4vw,54px) 
 #market-trend[hidden]{display:none}
 .explorer-layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:20px}.system-map{width:100%;height:auto;min-height:340px;background:#f6f4ed;border:1px solid var(--line);display:block}.system-map .waypoint{cursor:pointer;stroke:var(--paper);stroke-width:2}.system-map .selected{stroke:#f2a844;stroke-width:5}.system-map .ship-mark{fill:none;stroke:#a85b20;stroke-width:3;pointer-events:none}.system-map text{font:11px monospace;fill:var(--ink);pointer-events:none}.explorer-list{max-height:420px;overflow:auto;display:grid;gap:6px}.explorer-list button{width:100%;text-align:left;background:#f6f4ed}.explorer-list button[aria-current=true]{background:var(--accent);border-color:var(--ink)}.explorer-key{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 14px}.explorer-key span{font:11px monospace}.explorer-detail{margin-top:18px}.explorer-detail dl{display:grid;grid-template-columns:max-content 1fr;gap:8px 14px;font:12px monospace}.explorer-detail dd{margin:0;overflow-wrap:anywhere}
 @media(max-width:800px){.explorer-layout{grid-template-columns:1fr}.system-map{min-height:260px}.explorer-list{max-height:300px}}
+__UI_STYLE__
 </style>
 </head>
 <body>
+<a class="skip-link" href="#page-title">Skip to current section</a>
 <header><div class="brand">Flight Ledger<span>SPACE TRADERS / OPERATIONS</span></div><div class="controls"><label class="small" for="scope">UNIVERSE / AGENT</label><select id="scope" aria-label="Universe and agent"></select><span id="state" class="status">CONNECTING</span></div></header>
+<div id="ui-navigation"></div>
 <main>
-<section class="lead"><div><div class="eyebrow">Local intelligence / no live requests from this page</div><h1>Keep the fleet earning.</h1><p>Observed economics, fleet readiness and an accountable action trail. Decisions are bounded. The credit reserve is not negotiable.</p></div><div class="controls"><button id="refresh">Refresh ledger</button><button id="pause">Pause automation</button><button id="resume">Clear stop</button></div></section>
+<section class="lead"><div><div class="eyebrow">Local intelligence / no live requests from this page</div><p>Refresh ledger reloads stored evidence. STOP requests a pause; it cannot cancel a dispatched request.</p></div><div class="controls"><button id="refresh">Refresh ledger</button><button id="pause">Pause automation</button><button id="resume">Clear stop</button></div></section>
 <div id="error" role="alert"></div>
 <section id="flight-login" class="desk" hidden><h2>Owner login</h2><form id="login-form"><label for="owner-password">Local owner password</label><input id="owner-password" type="password" autocomplete="current-password"><button type="submit">Log in</button></form><p id="login-error" role="alert"></p></section>
-<section id="flight-controls" class="desk" hidden aria-labelledby="flight-title"><div class="eyebrow">Durable flight operations</div><h2 id="flight-title">Fly the selected ship.</h2><p>Select a ship and destination in the explorer below. Commands persist when this page closes. Arrival requires confirmation from the game; countdowns are estimates.</p><p id="flight-selection" class="small"></p><div class="controls"><button id="flight-refresh">Refresh game snapshot</button><button id="flight-preview">Preview trip</button><button id="flight-orbit">Orbit</button><button id="flight-dock">Dock</button><button id="flight-refuel">Dock and refuel</button><button id="flight-logout">Log out</button></div><label><input id="trip-dock" type="checkbox" checked>Dock on arrival</label><label><input id="trip-refuel" type="checkbox" checked>Refuel on arrival (paid)</label><button id="flight-trip">Submit trip</button><button id="flight-retry" hidden>Recover submission using same request ID</button><pre id="flight-estimate"></pre><p id="flight-message" role="status"></p><p id="flight-heartbeat" class="small"></p><div id="flight-commands" class="fleet"></div></section>
+<div id="managed-global" hidden><div class="controls"><button id="flight-refresh">Refresh game snapshot</button><button id="flight-logout">Log out</button><button id="flight-retry" hidden>Recover submission using same request ID</button></div><p id="flight-message" role="status"></p><p id="flight-heartbeat" class="small"></p></div>
 <section class="metrics" aria-label="Account summary"><div class="metric"><div class="eyebrow">Credits on hand</div><div id="credits" class="value">--</div><div id="observed" class="small">No observation yet</div></div><div class="metric"><div class="eyebrow">Scope cash change</div><div id="profit" class="value">--</div><div class="small">Cash flow, not inventory-adjusted profit</div></div><div class="metric"><div class="eyebrow">Above fixed floor</div><div id="reserve" class="value">--</div><div class="small">Before fuel and contract obligations</div></div><div class="metric"><div class="eyebrow">Market coverage</div><div id="coverage" class="value">--</div><div class="small">Priced / advertised markets</div></div></section>
+<div id="ui-root"></div>
+<div id="shared-ship-context"><label for="explorer-ship">Selected ship</label> <select id="explorer-ship" aria-describedby="ship-ownership"></select><div id="ship-context-summary"></div></div>
+<div id="legacy-pages"></div>
+<section id="flight-controls" class="desk" hidden aria-labelledby="flight-title"><div class="eyebrow">Durable flight operations</div><h2 id="flight-title">Fly the selected ship.</h2><p>Select a ship in the shared context and a destination in the explorer. Commands persist when this page closes. Arrival requires confirmation from the game; countdowns are estimates. <a href="#operations">Inspect commands and recovery</a>.</p><p id="flight-selection" class="small"></p><div class="controls"><button id="flight-preview">Preview trip</button><button id="flight-orbit">Orbit</button><button id="flight-dock">Dock</button><button id="flight-refuel">Dock and refuel</button></div><label><input id="trip-dock" type="checkbox" checked>Dock on arrival</label><label><input id="trip-refuel" type="checkbox" checked>Refuel on arrival (paid)</label><button id="flight-trip">Submit trip</button><pre id="flight-estimate"></pre></section>
+<section id="command-panel" class="desk"><h2>Durable commands and recovery</h2><p>Refresh the game snapshot and inspect the journal before recording a reviewed outcome. Review cancels remaining steps, not the already dispatched mutation. While paused, queued observation/review work waits for explicit resume; inspect all queued work before resuming.</p><div id="flight-commands" class="fleet"></div></section>
 <section class="panel"><h2>The credit trail</h2><svg id="chart" class="chart" viewBox="0 0 600 180" role="img" aria-label="Observed credit history"></svg><div class="small">All observations are scoped to the selected reset and agent.</div></section>
-<section class="desk" aria-labelledby="explorer-title"><div class="eyebrow">System explorer / stored observations only</div><h2 id="explorer-title">Explore a recorded system.</h2><div class="controls"><label for="system-select" class="small">SYSTEM</label><select id="system-select"></select><label for="explorer-ship" class="small">FLEET</label><select id="explorer-ship"></select></div><div class="explorer-key"><span>● waypoint</span><span>◆ market</span><span>■ shipyard</span><span>⬢ jump gate</span><span>◎ selected ship</span></div><p id="explorer-status" class="small" role="status"></p><div class="explorer-layout"><svg id="map" class="system-map" viewBox="0 0 700 420" role="img" aria-label="Observed system waypoints"></svg><div><div id="waypoint-list" class="explorer-list" aria-label="Observed waypoints"></div></div></div><div id="waypoint-detail" class="explorer-detail"></div></section>
-<div class="grid"><section class="panel"><h2>Fleet readiness</h2><div id="fleet" class="fleet"></div></section><section class="panel"><h2>Contract desk</h2><div id="contracts"></div><h2 style="margin-top:24px">Strategy notes</h2><div id="plans"></div></section></div>
+<section class="desk" aria-labelledby="explorer-title"><div class="eyebrow">System explorer / stored observations only</div><h2 id="explorer-title">Explore a recorded system.</h2><div class="controls"><label for="system-select" class="small">SYSTEM</label><select id="system-select"></select></div><div class="explorer-key"><span>● waypoint</span><span>◆ market</span><span>■ shipyard</span><span>⬢ jump gate</span><span>◎ selected ship</span></div><p id="explorer-status" class="small" role="status"></p><div class="explorer-layout"><svg id="map" class="system-map" viewBox="0 0 700 420" role="img" aria-label="Observed system waypoints"></svg><div><div id="waypoint-list" class="explorer-list" aria-label="Observed waypoints"></div></div></div><div id="waypoint-detail" class="explorer-detail"></div></section>
+<div class="grid"><section class="panel"><h2>Fleet readiness</h2><div id="fleet" class="fleet"></div></section><section class="panel"><h2>Contract desk</h2><div id="contracts"></div></section><section class="panel"><h2>Strategy notes</h2><div id="plans"></div></section></div>
 <section class="desk" aria-labelledby="market-title">
 <div class="eyebrow">Market desk / cached evidence only</div><h2 id="market-title">Inspect the recorded market.</h2>
 <p>No live requests. Buy and sell are credits per unit; volume is a transaction batch limit, not available inventory. Unknown values are gaps, never zero-price offers.</p>
@@ -149,13 +157,19 @@ async function loadMarketHistory(){
 let ledger={}, deskEvidence=null, deskSnapshot=null, builderBase=null, deskVersion=0, reportVersion=0, modelVersion=0, doctorVersion=0;
 let explorerSystem='', explorerWaypoint='', explorerShip='';
 let flightManaged=false, flightLoggedIn=false, flightVersion=0, authReady=false;
+let flightReport=null, reportError='', flightError='';
+window.ledgerUI={snapshot:{}};
+function publishUI(){window.ledgerUI.snapshot={ledger,flight:flightReport,selectedShip:explorerShip,managed:flightManaged,authenticated:flightLoggedIn,pending:!!localStorage.getItem('flight-pending'),error:[reportError,flightError].filter(Boolean).join('; ')};document.dispatchEvent(new Event('ledger-ui'));}
+publishUI();
 function flightSelection(){
  $('flight-selection').textContent=`Ship: ${explorerShip||'select below'} / Destination: ${explorerWaypoint||'select below'} / System: ${explorerSystem||'unknown'}`;
 }
 async function flightPost(path,body){return requestJSON(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf,...body})})}
 async function loadAuth(){
  const auth=await requestJSON('/api/auth');flightManaged=auth.managed;flightLoggedIn=auth.authenticated;authReady=true;
- $('flight-login').hidden=!flightManaged||flightLoggedIn;$('flight-controls').hidden=!flightManaged||!flightLoggedIn;
+  $('flight-login').hidden=!flightManaged||flightLoggedIn;$('flight-controls').hidden=!flightManaged||!flightLoggedIn;
+  $('managed-global').hidden=!flightManaged||!flightLoggedIn;
+  publishUI();
  if(flightManaged){document.querySelector('.lead .eyebrow').textContent='Local flight operations / shared observations';$('resume').textContent='Resume worker';document.querySelector('footer').firstChild.textContent='LOCAL ONLY / Authenticated resume permits queued work. STOP survives restart. ';}
  if(flightManaged&&flightLoggedIn)await loadFlight();
 }
@@ -163,7 +177,8 @@ async function loadFlight(){
  if(!flightManaged||!flightLoggedIn)return;
  const version=++flightVersion,scope=$('scope').value;
  try{
-  const d=await requestJSON('/api/flight');if(version!==flightVersion||scope!==$('scope').value)return;
+   const d=await requestJSON('/api/flight');if(version!==flightVersion||scope!==$('scope').value)return;
+   flightReport=d;flightError='';publishUI();
   const settings=d.settings,stamp=settings.heartbeat,seconds=stamp?(Date.now()-Date.parse(stamp))/1000:Infinity;
   $('flight-heartbeat').textContent=`${settings.mode==='demo'?'SYNTHETIC OFFLINE WORLD':'LIVE ADAPTER'} / ${settings.scope} / ${settings.paused?'PAUSED':settings.worker_state} / heartbeat ${stamp||'never'} (${seconds>15?'stale: worker liveness unknown':'recent heartbeat'}).`;
   const drafts=new Map([...$('flight-commands').querySelectorAll('textarea')].map(input=>[input.dataset.commandId,input.value]));
@@ -181,13 +196,13 @@ async function loadFlight(){
    $('flight-commands').append(card);
   });
   if(editing){const input=[...$('flight-commands').querySelectorAll('textarea')].find(input=>input.dataset.commandId===editing.id);if(input){input.focus({preventScroll:true});input.setSelectionRange(editing.start,editing.end);}}
- }catch(e){if(version===flightVersion)$('flight-message').textContent=e.message;}
+  }catch(e){if(version===flightVersion){$('flight-message').textContent=e.message;flightError=e.message;publishUI();}}
 }
 async function sendFlight(envelope){
  $('flight-trip').disabled=true;
  try{const command=await flightPost('/api/flight',envelope);localStorage.removeItem('flight-pending');$('flight-retry').hidden=true;$('flight-message').textContent=`Command #${command.id}: ${command.status}`;await loadFlight();}
  catch(e){if(e.status>=400&&e.status<500){localStorage.removeItem('flight-pending');$('flight-retry').hidden=true;$('flight-message').textContent=e.message+'; submission rejected.';}else{$('flight-message').textContent=e.message+'; submission retained with its original request ID.';$('flight-retry').hidden=false;}}
- finally{$('flight-trip').disabled=false;}
+  finally{$('flight-trip').disabled=false;publishUI();}
 }
 async function submitFlight(payload){
  if(localStorage.getItem('flight-pending')){$('flight-message').textContent='Recover the previous submission first; its outcome may be unknown.';$('flight-retry').hidden=false;return;}
@@ -209,7 +224,8 @@ function describeExplorer(w){
  out.append(dl);
 }
 function drawExplorer(){
- flightSelection();
+  flightSelection();
+  publishUI();
  const explorer=ledger.explorer||{systems:[],ships:[]},system=explorer.systems.find(s=>s.symbol===explorerSystem),points=system?.waypoints||[],map=$('map'),list=$('waypoint-list');map.replaceChildren();list.replaceChildren();
  if(!system){$('explorer-status').textContent='No observed waypoint systems in this scope.';describeExplorer(null);return;}
  if(!points.some(w=>w.symbol===explorerWaypoint))explorerWaypoint='';
@@ -224,7 +240,8 @@ function drawExplorer(){
 }
 function syncExplorer(d){
  const systems=d.explorer?.systems||[],systemSelect=$('system-select'),shipSelect=$('explorer-ship');systemSelect.replaceChildren(new Option('No observed systems',''));systems.forEach(s=>systemSelect.append(new Option(s.symbol,s.symbol)));if(!systems.some(s=>s.symbol===explorerSystem))explorerSystem=systems[0]?.symbol||'';systemSelect.value=explorerSystem;systemSelect.disabled=!systems.length;
- shipSelect.replaceChildren(new Option('Select a ship',''));(d.explorer?.ships||[]).forEach(s=>shipSelect.append(new Option(`${s.symbol} / ${s.status||'unknown'}`,s.symbol)));if(!(d.explorer?.ships||[]).some(s=>s.symbol===explorerShip))explorerShip='';shipSelect.value=explorerShip;drawExplorer();
+  if(!explorerShip&&d.scope)explorerShip=localStorage.getItem('selected-ship:'+d.scope)||'';
+  shipSelect.replaceChildren(new Option('Select a ship',''));(d.explorer?.ships||[]).forEach(s=>shipSelect.append(new Option(`${s.symbol} / ${s.status||'unknown'}`,s.symbol)));if(!(d.explorer?.ships||[]).some(s=>s.symbol===explorerShip)){explorerShip='';if(d.scope)localStorage.removeItem('selected-ship:'+d.scope);}shipSelect.value=explorerShip;drawExplorer();
 }
 function clearDoctor(){doctorVersion++;$('doctor-status').textContent='';$('doctor-findings').replaceChildren();}
 async function checkDoctor(){
@@ -262,6 +279,7 @@ function clearDesk(message){
  $('desk-status').textContent=message;$('model-submit').disabled=false;
 }
 function clearScope(){
+  flightReport=null;reportError='';flightError='';$('flight-heartbeat').textContent='';
  flightVersion++;$('flight-estimate').textContent='';$('flight-commands').replaceChildren();$('flight-message').textContent='';
  explorerSystem='';explorerWaypoint='';explorerShip='';
  clearMarketHistory('Loading selected scope...');['market-select','good-select','market-prices','market-asof'].forEach(id=>$(id).replaceChildren());
@@ -271,7 +289,8 @@ function clearScope(){
   ['chart','map','waypoint-list','waypoint-detail','system-select','explorer-ship','fleet','contracts','plans','routes','cash','audit','positions','markets','journal','contract-select','automation-runs'].forEach(id=>$(id).replaceChildren());
  $('audit').classList.remove('warn');$('error').textContent='';
  $('observed').textContent='Loading selected scope...';
- $('export').removeAttribute('href');$('export').setAttribute('aria-disabled','true');
+  $('export').removeAttribute('href');$('export').setAttribute('aria-disabled','true');
+  publishUI();
 }
 function syncDesk(d){
  ledger=d;
@@ -428,16 +447,16 @@ function render(d){
   if(d.scope){$('export').href='/api/report?scope='+encodeURIComponent(d.scope);$('export').removeAttribute('aria-disabled');}else{$('export').removeAttribute('href');$('export').setAttribute('aria-disabled','true');}
    renderRuns(d.automation_runs||[]);syncDesk(d);syncMarket(d);loadFlight();
 }
-async function refresh(){if(!authReady||(flightManaged&&!flightLoggedIn))return;const version=++reportVersion;try{const d=await requestJSON('/api/report?scope='+encodeURIComponent($('scope').value));if(version!==reportVersion)return;render(d);$('error').textContent=''}catch(e){if(version===reportVersion){if(e.status===401){clearScope();flightLoggedIn=false;await loadAuth();return;}$('error').textContent=e.message;if(!ledger.scope){$('observed').textContent='Scope data unavailable. Refresh ledger to retry.';$('desk-status').textContent='Scope data unavailable. Refresh ledger to retry.';}}}}
+async function refresh(){if(!authReady||(flightManaged&&!flightLoggedIn))return;const version=++reportVersion;try{const d=await requestJSON('/api/report?scope='+encodeURIComponent($('scope').value));if(version!==reportVersion)return;reportError='';render(d);$('error').textContent='';publishUI()}catch(e){if(version===reportVersion){if(e.status===401){clearScope();flightLoggedIn=false;await loadAuth();return;}$('error').textContent=e.message;reportError=e.message;publishUI();if(!ledger.scope){$('observed').textContent='Scope data unavailable. Refresh ledger to retry.';$('desk-status').textContent='Scope data unavailable. Refresh ledger to retry.';}}}}
 async function control(action){try{const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,csrf})});if(!r.ok)throw Error('Control rejected');await refresh()}catch(e){$('error').textContent=e.message}}
 $('contract-select').onchange=loadSources;$('source-reload').onclick=loadSources;$('model-ship').onchange=prefillModel;$('prefill').onclick=prefillModel;$('model-form').onsubmit=calculateModel;$('model-input').oninput=invalidateModel;
 $('builder-form').onsubmit=buildDraft;$('builder-form').oninput=event=>{event.target.removeAttribute('aria-invalid');$('builder-error').textContent='';$('builder-status').textContent='Form changed. Build draft from form to apply; JSON is unchanged.';};
 $('refresh').onclick=refresh;$('scope').onchange=()=>{clearScope();refresh()};$('pause').onclick=()=>control('pause');$('resume').onclick=()=>control('resume');setInterval(refresh,10000);
 $('doctor-check').onclick=checkDoctor;
-$('system-select').onchange=()=>{explorerSystem=$('system-select').value;explorerWaypoint='';drawExplorer()};$('explorer-ship').onchange=()=>{explorerShip=$('explorer-ship').value;const ship=ledger.explorer?.ships.find(s=>s.symbol===explorerShip),target=ship?.status==='IN_TRANSIT'?ship.destination:ship?.waypoint,system=target?systemForWaypoint(target):'';if(system){explorerSystem=system;$('system-select').value=system;explorerWaypoint=target;}drawExplorer()};
+$('system-select').onchange=()=>{explorerSystem=$('system-select').value;explorerWaypoint='';$('flight-estimate').textContent='';drawExplorer()};$('explorer-ship').onchange=()=>{explorerShip=$('explorer-ship').value;if(ledger.scope)localStorage.setItem('selected-ship:'+ledger.scope,explorerShip);$('flight-estimate').textContent='';const ship=ledger.explorer?.ships.find(s=>s.symbol===explorerShip),target=ship?.status==='IN_TRANSIT'?ship.destination:ship?.waypoint,system=target?systemForWaypoint(target):'';if(system){explorerSystem=system;$('system-select').value=system;explorerWaypoint=target;}drawExplorer()};
 $('market-select').onchange=()=>{$('good-select').value='';showMarket();};$('good-select').onchange=loadMarketHistory;
 $('login-form').onsubmit=async e=>{e.preventDefault();try{await flightPost('/api/login',{password:$('owner-password').value});$('owner-password').value='';$('login-error').textContent='';await loadAuth();await refresh();}catch(error){$('owner-password').value='';$('login-error').textContent=error.message;}};
-$('flight-logout').onclick=async()=>{try{await flightPost('/api/logout',{});flightVersion++;clearScope();await loadAuth();}catch(e){$('flight-message').textContent='Logout failed: '+e.message;}};
+$('flight-logout').onclick=async()=>{try{await flightPost('/api/logout',{});reportVersion++;flightVersion++;Object.keys(localStorage).filter(key=>key.startsWith('selected-ship:')).forEach(key=>localStorage.removeItem(key));clearScope();await loadAuth();}catch(e){$('flight-message').textContent='Logout failed: '+e.message;}};
 $('flight-refresh').onclick=()=>submitFlight({kind:'refresh',system:explorerSystem});
 $('flight-orbit').onclick=()=>shipCommand('orbit');$('flight-dock').onclick=()=>shipCommand('dock');$('flight-refuel').onclick=()=>shipCommand('refuel');
 $('trip-dock').onchange=()=>{if(!$('trip-dock').checked)$('trip-refuel').checked=false;};$('trip-refuel').onchange=()=>{if($('trip-refuel').checked)$('trip-dock').checked=true;};
@@ -446,5 +465,6 @@ $('flight-preview').onclick=async()=>{const scope=$('scope').value,ship=explorer
 $('flight-retry').hidden=!localStorage.getItem('flight-pending');$('flight-retry').onclick=()=>{const pending=localStorage.getItem('flight-pending');if(pending)sendFlight(JSON.parse(pending));};
 loadAuth().then(refresh).catch(e=>{$('login-error').textContent=e.message;});
 </script>
+<script nonce="__NONCE__">__UI_SCRIPT__</script>
 </body>
 </html>
