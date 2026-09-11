@@ -26,6 +26,10 @@ jobs:
           npm run check
           npm run build
           git diff --exit-code -- ../src/py_st/services/ui
+          if [ -n "$(git status --porcelain --untracked-files=all -- ../src/py_st/services/ui)" ]; then
+            git status --short --untracked-files=all -- ../src/py_st/services/ui
+            exit 1
+          fi
 
       - uses: actions/setup-python@v5
         with:

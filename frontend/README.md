@@ -32,12 +32,22 @@ is not the application/authentication boundary.
   `Freshness` and clock/unknown handling. New gameplay uses these typed patterns.
 - `src/bridge.ts`: typed snapshot subscription, explicit legacy panel inventory,
   section visibility and presentation-only manual-command availability.
+  It is the sole writer of disabled/title state on the four manual buttons;
+  legacy submission code publishes `submitting` instead of overriding that guard.
 - `dashboard.html`: existing controllers and panel descendants. It publishes a
   new snapshot reference on `ledger-ui` events. No game credentials are exposed.
   React must not render into a legacy-owned panel, and legacy code must not
   modify React-owned descendants. Its ship selector is moved but retains one
   owner. Scope-keyed local storage remembers selection until logout; selecting
   a ship never grants execution authority.
+
+Navigation uses `#/section` fragments, which must not double as DOM element IDs.
+The adapter hides panels during migration and applies the initial route before
+React commits. Keep the inventory/browser tests when replacing panels; missing
+legacy anchors throw an error naming the missing ID. Inspection previews are
+non-mutating and may remain available when manual mutations are blocked.
+Overview takes the first five commands from the queue report's newest-ID-first
+ordering. The global credit observation age is never a market-quote timestamp.
 
 Add new gameplay as React components, replace legacy panels one at a time, and
 remove the corresponding adapter entry. Keep the current shared command API,

@@ -64,7 +64,10 @@ it does not import a dated snapshot into the operational ledger as new data.
 Navigation: **Overview · Explorer · Fleet · Markets · Contracts · Automation ·
 Reports · Operations**. Operations is an always-reachable operator section, not
 a settings drawer. Use hash links with Back/Forward and a current-page marker.
-Overview is the default. Sections stay mounted across navigation so inspection
+Routes use `#/overview`, `#/explorer`, etc., avoiding collisions with legacy
+element IDs such as `fleet`. Overview is the default. Sections are hidden during
+migration and the selected route is applied before React's first commit.
+Sections stay mounted across navigation so inspection
 choices, contract drafts and reconciliation explanations are retained.
 
 Global: reset/agent scope, credits, fixed floor headroom (explicitly before fuel
@@ -193,6 +196,12 @@ per panel, with existing scenario tests as the exit criterion.
   later actions disclose irreversible effects and exact ship/units/cost; no
   generic “Are you sure?” replacing a real preview. Countdown is an estimate;
   successful arrival/cooldown availability requires authoritative observation.
+  Inspection previews remain available when mutations are blocked: the current
+  `/api/flight-preview` calculates from stored evidence and neither enqueues nor
+  dispatches work. Do not infer mutation permission from preview availability.
+  The bridge is the sole writer of manual-button availability; the legacy
+  controller publishes submission-in-progress state rather than enabling buttons
+  in promise cleanup. Pending journal outcomes also block manual mutations.
 - **Alerts:** inline form errors plus persistent global safety summary/link to
   Operations; no toast-only loss of important errors. Error text is escaped.
   STOP/pause is directly reachable, resume is explicit and authenticated.
@@ -304,7 +313,7 @@ implementation of the shell and migration; it does not authorize wider gameplay.
 
 ## UI contract for subsequent slices
 
-1. **Navigation:** the eight hash sections above; new gameplay belongs in a named
+1. **Navigation:** the eight `#/section` hash routes above; new gameplay belongs in a named
    section. Operations is the permanent journal/doctor/command-recovery surface.
 2. **Ship context:** shared per reset/agent on ship-centric screens, persisted
    across navigation, cleared on logout/invalid scope. Inspect worker-owned ships;

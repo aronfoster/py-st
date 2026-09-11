@@ -7,6 +7,47 @@ including merged flight operations PR #46 and capability snapshot PR #47.
 Read the full FOS-72/FOS-73 descriptions and comments plus FOS-63/FOS-71 scope.
 The Task 02 branch instructions below are historical, not the current base.
 
+### PR #48 review follow-up — 2026-09-11
+
+Integrated Codex's three findings and Claude's applicable boundary/robustness
+feedback, with Grok's notes checked against the implementation:
+
+- Pending mutation-journal outcomes block all four manual mutation controls.
+- Historical scope command certainty is unknown when the managed queue reports
+  another scope; separately scoped journal counts remain visible.
+- Legacy submissions publish `submitting`; the bridge is now the sole writer of
+  manual-button disabled/title state. Repeated 5xx recovery and auxiliary
+  snapshot submissions cannot override an existing ownership block.
+- UTF-8 reads are explicit. Inline asset escaping is restricted to the relevant
+  case-insensitive script/style terminators and script comment opener; valid
+  less-than/regex JavaScript and unrelated closing-tag text are preserved.
+- Ordinary HTTP tests verify embedded assets, nonce substitution, UTF-8 and
+  escaping without opting into browser tests. CI additionally rejects untracked
+  generated assets instead of checking only tracked-file diffs.
+- Routes use `#/section` to avoid legacy element-ID collisions. Migrated panels
+  start hidden; initial route visibility is applied before React commits.
+  Missing legacy anchors/sections report the offending ID.
+- Documented that inspection previews do not enqueue/dispatch mutations and
+  remain available while manual mutations are blocked. Global account freshness
+  is not market-quote age.
+
+No substantive reviewer disagreement. Grok's conditional recency concern needs
+no code change: `FlightQueue.report()` already uses `ORDER BY id DESC`, so the
+first five commands are the newest submissions. This ordering is documented.
+Reviewer-specific test/formatter differences were reported as reproducible on
+master in their environment; they do not replace the local pinned-tool results.
+
+Follow-up verification: **136 passed** in the actual browser-enabled suite;
+**1,616 passed, 19 skipped** in normal offline pytest. Four new opt-in browser
+cases account for the additional skips and passed explicitly. Black, Ruff,
+`mypy .`, frontend typecheck/format and production build passed.
+Test roots: `.cache/nightly/fos-72-review-browser` and
+`.cache/nightly/fos-72-review-full`; same invocation flags as below. The browser
+cases cover both desktop and 390px scope/navigation states, single-writer
+submission guards, unchanged request IDs, recovery after rejection, and
+non-mutating preview availability. No live API calls or authoritative state
+changes were used.
+
 Completed a design checkpoint before UI changes in [UI_UX.md](UI_UX.md):
 gameplay/capability matrix consuming FOS-73's dated evidence and independent
 detail/unknown/truncation semantics, complete surface migration inventory,
@@ -35,7 +76,7 @@ the existing nonce CSP. Host/Origin, authentication, CSRF and worker guards are
 unchanged. No new static-file endpoint or production Node process. CI now checks
 frontend typing/formatting, rebuilds the assets and rejects committed drift.
 
-### Verification
+### Initial implementation verification
 
 - Baseline actual browser-enabled suite before migration: **129 passed**.
 - Final explicit browser suite: **131 passed**. Covers desktop/390px, all retained

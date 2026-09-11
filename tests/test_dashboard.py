@@ -36,6 +36,17 @@ def test_dashboard_shared_data_and_guarded_control(tmp_path: Path) -> None:
             match = re.search('nonce="([a-f0-9]+)"', page.text)
             assert match is not None
             csrf = match.group(1)
+            assert all(
+                marker not in page.text
+                for marker in ("__UI_SCRIPT__", "__UI_STYLE__", "__NONCE__")
+            )
+            assert re.findall('nonce="([a-f0-9]+)"', page.text) == [csrf, csrf]
+            scripts = re.findall(
+                r'<script nonce="[^"]+">(.*?)</script>', page.text, re.DOTALL
+            )
+            assert len(scripts) == 2
+            assert "Mutation certainty" in scripts[1]
+            assert ".ui-nav" in page.text
             data = client.get("/api/report").json()
             denied = client.post(
                 "/api/control", json={"action": "pause", "csrf": csrf}
@@ -63,6 +74,47 @@ def test_dashboard_shared_data_and_guarded_control(tmp_path: Path) -> None:
             )
             assert not resumed.json()["paused"]
             assert not (tmp_path / "STOP").exists()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_dashboard_embeds_only_escaped_raw_text_terminators(
+    tmp_path: Path,
+) -> None:
+    # Arrange: valid JS less-than/regex syntax must not be blanket-escaped.
+    import py_st.services.dashboard as dashboard
+
+    template = Path(dashboard.__file__).with_name("dashboard.html")
+    (tmp_path / "dashboard.html").write_text(
+        template.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    assets = tmp_path / "ui"
+    assets.mkdir()
+    expression = 'const comparison=1</re/.test("é");'
+    (assets / "shell.js").write_text(
+        'const text="</ScRiPt><!--é";' + expression, encoding="utf-8"
+    )
+    (assets / "shell.css").write_text(
+        'p::after { content: "</StYlE></other>é"; }', encoding="utf-8"
+    )
+    with patch.object(dashboard, "__file__", str(tmp_path / "dashboard.py")):
+        server = dashboard_server(tmp_path, 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        # Act: exercise response composition and UTF-8 HTTP encoding.
+        response = httpx.get(f"http://127.0.0.1:{server.server_port}/")
+        # Assert: only HTML raw-text terminators/comment opener are rewritten.
+        assert response.status_code == 200
+        assert expression in response.text
+        assert r"<\/ScRiPt>\x3c!--é" in response.text
+        assert r"<\/StYlE></other>é" in response.text
+        assert "</ScRiPt>" not in response.text
+        assert "</StYlE>" not in response.text
+        assert response.text.count("</script>") == 2
+        assert response.text.count("</style>") == 1
     finally:
         server.shutdown()
         server.server_close()

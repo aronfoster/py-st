@@ -47,7 +47,7 @@ def check_read_only(page: "Page", origin: str) -> None:
             len(prices) + 1
         )
         if prices:
-            page.locator('nav a[href="#markets"]').click()
+            page.locator('nav a[href="#/markets"]').click()
             market = prices[0]
             page.locator("#market-select").select_option(market["key"])
             expect(page.locator("#market-asof")).to_contain_text(

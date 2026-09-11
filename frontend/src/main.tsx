@@ -23,7 +23,7 @@ import {
 import "./style.css";
 
 function currentPage(): Page {
-  const page = location.hash.slice(1);
+  const page = location.hash.startsWith("#/") ? location.hash.slice(2) : "";
   return Object.hasOwn(pages, page) ? (page as Page) : "overview";
 }
 
@@ -61,10 +61,13 @@ function commandBlock(snapshot: Snapshot): string | null {
   if (snapshot.error) return "state update unavailable";
   if (!flight || ledger.scope !== flight.settings.scope)
     return "command authority unknown or historical scope";
+  if (snapshot.submitting) return "submission in progress";
   if (snapshot.pending)
     return "recover prior submission with the same request ID";
   if (flight.commands.some((c) => c.status === "reconciliation_required"))
     return "reconciliation required";
+  if ((ledger.actions || []).some((a) => a.status === "pending"))
+    return "pending mutation journal outcome requires reconciliation";
   if ((ledger.positions || []).some((r) => r.data.status !== "closed"))
     return "automation exposure unresolved";
   if (
@@ -132,7 +135,7 @@ function App() {
           {Object.entries(pages).map(([key, label]) => (
             <a
               key={key}
-              href={`#${key}`}
+              href={`#/${key}`}
               aria-current={page === key ? "page" : undefined}
             >
               {label}
@@ -179,19 +182,16 @@ function App() {
             !!(uncertain.length || pending.length || snapshot.pending)
           }
         >
-          {!ledger.scope || (snapshot.managed && !flight) ? (
-            "Unknown · scope or command report unavailable"
-          ) : (
-            <>
-              {uncertain.length} reconciliation required · {pending.length}{" "}
-              pending journal entries
-              {snapshot.pending ? " · submission outcome unknown" : ""}
-              <br />
-              <a href="#operations">Inspect commands and journal</a>
-              <br />
-              Reported records only; not an all-clear.
-            </>
-          )}
+          {!ledger.scope ||
+          (snapshot.managed && (!flight || ledger.scope !== settings?.scope))
+            ? "Unknown · scope or matching command report unavailable"
+            : `${uncertain.length} reconciliation required`}
+          {ledger.scope && <> · {pending.length} pending journal entries</>}
+          {snapshot.pending ? " · submission outcome unknown" : ""}
+          <br />
+          <a href="#/operations">Inspect commands and journal</a>
+          <br />
+          Reported records only; not an all-clear.
         </Status>
       </div>
       {snapshot.error && (
@@ -204,7 +204,7 @@ function App() {
         <p className="ui-warning">
           {ledger.paused ? "STOP requested. " : "Outcome review needed. "}STOP
           cannot cancel a dispatched request. Inspect queued work and uncertain
-          outcomes in <a href="#operations">Operations</a> before resuming.
+          outcomes in <a href="#/operations">Operations</a> before resuming.
         </p>
       )}
       <h1 id="page-title" tabIndex={-1}>
@@ -254,8 +254,8 @@ function App() {
                   </p>
                 )}
                 <p>
-                  <a href="#contracts">Inspect obligations</a> ·{" "}
-                  <a href="#reports">Review cash and open positions</a>
+                  <a href="#/contracts">Inspect obligations</a> ·{" "}
+                  <a href="#/reports">Review cash and open positions</a>
                 </p>
               </>
             )}
@@ -278,7 +278,7 @@ function App() {
                 activity remains in Reports and Operations.
               </EmptyState>
             )}
-            <a href="#operations">Open command evidence and recovery</a>
+            <a href="#/operations">Open command evidence and recovery</a>
           </Panel>
         </div>
         <Panel title="Fleet check-in">
@@ -314,8 +314,8 @@ function App() {
                 <p className="small">
                   <Freshness stamp={observed_at} now={now} />
                 </p>
-                <a href="#fleet">Inspect fleet</a> ·{" "}
-                <a href="#explorer">Explore and fly</a>
+                <a href="#/fleet">Inspect fleet</a> ·{" "}
+                <a href="#/explorer">Explore and fly</a>
               </EntitySummary>
             ))}
           </div>
@@ -326,4 +326,5 @@ function App() {
 }
 
 migratePanels();
+showPage(currentPage());
 createRoot(document.getElementById("ui-root")!).render(<App />);

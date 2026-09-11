@@ -57,6 +57,7 @@ export interface Snapshot {
   managed: boolean;
   authenticated: boolean;
   pending: boolean;
+  submitting: boolean;
   error: string;
 }
 
@@ -91,6 +92,12 @@ export function subscribe(callback: () => void) {
   return () => document.removeEventListener("ledger-ui", callback);
 }
 
+function legacyElement(id: string): HTMLElement {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`Legacy panel missing: ${id}`);
+  return element;
+}
+
 /** Move each whole legacy panel once; React never owns their descendants. */
 export function migratePanels() {
   const destinations: Record<Exclude<Page, "overview">, string[]> = {
@@ -102,17 +109,17 @@ export function migratePanels() {
     reports: ["chart", "cash"],
     operations: ["command-panel", "doctor-check", "journal"],
   };
-  const host = document.getElementById("legacy-pages")!;
-  document
-    .getElementById("command-panel")!
-    .prepend(document.getElementById("flight-heartbeat")!);
+  const host = legacyElement("legacy-pages");
+  legacyElement("command-panel").prepend(legacyElement("flight-heartbeat"));
   for (const [page, ids] of Object.entries(destinations)) {
     const section = document.createElement("div");
+    section.hidden = true;
     section.dataset.page = page;
     section.id = `page-${page}`;
     for (const id of ids) {
-      const element = document.getElementById(id)!;
-      section.append(element.closest("section")!);
+      const panel = legacyElement(id).closest("section");
+      if (!panel) throw new Error(`Legacy section missing for: ${id}`);
+      section.append(panel);
     }
     host.append(section);
   }
