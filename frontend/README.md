@@ -11,6 +11,12 @@ npm run check
 npm run build
 ```
 
+From the repository root, `make install-hooks` installs both the normal commit
+hooks and a pre-push hook that runs the complete Python quality/test suite plus
+the frontend checks, rebuild, and generated-asset drift check. A failed check
+blocks `git push`; bypassing hooks with Git's `--no-verify` remains an explicit
+operator choice.
+
 `npm run format` formats frontend source. Build runs strict TypeScript and Vite,
 producing `src/py_st/services/ui/shell.js` and `shell.css`. Commit both source and
 generated assets; CI rebuilds and rejects drift. The lockfile pins the dependency

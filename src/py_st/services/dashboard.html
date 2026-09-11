@@ -159,7 +159,7 @@ let explorerSystem='', explorerWaypoint='', explorerShip='';
 let flightManaged=false, flightLoggedIn=false, flightVersion=0, authReady=false;
 let flightReport=null, reportError='', flightError='', flightSubmitting=false;
 window.ledgerUI={snapshot:{}};
-function publishUI(){window.ledgerUI.snapshot={ledger,flight:flightReport,selectedShip:explorerShip,managed:flightManaged,authenticated:flightLoggedIn,pending:!!localStorage.getItem('flight-pending'),submitting:flightSubmitting,error:[reportError,flightError].filter(Boolean).join('; ')};document.dispatchEvent(new Event('ledger-ui'));}
+function publishUI(){window.ledgerUI={snapshot:{ledger,flight:flightReport,selectedShip:explorerShip,managed:flightManaged,authenticated:flightLoggedIn,pending:!!localStorage.getItem('flight-pending'),submitting:flightSubmitting,error:[reportError,flightError].filter(Boolean).join('; ')},previewTrade:body=>flightPost('/api/trade-preview',body),submitCommand:payload=>submitFlight(payload,true)};document.dispatchEvent(new Event('ledger-ui'));}
 publishUI();
 function flightSelection(){
  $('flight-selection').textContent=`Ship: ${explorerShip||'select below'} / Destination: ${explorerWaypoint||'select below'} / System: ${explorerSystem||'unknown'}`;
@@ -198,16 +198,16 @@ async function loadFlight(){
   if(editing){const input=[...$('flight-commands').querySelectorAll('textarea')].find(input=>input.dataset.commandId===editing.id);if(input){input.focus({preventScroll:true});input.setSelectionRange(editing.start,editing.end);}}
   }catch(e){if(version===flightVersion){$('flight-message').textContent=e.message;flightError=e.message;publishUI();}}
 }
-async function sendFlight(envelope){
- if(flightSubmitting)return;
+async function sendFlight(envelope,propagate=false){
+ if(flightSubmitting){if(propagate)throw Error('Submission already in progress.');return null;}
  flightSubmitting=true;publishUI();
- try{const command=await flightPost('/api/flight',envelope);localStorage.removeItem('flight-pending');$('flight-retry').hidden=true;$('flight-message').textContent=`Command #${command.id}: ${command.status}`;await loadFlight();}
- catch(e){if(e.status>=400&&e.status<500){localStorage.removeItem('flight-pending');$('flight-retry').hidden=true;$('flight-message').textContent=e.message+'; submission rejected.';}else{$('flight-message').textContent=e.message+'; submission retained with its original request ID.';$('flight-retry').hidden=false;}}
+ try{const command=await flightPost('/api/flight',envelope);localStorage.removeItem('flight-pending');$('flight-retry').hidden=true;$('flight-message').textContent=`Command #${command.id}: ${command.status}`;await loadFlight();return command;}
+ catch(e){if(e.status>=400&&e.status<500){localStorage.removeItem('flight-pending');$('flight-retry').hidden=true;$('flight-message').textContent=e.message+'; submission rejected.';}else{$('flight-message').textContent=e.message+'; submission retained with its original request ID.';$('flight-retry').hidden=false;}if(propagate)throw e;return null;}
   finally{flightSubmitting=false;publishUI();}
 }
-async function submitFlight(payload){
- if(localStorage.getItem('flight-pending')){$('flight-message').textContent='Recover the previous submission first; its outcome may be unknown.';$('flight-retry').hidden=false;return;}
- const envelope={scope:$('scope').value,request_id:crypto.randomUUID(),payload};localStorage.setItem('flight-pending',JSON.stringify(envelope));await sendFlight(envelope);
+async function submitFlight(payload,propagate=false){
+ if(localStorage.getItem('flight-pending')){$('flight-message').textContent='Recover the previous submission first; its outcome may be unknown.';$('flight-retry').hidden=false;if(propagate)throw Error('Recover the previous submission first; its outcome may be unknown.');return null;}
+ const envelope={scope:$('scope').value,request_id:crypto.randomUUID(),payload};localStorage.setItem('flight-pending',JSON.stringify(envelope));return sendFlight(envelope,propagate);
 }
 function shipCommand(kind){if(!explorerShip){$('flight-message').textContent='Select an owned ship first.';return;}submitFlight({kind,ship:explorerShip});}
 const observation=row=>row?`${row.observed_at||'timestamp missing'} / ${row.source||'source missing'}`:'not observed';

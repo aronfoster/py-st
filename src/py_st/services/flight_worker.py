@@ -21,6 +21,147 @@ from py_st.services.stop_control import request_stop, stop_requested
 from py_st.services.strategies import CREDIT_FLOOR, FUEL_ALLOWANCE, refuel_run
 
 
+def trade_preview(
+    store: Intelligence,
+    scope: str,
+    symbol: str,
+    good: str,
+    units: int,
+    kind: str,
+) -> dict[str, Any]:
+    """Build a dated, non-authoritative trade estimate from stored evidence."""
+    if kind not in ("purchase", "sell") or units <= 0:
+        raise ValueError("Invalid trade preview")
+    ships = [
+        row for row in store.latest(scope, "ship") if row["key"] == symbol
+    ]
+    agents = store.latest(scope, "agent")
+    if len(ships) != 1 or not agents:
+        raise ValueError("Owned ship or credit observation is unavailable")
+    ship_row, agent_row = ships[0], agents[-1]
+    ship = ship_row["data"]
+    waypoint = ship["nav"]["waypointSymbol"]
+    markets = [
+        r for r in store.latest(scope, "market") if r["key"] == waypoint
+    ]
+    quote = None
+    market_row = markets[0] if markets else None
+    if market_row:
+        matches = [
+            item
+            for item in market_row["data"].get("tradeGoods", [])
+            if item.get("symbol") == good
+        ]
+        if len(matches) == 1:
+            quote = matches[0]
+    price_key = "purchasePrice" if kind == "purchase" else "sellPrice"
+    price = quote.get(price_key) if quote else None
+    volume = quote.get("tradeVolume") if quote else None
+    inventory = {
+        item["symbol"]: item["units"]
+        for item in ship["cargo"].get("inventory", [])
+    }
+    protected: dict[str, int] = {}
+    open_contracts = False
+    unknown_contracts = False
+    for row in store.latest(scope, "contract"):
+        contract = row["data"]
+        if (
+            contract.get("fulfilled") is not True
+            and contract.get("accepted") is not False
+        ):
+            open_contracts = True
+            if contract.get("accepted") is not True:
+                unknown_contracts = True
+        if (
+            contract.get("accepted") is True
+            and contract.get("fulfilled") is not True
+        ):
+            for item in contract.get("terms", {}).get("deliver", []):
+                remaining = max(
+                    0, item["unitsRequired"] - item["unitsFulfilled"]
+                )
+                protected[item["tradeSymbol"]] = max(
+                    protected.get(item["tradeSymbol"], 0), remaining
+                )
+    credits = agent_row["data"]["credits"]
+    total = price * units if type(price) is int and price > 0 else None
+    free = ship["cargo"]["capacity"] - ship["cargo"]["units"]
+    sellable = max(0, inventory.get(good, 0) - protected.get(good, 0))
+    age = None
+    if market_row:
+        age = (
+            datetime.now(UTC)
+            - datetime.fromisoformat(market_row["observed_at"])
+        ).total_seconds()
+    feasible = bool(
+        total is not None
+        and type(volume) is int
+        and volume > 0
+        and units <= volume
+        and age is not None
+        and age <= 900
+        and ship["nav"]["status"] == "DOCKED"
+        and (
+            (
+                kind == "purchase"
+                and not open_contracts
+                and units <= free
+                and credits - total >= CREDIT_FLOOR + FUEL_ALLOWANCE
+            )
+            or (kind == "sell" and not unknown_contracts and units <= sellable)
+        )
+    )
+    return {
+        "kind": kind,
+        "ship": symbol,
+        "good": good,
+        "units": units,
+        "waypoint": waypoint,
+        "unit_price": price,
+        "total_price": total,
+        "trade_volume": volume,
+        "credits_before": credits,
+        "credits_after": (
+            credits - total
+            if kind == "purchase" and total is not None
+            else credits + total if total is not None else None
+        ),
+        "cargo_before": ship["cargo"]["units"],
+        "cargo_after": ship["cargo"]["units"]
+        + (units if kind == "purchase" else -units),
+        "cargo_capacity": ship["cargo"]["capacity"],
+        "fixed_floor": CREDIT_FLOOR,
+        "fuel_reserve": FUEL_ALLOWANCE,
+        "fixed_floor_headroom": credits - CREDIT_FLOOR,
+        "protected_contract_cargo": protected,
+        "open_contract_obligations": open_contracts,
+        "contract_state_unknown": unknown_contracts,
+        "sellable_units": sellable,
+        "observed_at": market_row["observed_at"] if market_row else None,
+        "stale": age is None or age > 900,
+        "estimated": True,
+        "feasible": feasible,
+        "reason": (
+            "Purchases are blocked until active contract obligations are "
+            "costed"
+            if kind == "purchase" and open_contracts
+            else (
+                "Contract acceptance is unknown; trade is blocked"
+                if unknown_contracts
+                else (
+                    "Stored estimate; worker requires an unchanged live "
+                    "quote, "
+                    "ship, credits, cargo and obligations before dispatch"
+                    if price is not None
+                    else "No observed current price detail; unknown is not "
+                    "zero"
+                )
+            )
+        ),
+    }
+
+
 def preview(
     store: Intelligence, scope: str, symbol: str, destination: str
 ) -> dict[str, Any]:
@@ -142,6 +283,27 @@ def validate_receipt(path: str, result: dict[str, Any]) -> None:
             or transaction["totalPrice"] < 0
         ):
             raise SafetyStop("Invalid refuel receipt; reconcile outcome")
+    if kind in ("purchase", "sell"):
+        agent = result.get("agent")
+        cargo = result.get("cargo")
+        transaction = result.get("transaction")
+        if (
+            not isinstance(agent, dict)
+            or type(agent.get("credits")) is not int
+            or agent["credits"] < 0
+            or not isinstance(cargo, dict)
+            or any(
+                type(cargo.get(key)) is not int
+                for key in ("units", "capacity")
+            )
+            or not 0 <= cargo["units"] <= cargo["capacity"]
+            or not isinstance(transaction, dict)
+            or type(transaction.get("totalPrice")) is not int
+            or transaction["totalPrice"] < 0
+            or type(transaction.get("units")) is not int
+            or transaction["units"] <= 0
+        ):
+            raise SafetyStop("Invalid trade receipt; reconcile outcome")
 
 
 class FlightWorker:
@@ -477,8 +639,9 @@ class FlightWorker:
             for p in self.store.latest(self.queue.scope, "position")
         ):
             raise SafetyStop("Recover existing automation exposure first")
-        # Unknown obligations cannot be assigned a speculative zero reserve.
-        if any(
+        # Flight/refuel cannot yet cost active obligations. Trades protect
+        # contract cargo; purchases retain the additional fuel reserve.
+        if step != "sell" and any(
             c.get("accepted") is not False and c.get("fulfilled") is not True
             for c in state["contracts"]
         ):
@@ -486,6 +649,64 @@ class FlightWorker:
                 "Active contracts need a costed obligation reserve"
             )
         nav = ship["nav"]
+        if step in ("purchase", "sell"):
+            if (
+                nav["status"] != "DOCKED"
+                or nav["waypointSymbol"] != payload["waypoint"]
+            ):
+                raise SafetyStop(
+                    "Trade ship must remain docked at the quoted market"
+                )
+            estimate = trade_preview(
+                self.store,
+                self.queue.scope,
+                symbol,
+                payload["good"],
+                payload["units"],
+                step,
+            )
+            if estimate["observed_at"] != payload["observed_at"]:
+                raise SafetyStop(
+                    "Trade preview evidence changed; preview again"
+                )
+            market = self.run.market(nav["waypointSymbol"])
+            quotes = [
+                g
+                for g in market.get("tradeGoods", [])
+                if g.get("symbol") == payload["good"]
+            ]
+            key = "purchasePrice" if step == "purchase" else "sellPrice"
+            if (
+                len(quotes) != 1
+                or quotes[0].get(key) != payload["quote"]
+                or type(quotes[0].get("tradeVolume")) is not int
+                or quotes[0]["tradeVolume"] < payload["units"]
+            ):
+                raise SafetyStop(
+                    "Market price or volume changed; refresh and preview again"
+                )
+            latest = self.fresh(symbol)
+            latest_ship = next(
+                s for s in latest["ships"] if s["symbol"] == symbol
+            )
+            if (
+                latest_ship != ship
+                or latest["agent"]["credits"] != state["agent"]["credits"]
+                or not estimate["feasible"]
+            ):
+                raise SafetyStop(
+                    "Trade preconditions changed or reserves/cargo are "
+                    "insufficient"
+                )
+            result = self.mutate(
+                command,
+                f"/my/ships/{symbol}/{step}",
+                {"symbol": payload["good"], "units": payload["units"]},
+            )
+            self.run.ship(symbol)
+            self.fresh(symbol)
+            self.advance(command, {"receipt": result, "preview": estimate})
+            return
         if step == "arrival":
             if nav["waypointSymbol"] != payload["destination"]:
                 raise SafetyStop("Ship destination changed during trip")

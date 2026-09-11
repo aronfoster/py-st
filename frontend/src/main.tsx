@@ -11,6 +11,7 @@ import {
   subscribe,
   type Page,
   type Snapshot,
+  type TradePreview,
 } from "./bridge";
 import {
   elapsed,
@@ -44,17 +45,215 @@ const descriptions: Record<Page, string> = {
 const deferred: Partial<Record<Page, string>> = {
   fleet:
     "Purchase, outfitting and maintenance controls: later FOS-63 fleet slice. Recorded shipyard detail remains in Explorer.",
-  markets:
-    "Buy, sell and transfer controls: FOS-71 Task 03 (browser trading). Inspection below is real; quotes are not executable promises.",
   contracts:
     "Accept, deliver and fulfill controls: FOS-71 browser contracts slice. The existing cost model is offline only.",
   automation:
     "Goal scheduling and manual takeover: FOS-71 persistent pilot slice. Pause requests STOP; it does not transfer ownership.",
 };
+
+function Trading({ snapshot, now }: { snapshot: Snapshot; now: number }) {
+  const markets = snapshot.ledger.markets || [];
+  const ship = (snapshot.ledger.ships || []).find(
+    (row) => row.key === snapshot.selectedShip,
+  );
+  const local = markets.find(
+    (row) => row.key === ship?.data.nav.waypointSymbol,
+  );
+  const goods = local?.data.tradeGoods || [];
+  const [kind, setKind] = useState<"purchase" | "sell">("purchase");
+  const [good, setGood] = useState("");
+  const [units, setUnits] = useState(1);
+  const [preview, setPreview] = useState<TradePreview | null>(null);
+  const [message, setMessage] = useState("");
+  const block =
+    commandBlock(snapshot, kind === "sell") ||
+    (snapshot.ledger.paused || snapshot.flight?.settings.paused
+      ? "STOP requested"
+      : null);
+  useEffect(() => {
+    setPreview(null);
+    setGood("");
+  }, [snapshot.selectedShip, local?.observed_at]);
+  const inspect = async () => {
+    setMessage("");
+    try {
+      setPreview(
+        await window.ledgerUI.previewTrade({
+          scope: snapshot.ledger.scope,
+          ship: snapshot.selectedShip,
+          good,
+          units,
+          kind,
+        }),
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Preview failed");
+    }
+  };
+  const submit = async () => {
+    if (!preview || preview.unit_price === null || !preview.observed_at)
+      return;
+    setMessage("Submitting durable command…");
+    try {
+      const command = await window.ledgerUI.submitCommand({
+        kind: preview.kind,
+        ship: preview.ship,
+        good: preview.good,
+        units: preview.units,
+        waypoint: preview.waypoint,
+        quote: preview.unit_price,
+        observed_at: preview.observed_at,
+      });
+      setMessage(
+        `Command #${command.id} ${command.status}. Track it in Operations.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Submission was not confirmed",
+      );
+    }
+  };
+  return (
+    <Panel title="Trade through durable command authority">
+      <p>
+        Known goods are advertisements. Only dated detailed observations below
+        contain prices; stale or missing detail is never treated as current or
+        zero.
+      </p>
+      <p className="small">
+        {ship
+          ? `${ship.key} · ${ship.data.nav.waypointSymbol} · ${ship.data.nav.status} · cargo ${ship.data.cargo.units}/${ship.data.cargo.capacity}`
+          : "Select an owned ship."}
+      </p>
+      {!local ? (
+        <EmptyState>
+          No market observation at this ship. Inspect movement in{" "}
+          <a href="#/explorer">Explorer</a>.
+        </EmptyState>
+      ) : (
+        <>
+          <p className="small">
+            Local market observed{" "}
+            <Freshness stamp={local.observed_at} now={now} />
+          </p>
+          {!goods.length ? (
+            <EmptyState>
+              Known goods:{" "}
+              {[
+                ...local.data.exports,
+                ...local.data.imports,
+                ...local.data.exchange,
+              ]
+                .map((g) => g.symbol)
+                .join(", ") || "none"}
+              . Current price detail is unknown.
+            </EmptyState>
+          ) : (
+            <div className="trade-form">
+              <label>
+                Action{" "}
+                <select
+                  value={kind}
+                  onChange={(e) => {
+                    setKind(e.target.value as "purchase" | "sell");
+                    setPreview(null);
+                  }}
+                >
+                  <option value="purchase">Purchase</option>
+                  <option value="sell">Sell</option>
+                </select>
+              </label>
+              <label>
+                Commodity{" "}
+                <select
+                  value={good}
+                  onChange={(e) => {
+                    setGood(e.target.value);
+                    setPreview(null);
+                  }}
+                >
+                  <option value="">Choose good</option>
+                  {goods.map((g) => (
+                    <option key={g.symbol}>{g.symbol}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Quantity{" "}
+                <input
+                  type="number"
+                  min="1"
+                  value={units}
+                  onChange={(e) => {
+                    setUnits(Number(e.target.value));
+                    setPreview(null);
+                  }}
+                />
+              </label>
+              <button disabled={!good || units < 1} onClick={inspect}>
+                Preview against stored evidence
+              </button>
+            </div>
+          )}
+        </>
+      )}
+      {preview && (
+        <div
+          className={
+            preview.feasible ? "trade-preview" : "trade-preview attention"
+          }
+        >
+          <strong>
+            {preview.feasible ? "Guarded estimate" : "Not currently feasible"}
+          </strong>
+          <p>
+            {preview.units} {preview.good} × {preview.unit_price ?? "unknown"}{" "}
+            = {preview.total_price ?? "unknown"} credits. Cargo{" "}
+            {preview.cargo_before} → {preview.cargo_after}/
+            {preview.cargo_capacity}; credits {preview.credits_before} →{" "}
+            {preview.credits_after ?? "unknown"}.
+          </p>
+          <p>
+            Fixed floor {preview.fixed_floor}; fixed-floor headroom{" "}
+            {preview.fixed_floor_headroom} must still cover the known fuel
+            reserve of {preview.fuel_reserve} and contract obligations.
+            Protected contract cargo:{" "}
+            {JSON.stringify(preview.protected_contract_cargo)}. Sellable
+            selected cargo: {preview.sellable_units}.
+          </p>
+          <p className="small">
+            {preview.reason} · quote{" "}
+            {preview.stale ? "STALE" : "recent stored, not live"} ·{" "}
+            {preview.observed_at || "unknown timestamp"}
+          </p>
+          <button
+            disabled={!preview.feasible || block !== null}
+            title={block || "Submit to guarded worker"}
+            onClick={submit}
+          >
+            Submit guarded {preview.kind}
+          </button>
+          {block && <p className="small">Inspection only · {block}</p>}
+        </div>
+      )}
+      <p role="status">{message}</p>
+      <p className="small">
+        Cargo transfer remains the next bounded extension; it is not exposed
+        until its live revalidation and ambiguous-outcome evidence use this
+        authority.
+      </p>
+    </Panel>
+  );
+}
 const active = (status: string) =>
   !["completed", "blocked", "cancelled"].includes(status);
 
-function commandBlock(snapshot: Snapshot): string | null {
+function commandBlock(
+  snapshot: Snapshot,
+  allowProtectedSale = false,
+): string | null {
   const { ledger, flight, selectedShip } = snapshot;
   if (!snapshot.managed) return "unmanaged ledger";
   if (!snapshot.authenticated) return "owner login required";
@@ -71,6 +270,7 @@ function commandBlock(snapshot: Snapshot): string | null {
   if ((ledger.positions || []).some((r) => r.data.status !== "closed"))
     return "automation exposure unresolved";
   if (
+    !allowProtectedSale &&
     (ledger.contracts || []).some((r) => r.data.accepted && !r.data.fulfilled)
   )
     return "active contract obligations uncosted";
@@ -212,6 +412,7 @@ function App() {
       </h1>
       <p className="ui-intent">{descriptions[page]}</p>
       {deferred[page] && <p className="ui-deferred">{deferred[page]}</p>}
+      {page === "markets" && <Trading snapshot={snapshot} now={now} />}
       {shipPages.includes(page) &&
         createPortal(
           <>

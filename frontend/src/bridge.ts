@@ -16,7 +16,11 @@ export interface Ship {
     };
   };
   fuel: { current: number; capacity: number };
-  cargo: { units: number; capacity: number };
+  cargo: {
+    units: number;
+    capacity: number;
+    inventory?: { symbol: string; units: number }[];
+  };
   cooldown: { remainingSeconds: number };
 }
 
@@ -42,6 +46,18 @@ export interface Snapshot {
       path: string;
       started_at: string;
     }[];
+    markets?: Observation<{
+      symbol: string;
+      exports: { symbol: string }[];
+      imports: { symbol: string }[];
+      exchange: { symbol: string }[];
+      tradeGoods?: {
+        symbol: string;
+        purchasePrice?: number;
+        sellPrice?: number;
+        tradeVolume?: number;
+      }[];
+    }>[];
   };
   flight: {
     settings: {
@@ -63,8 +79,40 @@ export interface Snapshot {
 
 declare global {
   interface Window {
-    ledgerUI: { snapshot: Snapshot };
+    ledgerUI: {
+      snapshot: Snapshot;
+      previewTrade: (body: object) => Promise<TradePreview>;
+      submitCommand: (payload: object) => Promise<Command>;
+    };
   }
+}
+
+export interface TradePreview {
+  kind: "purchase" | "sell";
+  ship: string;
+  good: string;
+  units: number;
+  waypoint: string;
+  unit_price: number | null;
+  total_price: number | null;
+  trade_volume: number | null;
+  credits_before: number;
+  credits_after: number | null;
+  cargo_before: number;
+  cargo_after: number;
+  cargo_capacity: number;
+  fixed_floor: number;
+  fuel_reserve: number;
+  fixed_floor_headroom: number;
+  protected_contract_cargo: Record<string, number>;
+  open_contract_obligations: boolean;
+  contract_state_unknown: boolean;
+  sellable_units: number;
+  observed_at: string | null;
+  stale: boolean;
+  estimated: boolean;
+  feasible: boolean;
+  reason: string;
 }
 
 export const pages = {

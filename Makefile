@@ -1,6 +1,6 @@
 ## Makefile for py-st project
 
-.PHONY: all lint type test ci fetch-spec regen-spec clean-spec build-model-aliases help prepare-tools clear-cache
+.PHONY: all lint type test ci install-hooks fetch-spec regen-spec clean-spec build-model-aliases help prepare-tools clear-cache
 .DEFAULT_GOAL := help
 
 # ==============================================================================
@@ -27,6 +27,10 @@ test: ## Run tests
 	PYTHONPATH=src python3 -m pytest -q
 
 ci: check type test ## Run non-mutating checks for continuous integration
+
+install-hooks: ## Install commit formatting and mandatory pre-push CI hooks
+	pre-commit install --install-hooks
+	pre-commit install --hook-type pre-push
 
 # ==============================================================================
 # API Spec & Model Generation

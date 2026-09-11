@@ -1,4 +1,35 @@
-# Current Handoff — FOS-72 browser foundation
+# Current Handoff — browser trading
+
+## Browser trading delivery — 2026-09-11
+
+Markets now provides a React-owned purchase/sale preview and submission flow.
+It uses the persistent ship selection and the existing authenticated command
+endpoint, request IDs, SQLite queue, single worker, mutation journal, STOP and
+reconciliation behavior. The worker refreshes ownership, ship, credits,
+contracts and the local market immediately before dispatch; a changed stored
+preview timestamp, price, volume, cargo, location, nav state, credit balance or
+reserve check blocks rather than forcing execution. Trade receipts refresh the
+authoritative agent and ship observations and remain visible in Operations and
+the existing cash/journal reports.
+
+The offline demo has dated IRON_ORE and FUEL detail and implements purchase and
+sale through the same transport/service paths. Start a fresh demo as described
+in `docs/FLIGHT_OPERATIONS.md`, open Markets, select `SYNTHETIC-1`, preview a
+quantity, submit it, run the worker, and inspect Operations/Fleet/Reports.
+Known advertisements without `tradeGoods` remain explicitly unpriced. The
+preview distinguishes the fixed 50,000-credit floor from the additional known
+fuel reserve and protected accepted-contract cargo. Purchases remain blocked
+while accepted obligations are open because this slice cannot assign their
+procurement reserve a trustworthy value; sales may proceed only above protected
+delivery inventory, and unknown contract acceptance blocks either trade. Cargo
+transfer is the next
+bounded extension: the API client supports it, but this delivery deliberately
+does not expose it before equivalent cross-ship revalidation and ambiguity
+evidence are added to the authority.
+
+Verification commands for this delivery are recorded in the PR. No live API
+calls, deployment, contract mutation, autonomous trading or other later slice
+was performed.
 
 ## Current delivery — 2026-09-11
 

@@ -64,6 +64,29 @@ def create_demo(root: Path) -> None:
         "loss_next": False,
         "mutations": [],
         "transit_seconds": 3,
+        "markets": {
+            point["symbol"]: {
+                "symbol": point["symbol"],
+                "exports": [{"symbol": "FUEL"}, {"symbol": "IRON_ORE"}],
+                "imports": [{"symbol": "IRON_ORE"}],
+                "exchange": [],
+                "tradeGoods": [
+                    {
+                        "symbol": "FUEL",
+                        "purchasePrice": 72,
+                        "sellPrice": 69,
+                        "tradeVolume": 100,
+                    },
+                    {
+                        "symbol": "IRON_ORE",
+                        "purchasePrice": 100,
+                        "sellPrice": 130,
+                        "tradeVolume": 20,
+                    },
+                ],
+            }
+            for point in points
+        },
     }
     db = sqlite3.connect(state / "remote.sqlite3")
     try:
@@ -82,6 +105,7 @@ def create_demo(root: Path) -> None:
             ("agent", [world["agent"]], "symbol"),
             ("ship", world["ships"], "symbol"),
             ("waypoint", points, "symbol"),
+            ("market", list(world["markets"].values()), "symbol"),
         ):
             for item in items:
                 store.observe(SCOPE, kind, item[key], item, "synthetic-demo")
@@ -195,22 +219,7 @@ def dispatch(world: dict[str, Any], request: httpx.Request) -> httpx.Response:
         if path == "/systems/X-DEMO/waypoints":
             return ok(world["waypoints"])
         if path.endswith("/market"):
-            return ok(
-                {
-                    "symbol": path.split("/")[-2],
-                    "exports": [{"symbol": "FUEL"}],
-                    "imports": [],
-                    "exchange": [],
-                    "tradeGoods": [
-                        {
-                            "symbol": "FUEL",
-                            "purchasePrice": 72,
-                            "sellPrice": 69,
-                            "tradeVolume": 100,
-                        }
-                    ],
-                }
-            )
+            return ok(world["markets"][path.split("/")[-2]])
         if "/waypoints/" in path:
             return ok(
                 next(
@@ -290,6 +299,78 @@ def dispatch(world: dict[str, Any], request: httpx.Request) -> httpx.Response:
                         "pricePerUnit": 72,
                         "tradeSymbol": "FUEL",
                         "type": "PURCHASE",
+                        "shipSymbol": symbol,
+                        "waypointSymbol": nav["waypointSymbol"],
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                }
+            )
+        if kind in ("purchase", "sell") and nav["status"] == "DOCKED":
+            body = json.loads(request.content)
+            quote = next(
+                (
+                    g
+                    for g in world["markets"][nav["waypointSymbol"]][
+                        "tradeGoods"
+                    ]
+                    if g["symbol"] == body.get("symbol")
+                ),
+                None,
+            )
+            units = body.get("units")
+            if (
+                quote is None
+                or type(units) is not int
+                or units <= 0
+                or units > quote["tradeVolume"]
+            ):
+                return httpx.Response(
+                    400, json={"error": {"message": "Invalid trade"}}
+                )
+            inventory = ship["cargo"]["inventory"]
+            item = next(
+                (i for i in inventory if i["symbol"] == body["symbol"]), None
+            )
+            price = quote[
+                "purchasePrice" if kind == "purchase" else "sellPrice"
+            ]
+            total = price * units
+            if kind == "purchase":
+                if (
+                    ship["cargo"]["units"] + units > ship["cargo"]["capacity"]
+                    or world["agent"]["credits"] < total
+                ):
+                    return httpx.Response(
+                        400, json={"error": {"message": "Capacity/funds"}}
+                    )
+                world["agent"]["credits"] -= total
+                if item:
+                    item["units"] += units
+                else:
+                    inventory.append(
+                        {"symbol": body["symbol"], "units": units}
+                    )
+                ship["cargo"]["units"] += units
+            else:
+                if item is None or item["units"] < units:
+                    return httpx.Response(
+                        400, json={"error": {"message": "Cargo"}}
+                    )
+                world["agent"]["credits"] += total
+                item["units"] -= units
+                ship["cargo"]["units"] -= units
+                if item["units"] == 0:
+                    inventory.remove(item)
+            return ok(
+                {
+                    "agent": world["agent"],
+                    "cargo": ship["cargo"],
+                    "transaction": {
+                        "totalPrice": total,
+                        "units": units,
+                        "pricePerUnit": price,
+                        "tradeSymbol": body["symbol"],
+                        "type": kind.upper(),
                         "shipSymbol": symbol,
                         "waypointSymbol": nav["waypointSymbol"],
                         "timestamp": datetime.now(UTC).isoformat(),
