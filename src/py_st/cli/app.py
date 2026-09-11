@@ -3,6 +3,7 @@ from __future__ import annotations
 import typer
 
 from . import agent_cmd, auto_cmd, contracts_cmd, ships_cmd, systems_cmd
+from .capabilities_cmd import snapshot
 from .flight_cmd import flight_app
 
 app = typer.Typer(help="SpaceTraders CLI for py-st")
@@ -12,6 +13,7 @@ app.add_typer(systems_cmd.systems_app, name="systems")
 app.add_typer(agent_cmd.agent_app, name="agent")
 app.add_typer(auto_cmd.auto_app, name="auto")
 app.add_typer(flight_app, name="flight")
+app.command("capability-snapshot")(snapshot)
 
 
 @app.callback()
