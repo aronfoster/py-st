@@ -8,12 +8,16 @@ automation (FOS-63). FOS-71 tracks bounded end-to-end implementation tasks.
 1. Stored-data system explorer: merged in PR #45.
 2. Browser flight operations: select, preview, navigate, confirm arrival, dock,
    refuel; durable worker, local authentication and stateful offline proof.
-3. Browser trading, then contracts, then persistent pilot controls.
-4. Fleet purchase/outfitting, maintenance, industrial coordination, supply chains,
+3. FOS-73 read-only capability snapshot: merged in PR #47.
+4. FOS-72 browser UI/UX foundation: design checkpoint and shell migration.
+5. Browser trading, then contracts, then persistent pilot controls, using the
+   [UI contract](docs/UI_UX.md#ui-contract-for-subsequent-slices).
+6. Fleet purchase/outfitting, maintenance, industrial coordination, supply chains,
    reconnaissance, seasons, multi-system progression and authenticated GCP hosting.
 
-Task 02 is being implemented locally. Complete its acceptance criteria before
-expanding scope. The sections below retain earlier backlog and dated evidence.
+Task 02 is merged in PR #46. FOS-72 establishes the browser foundation before
+Task 03 trading is dispatched. The sections below retain earlier backlog and
+dated evidence.
 
 ---
 

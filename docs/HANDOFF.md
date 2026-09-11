@@ -1,4 +1,157 @@
-# Current Handoff — FOS-71 Task 02
+# Current Handoff — FOS-72 browser foundation
+
+## Current delivery — 2026-09-11
+
+Started from clean, freshly fetched `master` at `a28f76d` (equal to remote),
+including merged flight operations PR #46 and capability snapshot PR #47.
+Read the full FOS-72/FOS-73 descriptions and comments plus FOS-63/FOS-71 scope.
+The Task 02 branch instructions below are historical, not the current base.
+
+### PR #48 review follow-up — 2026-09-11
+
+Integrated Codex's three findings and Claude's applicable boundary/robustness
+feedback, with Grok's notes checked against the implementation:
+
+- Pending mutation-journal outcomes block all four manual mutation controls.
+- Historical scope command certainty is unknown when the managed queue reports
+  another scope; separately scoped journal counts remain visible.
+- Legacy submissions publish `submitting`; the bridge is now the sole writer of
+  manual-button disabled/title state. Repeated 5xx recovery and auxiliary
+  snapshot submissions cannot override an existing ownership block.
+- UTF-8 reads are explicit. Inline asset escaping is restricted to the relevant
+  case-insensitive script/style terminators and script comment opener; valid
+  less-than/regex JavaScript and unrelated closing-tag text are preserved.
+- Ordinary HTTP tests verify embedded assets, nonce substitution, UTF-8 and
+  escaping without opting into browser tests. CI additionally rejects untracked
+  generated assets instead of checking only tracked-file diffs.
+- Routes use `#/section` to avoid legacy element-ID collisions. Migrated panels
+  start hidden; initial route visibility is applied before React commits.
+  Missing legacy anchors/sections report the offending ID.
+- Documented that inspection previews do not enqueue/dispatch mutations and
+  remain available while manual mutations are blocked. Global account freshness
+  is not market-quote age.
+
+No substantive reviewer disagreement. Grok's conditional recency concern needs
+no code change: `FlightQueue.report()` already uses `ORDER BY id DESC`, so the
+first five commands are the newest submissions. This ordering is documented.
+Reviewer-specific test/formatter differences were reported as reproducible on
+master in their environment; they do not replace the local pinned-tool results.
+
+Follow-up verification: **136 passed** in the actual browser-enabled suite;
+**1,616 passed, 19 skipped** in normal offline pytest. Four new opt-in browser
+cases account for the additional skips and passed explicitly. Black, Ruff,
+`mypy .`, frontend typecheck/format and production build passed.
+Test roots: `.cache/nightly/fos-72-review-browser` and
+`.cache/nightly/fos-72-review-full`; same invocation flags as below. The browser
+cases cover both desktop and 390px scope/navigation states, single-writer
+submission guards, unchanged request IDs, recovery after rejection, and
+non-mutating preview availability. No live API calls or authoritative state
+changes were used.
+
+Completed a design checkpoint before UI changes in [UI_UX.md](UI_UX.md):
+gameplay/capability matrix consuming FOS-73's dated evidence and independent
+detail/unknown/truncation semantics, complete surface migration inventory,
+frontend architecture comparison/decision, diffable wireframes, scenario
+walkthroughs and the **UI contract for subsequent slices**.
+
+Implemented a React/TypeScript/Vite shell with Overview, Explorer, Fleet,
+Markets, Contracts, Automation, Reports and Operations. New typed primitives
+cover panels, entities, status, freshness and empty states. Overview shows
+recent work, fleet check-ins and obligations; the three global state dimensions
+remain separate, with heartbeat age advancing even when ledger updates fail.
+Ship selection persists by reset/agent across views/reopening and clears on
+logout; worker-owned/unresolved ships remain inspectable with manual controls
+disabled and reasons shown. The worker remains the sole authority.
+
+All existing panels are retained in their inventoried sections. Operations has
+real durable commands, outcome review, mutation journal and doctor diagnostics.
+The explicit adapter moves legacy panel roots without giving React ownership of
+their descendants; navigation and polling preserve drafts. Existing command
+submission/deduplication/reconciliation and backend safety semantics remain.
+Future gameplay notices identify the owning slice rather than fake controls.
+
+Frontend instructions are in [frontend/README.md](../frontend/README.md). Node 22
+is a development/CI dependency only; generated assets ship inside Python and use
+the existing nonce CSP. Host/Origin, authentication, CSRF and worker guards are
+unchanged. No new static-file endpoint or production Node process. CI now checks
+frontend typing/formatting, rebuilds the assets and rejects committed drift.
+
+### Initial implementation verification
+
+- Baseline actual browser-enabled suite before migration: **129 passed**.
+- Final explicit browser suite: **131 passed**. Covers desktop/390px, all retained
+  panel locations, Back navigation, selection persistence, worker-owned
+  inspection, STOP + reconciliation, draft preservation, stale heartbeat with
+  recent observations, polling failure, logout cleanup and CSP console errors.
+  Existing full synthetic flight/closure/reopen economics remain covered.
+- Full normal offline suite: **1,615 passed, 15 skipped**. The two additional
+  opt-in shell scenarios are among those skips and passed explicitly above.
+- Repository-wide Black `--check`, Ruff `check --no-fix`, `mypy .`, frontend
+  strict TypeScript/Prettier, and `git diff --check` passed.
+- Clean `npm ci` and rebuild produced byte-identical JS/CSS hashes. The JS is
+  approximately 232 kB (73 kB gzipped); CSS approximately 2.3 kB.
+- Standard isolated `pip wheel . --no-deps` succeeded; inspected the wheel for
+  the dashboard HTML and both nonempty bundled assets. A first optional
+  no-build-isolation attempt lacked setuptools in the owner's venv; normal
+  isolated packaging succeeded without changing that environment.
+
+Commands used (test suites sequential, preserving single-worker locking):
+
+```sh
+ST_LIVE_TESTS=0 DASHBOARD_BROWSER_TESTS=1 \
+  ST_CACHE_DIR=.cache/nightly/fos-72-browser-cache TMPDIR="$PWD/.cache/nightly" \
+  .venv/bin/python -m pytest tests/test_flight.py tests/test_dashboard.py -q \
+  --basetemp=.cache/nightly/fos-72-final-browser
+ST_LIVE_TESTS=0 ST_CACHE_DIR=.cache/nightly/fos-72-full-cache \
+  .venv/bin/python -m pytest -q --basetemp=.cache/nightly/fos-72-full-tests
+.venv/bin/python -m black --check .
+.venv/bin/python -m ruff check --no-fix .
+.venv/bin/python -m mypy .
+npm --prefix frontend run check
+npm --prefix frontend run build
+```
+
+The supervised environment initially had no Node on PATH; verified official
+Node 22.23.2 was unpacked under `.cache/nightly/node-v22.23.2-linux-x64`.
+Use its `bin` on PATH for npm commands here. No system-level installation.
+
+Browser screenshots were inspected; duplicate heartbeat presentation and phone
+navigation spacing were tightened after initial inspection. Final evidence under
+`.cache/nightly/fos-72-final-browser/`:
+
+- `test_browser_trip_1440_0/flight-1440.png` and
+  `test_browser_trip_390_0/flight-390.png`: resulting fleet after completed trip.
+- `test_ui_shell_ownership_livene0/operations-review-1440.png`:
+  desktop STOP, stale heartbeat, retained review draft and real doctor.
+- `test_ui_shell_ownership_livene1/overview-stale-390.png` and
+  `test_ui_shell_ownership_livene1/operations-review-390.png`: phone check-in and
+  recovery under stale liveness plus ledger-update failure.
+
+### Review / next slice
+
+Aron completed human review and authorized committing/pushing the feature branch
+`aron/fos-72-browser-ui-foundation`; he will create the PR for LLM review.
+No deployment or live gameplay mutation was performed. The root `.state` and STOP
+were not used for verification. The application was exercised against isolated
+synthetic HTTP/worker state; new live proof is not claimed.
+
+FOS-71 should consume [the UI contract](UI_UX.md#ui-contract-for-subsequent-slices)
+when preparing Task 03, after this delivery is reviewed and merged. Ordinary
+architecture decisions are resolved; no human-owned product blocker remains.
+Trading/contracts writes, persistent pilot/takeover, fleet/industrial features,
+cross-system travel and authenticated GCP deployment retain their named owners.
+
+Reviewer entry points: start with `docs/UI_UX.md`, then `frontend/src/bridge.ts`,
+`main.tsx`, `components.tsx`, the dashboard integration and browser regressions.
+Review generated JS/CSS through their source and reproducible build rather than
+the minified diff. Screenshots are local supplemental evidence, not committed;
+the explicit browser command above recreates them without live credentials.
+The text wireframes and scenarios support architecture/correctness review alone;
+visual-density and responsive-layout review benefits from running the browser.
+
+---
+
+## Earlier Task 02 handoff — historical reference
 
 ## Assignment and base
 

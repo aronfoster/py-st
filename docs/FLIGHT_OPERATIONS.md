@@ -26,7 +26,8 @@ In two terminals, with the **same absolute `ST_STATE_ROOT`** in both:
 ```
 
 Open **http://127.0.0.1:8765**, log in, and click **Resume worker**. Select
-`SYNTHETIC-1` and waypoint `X-DEMO-B2` in the explorer. Preview the trip, retain
+**Explorer** in the navigation, then select `SYNTHETIC-1` in the shared ship
+context and waypoint `X-DEMO-B2` in the explorer. Preview the trip, retain
 Dock/Refuel on arrival and submit. The independent worker orbits, navigates,
 confirms arrival, docks and refuels. The synthetic trip uses 12 fuel and paid
 refueling costs 72 credits: 123,456 → 123,384, ending at B2 with 100/100 fuel.
@@ -74,7 +75,7 @@ snapshot refresh afterward to show the changed observations.
   **RECONCILIATION_REQUIRED**. No automatic replay or dependent step is allowed.
 
 For an unknown outcome, refresh the game snapshot, inspect actual ship state,
-credits and the command/journal evidence, then enter a concrete outcome explanation
+credits and the command/journal evidence in **Operations**, then enter an outcome explanation
 in the command's review control. Explicit review records fresh evidence and cancels
 the rest of that command. Submit a new deliberate workflow only after reviewing
 the result. A countdown, full tank or old observation is not sufficient proof.

@@ -18,6 +18,7 @@ feeds explorer, fleet, credits, action history and planning panels.
 | --- | --- |
 | `cli/flight_cmd.py` | Explicit setup, serve, worker and offline scenarios |
 | `services/dashboard.py`, `dashboard.html` | Owner session, Host/Origin/CSRF boundary, UI and enqueue API |
+| `frontend/src`, `services/ui` | Typed React shell/primitives and packaged Vite production assets; explicit bridge to legacy panels |
 | `services/flight_queue.py` | Versioned commands, deduplication, steps, pause state and heartbeat |
 | `services/flight_worker.py` | Account authority, fresh flight checks, bounded dispatch, arrival and recovery |
 | `services/flight_demo.py` | Persistent synthetic world behind `httpx.MockTransport` |
@@ -82,6 +83,21 @@ Active contracts and open/unknown automation positions block flight mutations
 until a later workflow can cost and coordinate them. No cargo is sold or consumed
 by this milestone. Browser trading/contracts/pilot controls build on this queue
 in later tasks rather than introducing another execution authority.
+
+## Browser presentation
+
+FOS-72 adds the eight-section shell and independent observation/liveness/certainty
+status over the same API. React owns new shell/check-in components; an explicit
+adapter relocates existing panel roots, retaining their controllers and drafts.
+Ship selection persists per reset/agent but never grants execution authority.
+Operations keeps the real command/reconciliation, journal and doctor surfaces.
+
+Node 22/npm are development/CI build dependencies only. Vite emits a bundled
+IIFE and CSS packaged with Python and embedded under the existing nonce CSP.
+No new runtime server, CDN, static-file router or Host/Origin exceptions. CI
+rebuilds committed assets and checks drift. See [UI/UX](UI_UX.md) for architecture
+comparison, surface inventory and the contract for subsequent gameplay slices,
+and [frontend instructions](../frontend/README.md) for builds and migration rules.
 
 See [Flight Operations](FLIGHT_OPERATIONS.md) for setup and verification and
 [Handoff](HANDOFF.md) for current continuation instructions.

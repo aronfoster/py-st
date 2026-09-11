@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import sqlite3
 import threading
@@ -28,7 +29,23 @@ from py_st.services.system_explorer import system_explorer
 def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
     root = root.resolve()
     csrf = secrets.token_hex(32)
-    html = Path(__file__).with_name("dashboard.html").read_text()
+    html = (
+        Path(__file__).with_name("dashboard.html").read_text(encoding="utf-8")
+    )
+    assets = Path(__file__).with_name("ui")
+    script = re.sub(
+        r"</(?=script)",
+        r"<\/",
+        (assets / "shell.js").read_text(encoding="utf-8"),
+        flags=re.IGNORECASE,
+    ).replace("<!--", r"\x3c!--")
+    style = re.sub(
+        r"</(?=style)",
+        r"<\/",
+        (assets / "shell.css").read_text(encoding="utf-8"),
+        flags=re.IGNORECASE,
+    )
+    html = html.replace("__UI_SCRIPT__", script).replace("__UI_STYLE__", style)
     managed = (root / ".state/flight.sqlite3").exists()
     sessions: dict[str, float] = {}
     auth_lock = threading.Lock()
