@@ -378,6 +378,14 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                                 }
                                 or body["scope"] != queue.scope
                                 or type(body["units"]) is not int
+                                or body["kind"] not in ("purchase", "sell")
+                                or any(
+                                    not isinstance(body[field], str)
+                                    or not re.fullmatch(
+                                        r"[A-Z0-9_-]{1,80}", body[field]
+                                    )
+                                    for field in ("ship", "good")
+                                )
                             ):
                                 raise ValueError(
                                     "Invalid trade preview fields"

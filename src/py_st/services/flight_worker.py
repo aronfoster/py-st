@@ -62,9 +62,21 @@ def trade_preview(
         for item in ship["cargo"].get("inventory", [])
     }
     protected: dict[str, int] = {}
+    open_contracts = False
+    unknown_contracts = False
     for row in store.latest(scope, "contract"):
         contract = row["data"]
-        if contract.get("accepted") and not contract.get("fulfilled"):
+        if (
+            contract.get("fulfilled") is not True
+            and contract.get("accepted") is not False
+        ):
+            open_contracts = True
+            if contract.get("accepted") is not True:
+                unknown_contracts = True
+        if (
+            contract.get("accepted") is True
+            and contract.get("fulfilled") is not True
+        ):
             for item in contract.get("terms", {}).get("deliver", []):
                 remaining = max(
                     0, item["unitsRequired"] - item["unitsFulfilled"]
@@ -87,14 +99,17 @@ def trade_preview(
         and type(volume) is int
         and volume > 0
         and units <= volume
+        and age is not None
+        and age <= 900
         and ship["nav"]["status"] == "DOCKED"
         and (
             (
                 kind == "purchase"
+                and not open_contracts
                 and units <= free
                 and credits - total >= CREDIT_FLOOR + FUEL_ALLOWANCE
             )
-            or (kind == "sell" and units <= sellable)
+            or (kind == "sell" and not unknown_contracts and units <= sellable)
         )
     )
     return {
@@ -120,16 +135,29 @@ def trade_preview(
         "fuel_reserve": FUEL_ALLOWANCE,
         "fixed_floor_headroom": credits - CREDIT_FLOOR,
         "protected_contract_cargo": protected,
+        "open_contract_obligations": open_contracts,
+        "contract_state_unknown": unknown_contracts,
         "sellable_units": sellable,
         "observed_at": market_row["observed_at"] if market_row else None,
         "stale": age is None or age > 900,
         "estimated": True,
         "feasible": feasible,
         "reason": (
-            "Stored estimate; worker requires an unchanged live quote, ship, "
-            "credits, cargo and obligations before dispatch"
-            if price is not None
-            else "No observed current price detail; unknown is not zero"
+            "Purchases are blocked until active contract obligations are "
+            "costed"
+            if kind == "purchase" and open_contracts
+            else (
+                "Contract acceptance is unknown; trade is blocked"
+                if unknown_contracts
+                else (
+                    "Stored estimate; worker requires an unchanged live "
+                    "quote, "
+                    "ship, credits, cargo and obligations before dispatch"
+                    if price is not None
+                    else "No observed current price detail; unknown is not "
+                    "zero"
+                )
+            )
         ),
     }
 
@@ -255,12 +283,27 @@ def validate_receipt(path: str, result: dict[str, Any]) -> None:
             or transaction["totalPrice"] < 0
         ):
             raise SafetyStop("Invalid refuel receipt; reconcile outcome")
-    if kind in ("purchase", "sell") and (
-        not isinstance(result.get("agent"), dict)
-        or not isinstance(result.get("cargo"), dict)
-        or not isinstance(result.get("transaction"), dict)
-    ):
-        raise SafetyStop("Invalid trade receipt; reconcile outcome")
+    if kind in ("purchase", "sell"):
+        agent = result.get("agent")
+        cargo = result.get("cargo")
+        transaction = result.get("transaction")
+        if (
+            not isinstance(agent, dict)
+            or type(agent.get("credits")) is not int
+            or agent["credits"] < 0
+            or not isinstance(cargo, dict)
+            or any(
+                type(cargo.get(key)) is not int
+                for key in ("units", "capacity")
+            )
+            or not 0 <= cargo["units"] <= cargo["capacity"]
+            or not isinstance(transaction, dict)
+            or type(transaction.get("totalPrice")) is not int
+            or transaction["totalPrice"] < 0
+            or type(transaction.get("units")) is not int
+            or transaction["units"] <= 0
+        ):
+            raise SafetyStop("Invalid trade receipt; reconcile outcome")
 
 
 class FlightWorker:
@@ -598,7 +641,7 @@ class FlightWorker:
             raise SafetyStop("Recover existing automation exposure first")
         # Flight/refuel cannot yet cost active obligations. Trades protect
         # contract cargo; purchases retain the additional fuel reserve.
-        if step not in ("purchase", "sell") and any(
+        if step != "sell" and any(
             c.get("accepted") is not False and c.get("fulfilled") is not True
             for c in state["contracts"]
         ):
@@ -636,7 +679,8 @@ class FlightWorker:
             if (
                 len(quotes) != 1
                 or quotes[0].get(key) != payload["quote"]
-                or quotes[0].get("tradeVolume", 0) < payload["units"]
+                or type(quotes[0].get("tradeVolume")) is not int
+                or quotes[0]["tradeVolume"] < payload["units"]
             ):
                 raise SafetyStop(
                     "Market price or volume changed; refresh and preview again"

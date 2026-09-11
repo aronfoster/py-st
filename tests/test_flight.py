@@ -32,8 +32,13 @@ from py_st.services.flight_demo import (
     demo_client,
     scenario,
 )
-from py_st.services.flight_queue import FlightQueue, canonical_root
-from py_st.services.flight_worker import FlightWorker, preview, trade_preview
+from py_st.services.flight_queue import FlightQueue, canonical_root, validate
+from py_st.services.flight_worker import (
+    FlightWorker,
+    preview,
+    trade_preview,
+    validate_receipt,
+)
 from py_st.services.intelligence import Intelligence
 from py_st.services.stop_control import request_stop
 
@@ -331,6 +336,116 @@ def test_trade_preview_rejects_capacity_and_unknown_price(
     assert unknown["unit_price"] is None
     assert unknown["total_price"] is None
     assert not unknown["feasible"]
+
+
+@pytest.mark.parametrize("change", ["price", "timestamp", "undocked"])
+def test_trade_worker_blocks_changed_preview_evidence(
+    runner: FlightWorker, change: str
+) -> None:
+    # Arrange
+    estimate = trade_preview(
+        runner.store, SCOPE, "SYNTHETIC-1", "IRON_ORE", 1, "purchase"
+    )
+    payload = {
+        "kind": "purchase",
+        "ship": "SYNTHETIC-1",
+        "good": "IRON_ORE",
+        "units": 1,
+        "waypoint": estimate["waypoint"],
+        "quote": estimate["unit_price"],
+        "observed_at": estimate["observed_at"],
+    }
+    if change == "price":
+        state = world(runner.root)
+        state["markets"]["X-DEMO-A1"]["tradeGoods"][1]["purchasePrice"] = 101
+        world(runner.root, markets=state["markets"])
+    elif change == "timestamp":
+        market = runner.store.latest(SCOPE, "market")[0]["data"]
+        runner.store.observe(SCOPE, "market", "X-DEMO-A1", market, "new")
+    else:
+        state = world(runner.root)
+        state["ships"][0]["nav"]["status"] = "IN_ORBIT"
+        world(runner.root, ships=state["ships"])
+
+    # Act
+    result = finish(runner, submit(runner, payload))
+
+    # Assert
+    assert result["status"] == "blocked"
+    assert world(runner.root)["mutations"] == []
+
+
+def test_trade_worker_protects_contract_cargo(runner: FlightWorker) -> None:
+    # Arrange: five held units are all required by an accepted contract.
+    state = world(runner.root)
+    state["ships"][0]["cargo"] = {
+        "units": 5,
+        "capacity": 40,
+        "inventory": [{"symbol": "IRON_ORE", "units": 5}],
+    }
+    state["contracts"] = [
+        {
+            "id": "CONTRACT",
+            "accepted": True,
+            "fulfilled": False,
+            "terms": {
+                "deliver": [
+                    {
+                        "tradeSymbol": "IRON_ORE",
+                        "unitsRequired": 5,
+                        "unitsFulfilled": 0,
+                        "destinationSymbol": "X-DEMO-A1",
+                    }
+                ]
+            },
+        }
+    ]
+    world(runner.root, ships=state["ships"], contracts=state["contracts"])
+    runner.fresh("SYNTHETIC-1")
+    estimate = trade_preview(
+        runner.store, SCOPE, "SYNTHETIC-1", "IRON_ORE", 1, "sell"
+    )
+
+    # Act / Assert
+    assert estimate["protected_contract_cargo"] == {"IRON_ORE": 5}
+    assert estimate["sellable_units"] == 0
+    assert not estimate["feasible"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"quote": "100"},
+        {"observed_at": "2026-01-01T00:00:00"},
+        {"unexpected": True},
+    ],
+)
+def test_trade_command_payload_validation(change: dict[str, Any]) -> None:
+    payload: dict[str, Any] = {
+        "kind": "purchase",
+        "ship": "SYNTHETIC-1",
+        "good": "IRON_ORE",
+        "units": 1,
+        "waypoint": "X-DEMO-A1",
+        "quote": 100,
+        "observed_at": datetime.now(UTC).isoformat(),
+    }
+    payload.update(change)
+
+    with pytest.raises(ValueError):
+        validate(payload)
+
+
+def test_malformed_trade_receipt_requires_reconciliation() -> None:
+    with pytest.raises(SafetyStop, match="Invalid trade receipt"):
+        validate_receipt(
+            "/my/ships/SYNTHETIC-1/purchase",
+            {
+                "agent": {"credits": 100000},
+                "cargo": {"units": 1, "capacity": 40},
+                "transaction": {"totalPrice": "100", "units": 1},
+            },
+        )
 
 
 def test_complete_trip_fuel_cash_and_shared_observations(

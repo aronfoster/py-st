@@ -51,7 +51,7 @@ const deferred: Partial<Record<Page, string>> = {
     "Goal scheduling and manual takeover: FOS-71 persistent pilot slice. Pause requests STOP; it does not transfer ownership.",
 };
 
-function Trading({ snapshot }: { snapshot: Snapshot }) {
+function Trading({ snapshot, now }: { snapshot: Snapshot; now: number }) {
   const markets = snapshot.ledger.markets || [];
   const ship = (snapshot.ledger.ships || []).find(
     (row) => row.key === snapshot.selectedShip,
@@ -65,6 +65,11 @@ function Trading({ snapshot }: { snapshot: Snapshot }) {
   const [units, setUnits] = useState(1);
   const [preview, setPreview] = useState<TradePreview | null>(null);
   const [message, setMessage] = useState("");
+  const block =
+    commandBlock(snapshot, kind === "sell") ||
+    (snapshot.ledger.paused || snapshot.flight?.settings.paused
+      ? "STOP requested"
+      : null);
   useEffect(() => {
     setPreview(null);
     setGood("");
@@ -89,16 +94,26 @@ function Trading({ snapshot }: { snapshot: Snapshot }) {
     if (!preview || preview.unit_price === null || !preview.observed_at)
       return;
     setMessage("Submitting durable command…");
-    await window.ledgerUI.submitCommand({
-      kind: preview.kind,
-      ship: preview.ship,
-      good: preview.good,
-      units: preview.units,
-      waypoint: preview.waypoint,
-      quote: preview.unit_price,
-      observed_at: preview.observed_at,
-    });
-    setMessage("Submitted. Track authoritative outcome in Operations.");
+    try {
+      const command = await window.ledgerUI.submitCommand({
+        kind: preview.kind,
+        ship: preview.ship,
+        good: preview.good,
+        units: preview.units,
+        waypoint: preview.waypoint,
+        quote: preview.unit_price,
+        observed_at: preview.observed_at,
+      });
+      setMessage(
+        `Command #${command.id} ${command.status}. Track it in Operations.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Submission was not confirmed",
+      );
+    }
   };
   return (
     <Panel title="Trade through durable command authority">
@@ -121,7 +136,7 @@ function Trading({ snapshot }: { snapshot: Snapshot }) {
         <>
           <p className="small">
             Local market observed{" "}
-            <Freshness stamp={local.observed_at} now={Date.now()} />
+            <Freshness stamp={local.observed_at} now={now} />
           </p>
           {!goods.length ? (
             <EmptyState>
@@ -202,8 +217,9 @@ function Trading({ snapshot }: { snapshot: Snapshot }) {
           </p>
           <p>
             Fixed floor {preview.fixed_floor}; fixed-floor headroom{" "}
-            {preview.fixed_floor_headroom} is not freely spendable. Known fuel
-            reserve {preview.fuel_reserve}. Protected contract cargo:{" "}
+            {preview.fixed_floor_headroom} must still cover the known fuel
+            reserve of {preview.fuel_reserve} and contract obligations.
+            Protected contract cargo:{" "}
             {JSON.stringify(preview.protected_contract_cargo)}. Sellable
             selected cargo: {preview.sellable_units}.
           </p>
@@ -212,9 +228,14 @@ function Trading({ snapshot }: { snapshot: Snapshot }) {
             {preview.stale ? "STALE" : "recent stored, not live"} ·{" "}
             {preview.observed_at || "unknown timestamp"}
           </p>
-          <button disabled={!preview.feasible} onClick={submit}>
+          <button
+            disabled={!preview.feasible || block !== null}
+            title={block || "Submit to guarded worker"}
+            onClick={submit}
+          >
             Submit guarded {preview.kind}
           </button>
+          {block && <p className="small">Inspection only · {block}</p>}
         </div>
       )}
       <p role="status">{message}</p>
@@ -229,7 +250,10 @@ function Trading({ snapshot }: { snapshot: Snapshot }) {
 const active = (status: string) =>
   !["completed", "blocked", "cancelled"].includes(status);
 
-function commandBlock(snapshot: Snapshot): string | null {
+function commandBlock(
+  snapshot: Snapshot,
+  allowProtectedSale = false,
+): string | null {
   const { ledger, flight, selectedShip } = snapshot;
   if (!snapshot.managed) return "unmanaged ledger";
   if (!snapshot.authenticated) return "owner login required";
@@ -246,6 +270,7 @@ function commandBlock(snapshot: Snapshot): string | null {
   if ((ledger.positions || []).some((r) => r.data.status !== "closed"))
     return "automation exposure unresolved";
   if (
+    !allowProtectedSale &&
     (ledger.contracts || []).some((r) => r.data.accepted && !r.data.fulfilled)
   )
     return "active contract obligations uncosted";
@@ -387,7 +412,7 @@ function App() {
       </h1>
       <p className="ui-intent">{descriptions[page]}</p>
       {deferred[page] && <p className="ui-deferred">{deferred[page]}</p>}
-      {page === "markets" && <Trading snapshot={snapshot} />}
+      {page === "markets" && <Trading snapshot={snapshot} now={now} />}
       {shipPages.includes(page) &&
         createPortal(
           <>

@@ -82,7 +82,7 @@ declare global {
     ledgerUI: {
       snapshot: Snapshot;
       previewTrade: (body: object) => Promise<TradePreview>;
-      submitCommand: (payload: object) => Promise<void>;
+      submitCommand: (payload: object) => Promise<Command>;
     };
   }
 }
@@ -105,6 +105,8 @@ export interface TradePreview {
   fuel_reserve: number;
   fixed_floor_headroom: number;
   protected_contract_cargo: Record<string, number>;
+  open_contract_obligations: boolean;
+  contract_state_unknown: boolean;
   sellable_units: number;
   observed_at: string | null;
   stale: boolean;

@@ -18,7 +18,11 @@ in `docs/FLIGHT_OPERATIONS.md`, open Markets, select `SYNTHETIC-1`, preview a
 quantity, submit it, run the worker, and inspect Operations/Fleet/Reports.
 Known advertisements without `tradeGoods` remain explicitly unpriced. The
 preview distinguishes the fixed 50,000-credit floor from the additional known
-fuel reserve and protected accepted-contract cargo. Cargo transfer is the next
+fuel reserve and protected accepted-contract cargo. Purchases remain blocked
+while accepted obligations are open because this slice cannot assign their
+procurement reserve a trustworthy value; sales may proceed only above protected
+delivery inventory, and unknown contract acceptance blocks either trade. Cargo
+transfer is the next
 bounded extension: the API client supports it, but this delivery deliberately
 does not expose it before equivalent cross-ship revalidation and ambiguity
 evidence are added to the authority.
