@@ -6,6 +6,7 @@ import fcntl
 import math
 import re
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -34,6 +35,7 @@ class Session:
         seconds: int = 600,
         actions: int = 30,
         root: Path = Path("."),
+        validate_result: Callable[[str, JSONDict], None] | None = None,
     ) -> None:
         if not 1 <= seconds <= 7200 or not 1 <= actions <= 200:
             raise ValueError("Bounds: 1..7200 seconds, 1..200 actions")
@@ -44,6 +46,7 @@ class Session:
         self.remaining = actions
         self.root = root
         self.scope = ""
+        self.validate_result = validate_result
         state = root / ".state"
         state.mkdir(parents=True, exist_ok=True)
         self.lock = (state / "automation.lock").open("a")
@@ -221,6 +224,8 @@ class Session:
                     },
                 )
             raise
+        if self.validate_result is not None:
+            self.validate_result(path, result)
         if path.endswith("/negotiate/contract"):
             try:
                 Contract.model_validate(result.get("contract"))

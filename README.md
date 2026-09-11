@@ -1,8 +1,19 @@
 # py-st
 
-Explore your SpaceTraders fleet, compare contract sources, and run bounded
-trading and scouting from a typed Python CLI. The local Flight Ledger dashboard
-shows stored fleet state, economics, contract models and pilot run history.
+Explore your SpaceTraders fleet and fly ships from the local Flight Ledger
+browser application. Authenticated flight commands run through a durable worker;
+the same dashboard shows fleet state, economics, contract models and history.
+
+## Play the Offline Flight Demo
+
+See [Browser Flight Operations](docs/FLIGHT_OPERATIONS.md) for setup and a
+complete synthetic select → preview → navigate → arrival → dock → refuel trip.
+It uses the real UI, queue, worker and services without game credentials/network.
+
+Live CLI mutations are retired in this revision in favor of worker ownership.
+Historical trading/pilot execution commands below are retained as documentation
+of existing strategy code, not supported live dispatch instructions. Browser
+trading, contracts and persistent pilot controls are subsequent assignments.
 
 ## Review Without Game Credentials
 
@@ -35,14 +46,14 @@ and `RESET:AGENT` with your own identifiers, not historical example values.
 | Refresh fleet/contracts or map markets | `auto observe` / `auto scan SYSTEM` | **LIVE GET**, writes local observations |
 | Diagnose mining blockers | `auto mining SHIP` | **LIVE GET**, no extraction or `--execute` |
 | Preview the next earning decision | `auto earn SYSTEM` / `auto pilot SYSTEM` | **LIVE GET dry run**, not offline |
-| Run bounded earning decisions | `auto pilot SYSTEM --execute` | **LIVE mutations**, explicit authorization |
-| Recover an original contract execution intent | `auto pilot SYSTEM --recover-contracts --steps 1` | **LIVE GET preview**; add `--execute` only after review |
+| Fly ships in the browser | `flight serve` plus `flight worker` | Configured offline demo or guarded live flight |
+| Preview an original contract execution intent | `auto pilot SYSTEM --recover-contracts --steps 1` | **LIVE GET preview** outside managed mode; mutation disabled |
 
 `auto scout SYSTEM --offline --scope RESET:AGENT` previews stored discovery;
-without `--offline`, scouting uses live GETs and `--execute` permits navigation.
+without `--offline`, scouting uses live GETs; direct execution is now disabled.
 Direct `auto contract`, `trade`, `fleet`, `move`, `refuel` and `negotiate` remain
-available for specific tasks; see [operations](docs/OPERATIONS.md) for their
-guards and recovery. Legacy manual commands do not share all automation guards.
+available for previews outside managed mode; see [operations](docs/OPERATIONS.md)
+for historical guards and recovery. Their real-client writes are refused.
 
 `auto contract` also supports multiple distinct goods at one marketplace when
 the ship is already there, with whole-obligation funding and journaled recovery.
@@ -67,11 +78,10 @@ Keep `ST_TOKEN` out of command arguments. Review stored recovery state and STOP
 before live work. Dry runs can fetch data and write local observations/plans;
 they are not offline previews or approval of future trades.
 
-## Start a Foreground Pilot
+## Historical Foreground Pilot (Live Dispatch Retired)
 
-Read [pilot onboarding and recovery](docs/OPERATIONS.md#foreground-pilot) before
-execution. After reviewing `auto report`, coordinating with the operator,
-deliberately clearing STOP when safe, and observing fresh state:
+The legacy strategy remains tested offline. These earlier command shapes explain
+its API; `--execute` cannot dispatch through the real client in this revision:
 
 ```sh
 # Live GET-only preview of ONE decision, not ten simulated steps:

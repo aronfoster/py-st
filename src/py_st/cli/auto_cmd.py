@@ -22,6 +22,7 @@ from py_st.services.contract_sources import contract_sources
 from py_st.services.dashboard import dashboard_server
 from py_st.services.doctor import diagnose
 from py_st.services.earning import earn_run
+from py_st.services.flight_queue import canonical_root
 from py_st.services.infrastructure import (
     infrastructure_run,
     validate_infrastructure,
@@ -47,6 +48,10 @@ auto_app = typer.Typer(help="Bounded automation; dry-run unless --execute.")
 def session(
     execute: bool, seconds: int, actions: int, *, initialize: bool = False
 ) -> Iterator[Session]:
+    if os.environ.get("ST_STATE_ROOT"):
+        raise typer.BadParameter(
+            "Managed account: use flight worker/browser, not legacy automation"
+        )
     guidance = (
         "Return to the authoritative workspace first. Use auto observe only "
         "for genuinely new history; do not copy or create an empty ledger "
@@ -559,7 +564,8 @@ def reconcile(
 @auto_app.command()
 def dashboard(port: int = 8765) -> None:
     """Serve local shared-data UI; no API credentials or gameplay commands."""
-    server = dashboard_server(Path.cwd(), port)
+    root = canonical_root() if os.environ.get("ST_STATE_ROOT") else Path.cwd()
+    server = dashboard_server(root, port)
     typer.echo(f"Flight Ledger: http://127.0.0.1:{server.server_port}")
     try:
         server.serve_forever()
@@ -572,7 +578,10 @@ def dashboard(port: int = 8765) -> None:
 @auto_app.command()
 def backup(destination: Path) -> None:
     """Create a consistent SQLite backup without overwriting existing data."""
-    store = Intelligence()
+    root = canonical_root() if os.environ.get("ST_STATE_ROOT") else Path.cwd()
+    store = Intelligence(
+        root / ".state/intelligence.sqlite3", existing_only=True
+    )
     try:
         store.backup(destination)
         typer.echo("Consistent intelligence backup created")
