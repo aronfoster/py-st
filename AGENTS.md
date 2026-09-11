@@ -1,21 +1,22 @@
 # Agent Instructions
 
 The primary goal is the best application for a human or automated process to
-play SpaceTraders. Gameplay is secondary: use bounded live experiments to
-validate capabilities, then return to building the tools. Profitable manual
-play is not a substitute for application development. Continue engineering
-through the available overnight token/runtime budget, not just green tests.
+play SpaceTraders. Current assignment: FOS-71 Task 02, browser flight operations
+on the merged system explorer. Deliver select/preview/navigate/arrival/dock/refuel,
+durable execution, local authentication and offline proof; stop at that workflow.
+FOS-63 owns the wider product roadmap. Live verification is separate.
 
 ## Workspace
 
-Work in this normal repository checkout on `aron/fos-63-review`. The former
+Work in this normal repository checkout, based on `master` with PR #45. The former
 `tmp/astra` worktree was removed and its runtime state moved to root `.state`.
 Do not create another worktree or request parent-directory access. Keep new
 temporary work under ignored `.cache/nightly`; use `.venv/bin/python` here.
 Subagents must use the same boundaries and explicit in-project test temp paths.
 Historical worktree instructions in the logs are not current setup instructions.
 
-Read this file, ROADMAP.md, docs/ASTRA_LOG.md and docs/HANDOFF.md first.
+Read this file, ROADMAP.md and docs/HANDOFF.md first. docs/ASTRA_LOG.md is
+historical evidence, not current continuation instructions.
 This is Python 3.11+; use the owner's Python 3.12 virtual environment.
 Preserve CLI -> services/automation -> client/transport layering. Generated
 models are not hand-edited. Use typed code, 79-column Black/Ruff formatting,

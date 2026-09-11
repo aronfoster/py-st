@@ -10,7 +10,15 @@ from .endpoints.agent import AgentEndpoint
 from .endpoints.contracts import ContractsEndpoint
 from .endpoints.ships import ShipsEndpoint
 from .endpoints.systems import SystemsEndpoint
-from .transport import JSON, HttpTransport, JSONDict
+from .transport import JSON, APIError, HttpTransport, JSONDict
+
+
+def worker_required(method: str, path: str) -> None:
+    if method not in ("GET", "HEAD") and path != "/register":
+        raise APIError(
+            "Direct live mutations are retired. Use the flight worker and "
+            "authenticated browser; registration remains owner-controlled."
+        )
 
 
 class SpaceTradersClient:
@@ -25,6 +33,8 @@ class SpaceTradersClient:
             timeout=30,
         )
         self._transport = HttpTransport(self._client)
+        if client is None:
+            self._transport.dispatch_guard = worker_required
         self._agent = AgentEndpoint(self._transport)
         self._contracts = ContractsEndpoint(self._transport)
         self._ships = ShipsEndpoint(self._transport)
