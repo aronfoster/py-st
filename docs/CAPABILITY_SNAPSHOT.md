@@ -16,6 +16,9 @@ dump. It excludes account IDs, transaction counterparties, descriptions, error
 payloads, headers and local configuration. The CLI additionally redacts the
 configured token and suppresses logging and exception details. Review the
 sanitized report before publishing; runtime JSON stays ignored.
+Output-file parent directories are created automatically. If a local save
+fails, the CLI exits 1 with a fixed diagnostic on stderr and preserves the
+collected sanitized JSON on stdout, without repeating any API reads.
 
 The service uses the existing client/transport GET and pagination paths. It
 does not use the smart-merge cache: a new response without prices must not
@@ -28,6 +31,11 @@ Scope is deliberately small: fresh fleet and contracts, headquarters-system
 waypoints, and at most 80 market/shipyard detail reads. The CLI stops dispatch
 after a 180-second monotonic budget (an in-flight request may finish later).
 Unavailable reads become unknown; authentication failures abort the report.
+Budget-limited reports retain collected evidence and exit 0 with
+`scope.truncated: true` and `scope.truncation_reasons`. Deadline exhaustion
+marks remaining reads `time_budget` without further attempts; the detail cap
+marks excess sites `detail_budget`. Other transport interruptions abort rather
+than being mislabeled as deadline exhaustion.
 There is no cross-system discovery or claim that same-system destinations
 have affordable, executable routes. Ships elsewhere remain in the fleet list.
 
@@ -46,6 +54,9 @@ have affordable, executable routes. Ships elsewhere remain in the fleet list.
   component symbols/capacities.
 - Each observation has `state`, `data`, and either `observed_at` or a fixed
   unknown `reason`. Missing projected fields are null, never invented values.
+  Present scalar values rejected by the identifier/date allowlist also become
+  null; null does not distinguish absent from rejected. Malformed list items
+  become null and are skipped when discovering waypoint/trait candidates.
 - Markets/yards have independent `details_state` and `details_observed_at`.
   Null detail timestamps mean unknown, even when the site itself was freshly
   observed. Consumers compute age from that timestamp at display time; no
@@ -65,9 +76,16 @@ location-gated details, unavailable reads, missing headquarters, explicit
 empty contracts, field projection, token redaction, and HTTP 401/API 4113
 termination with no further requests or error-payload disclosure.
 
-Verification: six targeted tests passed before live execution. Full suite:
+Initial verification on 2026-09-11: six targeted tests passed before live
+execution. Full suite:
 **1,608 passed, 13 skipped**. Black check, Ruff `--no-fix` and source mypy pass.
 Base: verified remote `master` at `6d4f2ff` (merged PR #46).
+
+PR review regressions additionally cover the 80-read detail cap, deadline
+truncation and stopping further attempts, unrelated transport interruptions,
+malformed waypoint/trait entries, automatic output parent creation, and
+sanitized stdout recovery after local save failure. Run `mypy .` (as CI does),
+not only source mypy, to include test typing checks.
 
 ## Supervised live evidence — 2026-09-11
 

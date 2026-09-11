@@ -2,6 +2,7 @@
 
 import json
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -11,12 +12,15 @@ from typer.testing import CliRunner
 from py_st.cli import capabilities_cmd
 from py_st.cli.app import app
 from py_st.client.client import SpaceTradersClient
-from py_st.client.transport import APIError
-from py_st.services.capabilities import capability_snapshot
+from py_st.client.transport import APIError, RequestAborted
+from py_st.services.capabilities import SnapshotTimeBudget, capability_snapshot
 
 
 def peer(
-    *, failure: int | None = None, code: int | None = None
+    *,
+    failure: int | None = None,
+    code: int | None = None,
+    waypoints: list[Any] | None = None,
 ) -> tuple[SpaceTradersClient, list[str]]:
     calls: list[str] = []
 
@@ -53,6 +57,18 @@ def peer(
         elif path == "/my/contracts":
             data = []
         elif path.endswith("/waypoints"):
+            if waypoints is not None:
+                return httpx.Response(
+                    200,
+                    json={
+                        "data": waypoints,
+                        "meta": {
+                            "total": len(waypoints),
+                            "limit": max(1, len(waypoints)),
+                            "page": 1,
+                        },
+                    },
+                )
             page = request.url.params.get("page", "1")
             data = [
                 {
@@ -116,6 +132,7 @@ def test_snapshot_fresh_pagination_unknowns_and_projection() -> None:
     assert report["account_observations"]["contracts"]["data"] == []
     assert "SECRET" not in json.dumps(report)
     assert "transactions" not in json.dumps(report)
+    assert report["scope"]["truncated"] is False
 
 
 @pytest.mark.parametrize("status,code", [(401, None), (400, 4113)])
@@ -162,7 +179,10 @@ def test_cli_redacts_token_even_in_allowed_field(
     assert result.exit_code == 0
     assert "TEST" not in result.output
     assert "[REDACTED]" in result.output
-    assert json.loads(result.output)["schema_version"] == 1
+    report = json.loads(result.output)
+    assert report["schema_version"] == 1
+    agent = report["account_observations"]["agent"]["data"]
+    assert agent["symbol"] == "[REDACTED]"
 
 
 def test_cli_auth_error_has_no_payload(
@@ -183,3 +203,145 @@ def test_cli_auth_error_has_no_payload(
     assert "authentication/reset mismatch" in result.output
     assert "SECRET" not in result.output
     assert "/private" not in result.output
+
+
+def test_detail_budget_limits_reads() -> None:
+    # Arrange: 82 detail candidates, exceeding the 80-read cap.
+    waypoints = [
+        {
+            "symbol": f"X1-TEST-A{i}",
+            "traits": [{"symbol": "MARKETPLACE"}, {"symbol": "SHIPYARD"}],
+        }
+        for i in range(41)
+    ]
+    client, calls = peer(waypoints=waypoints)
+    # Act.
+    with client:
+        report = capability_snapshot(client)
+    # Assert: five initial reads followed by exactly 80 detail reads.
+    assert len(calls) == 85
+    assert report["scope"]["truncation_reasons"] == ["detail_budget"]
+    for kind in ("markets", "shipyards"):
+        last = report["opportunity_observations"][kind][-1]
+        assert last["reason"] == "detail_budget"
+        assert last["details_unknown_reason"] == "detail_budget"
+
+
+def test_time_budget_stops_read_attempts() -> None:
+    # Arrange: expire after the initial six requests including waypoint pages.
+    client, calls = peer()
+    waits = 0
+
+    def wait(seconds: float) -> None:
+        nonlocal waits
+        waits += 1
+        if len(calls) >= 6:
+            raise SnapshotTimeBudget("SECRET")
+
+    client.set_wait(wait)
+    # Act.
+    with client:
+        report = capability_snapshot(client)
+    # Assert: only one rejected attempt; subsequent rows are deferred locally.
+    assert len(calls) == 6
+    assert waits == 7
+    assert report["scope"]["truncated"] is True
+    assert report["scope"]["truncation_reasons"] == ["time_budget"]
+    for kind in ("markets", "shipyards"):
+        for row in report["opportunity_observations"][kind]:
+            assert row["reason"] == "time_budget"
+            assert row["details_observed_at"] is None
+    assert "SECRET" not in json.dumps(report)
+
+
+def test_other_abort_is_not_mislabeled_as_time_budget() -> None:
+    # Arrange.
+    client, calls = peer()
+
+    def wait(seconds: float) -> None:
+        raise RuntimeError("unrelated interruption")
+
+    client.set_wait(wait)
+    # Act / Assert.
+    with client, pytest.raises(RequestAborted):
+        capability_snapshot(client)
+    assert calls == []
+
+
+def test_malformed_waypoint_and_trait_items_preserve_valid_sites() -> None:
+    # Arrange.
+    client, _ = peer(
+        waypoints=[
+            None,
+            "bad-waypoint",
+            {
+                "symbol": "X1-TEST-A",
+                "traits": [None, {"symbol": "MARKETPLACE"}],
+            },
+        ]
+    )
+    # Act.
+    with client:
+        report = capability_snapshot(client)
+    # Assert: malformed entries remain null; valid site discovery survives.
+    opportunities = report["opportunity_observations"]
+    assert opportunities["waypoints"]["data"][:2] == [None, None]
+    assert len(opportunities["markets"]) == 1
+    assert opportunities["markets"][0]["details_state"] == "observed"
+
+
+@pytest.mark.parametrize("save_fails", [False, True])
+def test_output_creates_parents_or_preserves_json_on_stdout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, save_fails: bool
+) -> None:
+    # Arrange: a missing output parent, or an existing directory as the file.
+    client, calls = peer()
+    output = tmp_path if save_fails else tmp_path / "new" / "snapshot.json"
+    monkeypatch.setenv("ST_TOKEN", "SECRET")
+    monkeypatch.setattr(capabilities_cmd, "load_dotenv", lambda: None)
+    monkeypatch.setattr(
+        capabilities_cmd, "SpaceTradersClient", lambda _: client
+    )
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    # Act.
+    result = CliRunner().invoke(
+        app, ["capability-snapshot", "--output", str(output)]
+    )
+    # Assert: saving failure does not replay reads or discard collected data.
+    assert result.exit_code == (1 if save_fails else 0)
+    rendered = result.stdout if save_fails else output.read_text()
+    assert (
+        json.loads(rendered)["account_observations"]["agent"]["data"]["symbol"]
+        == "TEST"
+    )
+    assert calls.count("/my/agent") == 1
+    assert "SECRET" not in rendered
+    assert str(tmp_path) not in result.output
+    if save_fails:
+        assert "file save failed" in result.stderr
+
+
+def test_cli_deadline_marks_report_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange: clock advances to the deadline after constructing the client.
+    client, calls = peer()
+    clock = 0.0
+
+    def factory(token: str) -> SpaceTradersClient:
+        nonlocal clock
+        clock = 180.0
+        return client
+
+    monkeypatch.setenv("ST_TOKEN", "SECRET")
+    monkeypatch.setattr(capabilities_cmd, "load_dotenv", lambda: None)
+    monkeypatch.setattr(capabilities_cmd, "SpaceTradersClient", factory)
+    monkeypatch.setattr(time, "monotonic", lambda: clock)
+    # Act.
+    result = CliRunner().invoke(app, ["capability-snapshot"])
+    # Assert: deadline prevents even the first request and labels partial data.
+    assert result.exit_code == 0
+    assert calls == []
+    report = json.loads(result.stdout)
+    assert report["scope"]["truncation_reasons"] == ["time_budget"]
+    assert report["account_observations"]["agent"]["reason"] == "time_budget"

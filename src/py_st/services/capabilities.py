@@ -9,7 +9,12 @@ from typing import Any
 import httpx
 
 from py_st.client.client import SpaceTradersClient
-from py_st.client.transport import APIError
+from py_st.client.transport import APIError, RequestAborted
+
+
+class SnapshotTimeBudget(APIError):
+    """The snapshot deadline prevented another request from dispatching."""
+
 
 # Explicit field projection excludes descriptions, transactions, account IDs,
 # response errors and any future API fields from publishable evidence.
@@ -107,10 +112,18 @@ def capability_snapshot(client: SpaceTradersClient) -> dict[str, Any]:
     Authentication/reset failures abort immediately. Other unavailable reads
     become explicit unknowns; exception text/payloads never enter the report.
     """
+    truncated: set[str] = set()
+
+    def budget_abort(exc: RequestAborted) -> None:
+        if not isinstance(exc.__cause__, SnapshotTimeBudget):
+            raise exc
+        truncated.add("time_budget")
 
     def observe(
         path: str, schema: Any, *, pages: bool = False
     ) -> dict[str, Any]:
+        if "time_budget" in truncated:
+            return {"state": "unknown", "reason": "time_budget", "data": None}
         try:
             data = client.request("GET", path, paginate=pages)
             if not isinstance(data, list if pages else dict):
@@ -120,6 +133,9 @@ def capability_snapshot(client: SpaceTradersClient) -> dict[str, Any]:
                 "observed_at": timestamp(),
                 "data": project(data, schema),
             }
+        except RequestAborted as exc:
+            budget_abort(exc)
+            return {"state": "unknown", "reason": "time_budget", "data": None}
         except APIError as exc:
             if exc.authentication_failed:
                 raise
@@ -131,6 +147,8 @@ def capability_snapshot(client: SpaceTradersClient) -> dict[str, Any]:
     reset: Any = None
     try:
         reset = project(client.status().get("resetDate"), None)
+    except RequestAborted as exc:
+        budget_abort(exc)
     except APIError as exc:
         if exc.authentication_failed:
             raise
@@ -156,10 +174,16 @@ def capability_snapshot(client: SpaceTradersClient) -> dict[str, Any]:
     shipyards: list[dict[str, Any]] = []
     details = 0
     for waypoint in waypoints["data"] or []:
+        if not isinstance(waypoint, dict):
+            continue
         symbol = waypoint["symbol"]
         if not isinstance(symbol, str):
             continue
-        traits = {t["symbol"] for t in waypoint["traits"] or []}
+        traits = {
+            t["symbol"]
+            for t in waypoint["traits"] or []
+            if isinstance(t, dict)
+        }
         for trait, endpoint, schema, target, detail_field in (
             ("MARKETPLACE", "market", MARKET, markets, "tradeGoods"),
             ("SHIPYARD", "shipyard", SHIPYARD, shipyards, "ships"),
@@ -167,17 +191,25 @@ def capability_snapshot(client: SpaceTradersClient) -> dict[str, Any]:
             if trait not in traits:
                 continue
             observation: dict[str, Any]
-            if details >= 80:
+            if "time_budget" in truncated:
+                observation = {
+                    "state": "unknown",
+                    "reason": "time_budget",
+                    "data": None,
+                }
+            elif details >= 80:
+                truncated.add("detail_budget")
                 observation = {
                     "state": "unknown",
                     "reason": "detail_budget",
                     "data": None,
                 }
             else:
-                details += 1
                 observation = observe(
                     f"/systems/{system}/waypoints/{symbol}/{endpoint}", schema
                 )
+                if observation.get("reason") != "time_budget":
+                    details += 1
             data = observation["data"] or {}
             known = data.get(detail_field) is not None
             target.append(
@@ -186,7 +218,11 @@ def capability_snapshot(client: SpaceTradersClient) -> dict[str, Any]:
                     **observation,
                     "details_state": "observed" if known else "unknown",
                     "details_unknown_reason": (
-                        None if known else "not_returned_or_location_gated"
+                        None
+                        if known
+                        else observation.get(
+                            "reason", "not_returned_or_location_gated"
+                        )
                     ),
                     "details_observed_at": (
                         observation.get("observed_at") if known else None
@@ -204,6 +240,8 @@ def capability_snapshot(client: SpaceTradersClient) -> dict[str, Any]:
             "reachability": "same_system_candidates_not_route_verified",
             "other_systems": "deferred",
             "freshness": "fresh_GET_only_no_historical_cache",
+            "truncated": bool(truncated),
+            "truncation_reasons": sorted(truncated),
         },
         "game_capabilities": {
             "evidence": "client endpoints and generated API models",

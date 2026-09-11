@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 from py_st.client.client import SpaceTradersClient
 from py_st.client.transport import APIError
-from py_st.services.capabilities import capability_snapshot
+from py_st.services.capabilities import SnapshotTimeBudget, capability_snapshot
 
 
 def snapshot(
@@ -37,7 +37,7 @@ def snapshot(
 
     def wait(seconds: float) -> None:
         if time.monotonic() + seconds >= deadline:
-            raise APIError("Snapshot time budget exhausted")
+            raise SnapshotTimeBudget("Snapshot time budget exhausted")
         time.sleep(seconds)
 
     try:
@@ -47,11 +47,6 @@ def snapshot(
         rendered = json.dumps(report, indent=2, allow_nan=False)
         # Defense in depth even if credential material appears in allowed data.
         rendered = rendered.replace(token, "[REDACTED]")
-        if output is None:
-            typer.echo(rendered)
-        else:
-            output.write_text(rendered + "\n", encoding="utf-8")
-            typer.echo("Sanitized snapshot saved.")
     except Exception as exc:
         message = "Snapshot failed; no response or exception details emitted."
         if isinstance(exc, APIError) and exc.authentication_failed:
@@ -63,3 +58,19 @@ def snapshot(
         raise typer.Exit(1) from None
     finally:
         logging.disable(previous)
+
+    if output is None:
+        typer.echo(rendered)
+        return
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered + "\n", encoding="utf-8")
+    except OSError:
+        typer.echo(
+            "Snapshot collected, but file save failed; "
+            "sanitized JSON follows on stdout.",
+            err=True,
+        )
+        typer.echo(rendered)
+        raise typer.Exit(1) from None
+    typer.echo("Sanitized snapshot saved.")
