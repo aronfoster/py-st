@@ -186,14 +186,16 @@ def test_browser_pending_journal_and_historical_scope(
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(viewport={"width": width, "height": 900})
-        page.add_init_script("""window.panelFlash = false;
+        page.add_init_script(
+            """window.panelFlash = false;
             new MutationObserver(() => {
                 if (document.querySelectorAll(
                     '#legacy-pages [data-page]:not([hidden])'
                 ).length > 1) window.panelFlash = true;
             }).observe(document, {subtree:true, childList:true,
                 attributes:true, attributeFilter:['hidden']});
-        """)
+        """
+        )
         page.goto(flight_http + "/#/fleet")
         expect(page.locator("#page-title")).to_have_text("Fleet")
         assert not page.evaluate("window.panelFlash")

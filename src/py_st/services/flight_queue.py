@@ -128,7 +128,8 @@ class FlightQueue:
                         "Explicit verified scope and mode required"
                     )
                 self.db.execute("PRAGMA journal_mode=WAL")
-                self.db.executescript("""
+                self.db.executescript(
+                    """
                     BEGIN IMMEDIATE;
                     CREATE TABLE settings (
                         id INTEGER PRIMARY KEY CHECK(id=1),
@@ -148,7 +149,8 @@ class FlightQueue:
                     );
                     PRAGMA user_version=1;
                     COMMIT;
-                """)
+                """
+                )
                 with self.db:
                     self.db.execute(
                         "INSERT INTO settings "
