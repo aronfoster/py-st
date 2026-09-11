@@ -108,7 +108,9 @@ def capability_snapshot(client: SpaceTradersClient) -> dict[str, Any]:
     become explicit unknowns; exception text/payloads never enter the report.
     """
 
-    def observe(path: str, schema: Any, *, pages: bool = False) -> Any:
+    def observe(
+        path: str, schema: Any, *, pages: bool = False
+    ) -> dict[str, Any]:
         try:
             data = client.request("GET", path, paginate=pages)
             if not isinstance(data, list if pages else dict):
@@ -141,7 +143,7 @@ def capability_snapshot(client: SpaceTradersClient) -> dict[str, Any]:
     contracts = observe("/my/contracts", CONTRACT, pages=True)
     hq = (agent["data"] or {}).get("headquarters")
     system = hq.rsplit("-", 1)[0] if isinstance(hq, str) else None
-    waypoints = (
+    waypoints: dict[str, Any] = (
         observe(f"/systems/{system}/waypoints", WAYPOINT, pages=True)
         if system
         else {

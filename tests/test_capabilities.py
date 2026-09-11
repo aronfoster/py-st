@@ -1,6 +1,7 @@
 """Offline transport proof for the publishable capability snapshot."""
 
 import json
+import time
 from typing import Any
 
 import httpx
@@ -154,7 +155,7 @@ def test_cli_redacts_token_even_in_allowed_field(
     monkeypatch.setattr(
         capabilities_cmd, "SpaceTradersClient", lambda _: client
     )
-    monkeypatch.setattr(capabilities_cmd.time, "sleep", lambda _: None)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
     # Act.
     result = CliRunner().invoke(app, ["capability-snapshot"])
     # Assert.
@@ -174,7 +175,7 @@ def test_cli_auth_error_has_no_payload(
     monkeypatch.setattr(
         capabilities_cmd, "SpaceTradersClient", lambda _: client
     )
-    monkeypatch.setattr(capabilities_cmd.time, "sleep", lambda _: None)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
     # Act.
     result = CliRunner().invoke(app, ["capability-snapshot"])
     # Assert.
