@@ -31,14 +31,17 @@ password length, including blank.
 
 ## Important boundaries
 
-Final local verification: **1,589 passed, 12 skipped** in the full offline suite;
-**115 passed** in the explicit browser-enabled flight/dashboard suite (including
+Review follow-up verification: **1,602 passed, 13 skipped** in the offline suite;
+**129 passed** in the explicit browser-enabled flight/dashboard suite (including
 integration checks). Black check, Ruff `--no-fix`, mypy and `git diff --check`
 passed. Desktop/mobile browser screenshots are under
-`.cache/nightly/flight-commit-browser/test_browser_trip_1440_0/flight-1440.png`
+`.cache/nightly/flight-review-final-browser/test_browser_trip_1440_0/flight-1440.png`
 and `test_browser_trip_390_0/flight-390.png` in that same test root.
-All checks were repeated before this owner-requested delivery, including the
-password change. The agent's verification used synthetic state; it made no live
+PR #46 review fixes cover setup STOP handling, deferred arrival polling,
+preserved reconciliation drafts, login/error handling, demo lookup failures,
+and execution compatibility checks over open commands. The owner requested
+committing and pushing these fixes to the existing review branch.
+The agent's verification used synthetic state; it made no live
 requests or changes to the authoritative ledger or STOP. The owner's report is
 separate from that automated offline proof.
 

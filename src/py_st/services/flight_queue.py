@@ -170,7 +170,10 @@ class FlightQueue:
             or settings["root"] != str(self.root)
         ):
             raise ValueError("Invalid managed account configuration")
-        for row in self.db.execute("SELECT * FROM commands"):
+        for row in self.db.execute(
+            "SELECT * FROM commands WHERE status NOT IN "
+            "('completed','cancelled','blocked')"
+        ):
             payload = validate(json.loads(row["payload"]))
             expected = steps(payload)
             if (

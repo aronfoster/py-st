@@ -7,7 +7,7 @@ import json
 import math
 import socket
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +18,7 @@ from py_st.services.automation import SafetyStop, Session
 from py_st.services.flight_queue import FlightQueue, now
 from py_st.services.intelligence import Intelligence
 from py_st.services.stop_control import request_stop, stop_requested
-from py_st.services.strategies import refuel_run
+from py_st.services.strategies import CREDIT_FLOOR, FUEL_ALLOWANCE, refuel_run
 
 
 def preview(
@@ -293,7 +293,11 @@ class FlightWorker:
             self.queue.update(
                 command["id"],
                 "blocked",
-                "Dispatch not sent or definitively rejected",
+                (
+                    "Dispatch not sent; revalidate before resubmitting"
+                    if action["status"] == "not_sent"
+                    else "Dispatch definitively rejected; inspect journal"
+                ),
                 evidence=action,
             )
         else:
@@ -312,6 +316,7 @@ class FlightWorker:
         previous = command.get("evidence") or {}
         if not isinstance(previous, dict):
             previous = {}
+        previous.pop("arrival_poll_after", None)
         previous[command["steps"][command["step"]]] = evidence
         self.queue.update(
             command["id"],
@@ -341,8 +346,16 @@ class FlightWorker:
             return False
         command = self.queue.get(row[0])
         try:
-            self.fresh()
-            if self.recover(command):
+            if command["status"] == "in_transit":
+                after = (command.get("evidence") or {}).get(
+                    "arrival_poll_after"
+                )
+                if after and datetime.fromisoformat(after) > datetime.now(UTC):
+                    self.queue.heartbeat("waiting for arrival")
+                    return False
+            if command["status"] == "dispatching":
+                self.fresh()
+                self.recover(command)
                 return True
             self.queue.update(command["id"], "running", "Revalidating step")
             self.execute_step(command)
@@ -365,6 +378,11 @@ class FlightWorker:
             current = self.queue.get(command["id"])
             if current["status"] == "dispatching":
                 self.recover(current)
+                if (
+                    isinstance(exc, SafetyStop)
+                    and self.queue.get(command["id"])["status"] == "blocked"
+                ):
+                    self.queue.update(command["id"], "blocked", str(exc))
             elif stop_requested(self.root):
                 reason = "STOP interrupted; explicit owner resume required"
                 if isinstance(exc, APIError) and exc.authentication_failed:
@@ -393,6 +411,7 @@ class FlightWorker:
         payload = command["payload"]
         step = command["steps"][command["step"]]
         if step == "reconcile":
+            self.fresh()
             original = self.queue.get(payload["command"])
             if original["status"] != "reconciliation_required":
                 raise SafetyStop(
@@ -471,11 +490,18 @@ class FlightWorker:
             if nav["waypointSymbol"] != payload["destination"]:
                 raise SafetyStop("Ship destination changed during trip")
             if nav["status"] == "IN_TRANSIT":
+                current_time = datetime.now(UTC)
+                arrival = datetime.fromisoformat(nav["route"]["arrival"])
+                remaining = (arrival - current_time).total_seconds()
+                delay = min(30, remaining) if remaining > 0 else 5
+                after = (current_time + timedelta(seconds=delay)).isoformat()
+                evidence = dict(command.get("evidence") or {})
+                evidence["arrival_poll_after"] = after
                 self.queue.update(
                     command["id"],
                     "in_transit",
-                    "Awaiting API-confirmed arrival",
-                    evidence=command.get("evidence"),
+                    f"Awaiting API-confirmed arrival; next check {after}",
+                    evidence=evidence,
                 )
                 return
             self.advance(command, {"ship": ship, "observed": now()})
@@ -495,7 +521,7 @@ class FlightWorker:
                 != ship
                 or latest["contracts"] != state["contracts"]
                 or latest["agent"]["credits"]
-                < plan.get("protected_credits", 50000)
+                < plan.get("protected_credits", CREDIT_FLOOR)
             ):
                 raise SafetyStop("Flight preconditions changed before orbit")
         if (
@@ -532,7 +558,7 @@ class FlightWorker:
                     "Flight preconditions changed; refresh/replan"
                 )
             if latest["agent"]["credits"] < plan.get(
-                "protected_credits", 50000
+                "protected_credits", CREDIT_FLOOR
             ):
                 raise SafetyStop(
                     "Flight would violate protected credit reserve"
@@ -597,7 +623,9 @@ class FlightWorker:
                 latest_ship != ship
                 or latest["contracts"] != state["contracts"]
                 or latest["agent"]["credits"]
-                < 51000 + plan["maximum_estimated_cost"]
+                < CREDIT_FLOOR
+                + FUEL_ALLOWANCE
+                + plan["maximum_estimated_cost"]
             ):
                 raise SafetyStop(
                     "Refuel preconditions changed; refresh/replan"

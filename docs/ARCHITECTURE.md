@@ -37,7 +37,9 @@ Setup is explicit and preserves an existing live ledger. Missing/newer state is
 refused, never replaced with an empty database.
 
 Commands bind to a reset/agent scope. Every tick checks command schema, versions,
-kinds and steps; fresh account identity must match before execution. An abstract
+kinds and steps for executable work; terminal history is not decoded for
+execution compatibility on each poll. Fresh account identity must match before
+execution. An abstract
 Linux Unix-domain socket keyed by reset/agent excludes other local workers even
 when they use different state paths. The original filesystem Session lock also
 excludes legacy Sessions sharing the root. Real-client mutations outside the
@@ -66,6 +68,11 @@ Arrival is a fresh API observation, not an elapsed countdown. Travel previews
 are labeled estimates with original timestamps and assumptions; missing inputs
 stay unknown. Navigation evidence includes estimated versus observed fuel/time.
 Actual refuel receipts update the shared cash report.
+
+While in transit, the next observation time is persisted in command evidence.
+The worker polls at most every 30 seconds (sooner at expected arrival), keeping
+heartbeat and STOP handling independent of API polling. Server polling preserves
+the owner's reconciliation draft and caret rather than recreating an empty form.
 
 ## Boundaries
 

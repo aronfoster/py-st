@@ -148,13 +148,13 @@ async function loadMarketHistory(){
 }
 let ledger={}, deskEvidence=null, deskSnapshot=null, builderBase=null, deskVersion=0, reportVersion=0, modelVersion=0, doctorVersion=0;
 let explorerSystem='', explorerWaypoint='', explorerShip='';
-let flightManaged=false, flightLoggedIn=false, flightVersion=0;
+let flightManaged=false, flightLoggedIn=false, flightVersion=0, authReady=false;
 function flightSelection(){
  $('flight-selection').textContent=`Ship: ${explorerShip||'select below'} / Destination: ${explorerWaypoint||'select below'} / System: ${explorerSystem||'unknown'}`;
 }
 async function flightPost(path,body){return requestJSON(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf,...body})})}
 async function loadAuth(){
- const auth=await requestJSON('/api/auth');flightManaged=auth.managed;flightLoggedIn=auth.authenticated;
+ const auth=await requestJSON('/api/auth');flightManaged=auth.managed;flightLoggedIn=auth.authenticated;authReady=true;
  $('flight-login').hidden=!flightManaged||flightLoggedIn;$('flight-controls').hidden=!flightManaged||!flightLoggedIn;
  if(flightManaged){document.querySelector('.lead .eyebrow').textContent='Local flight operations / shared observations';$('resume').textContent='Resume worker';document.querySelector('footer').firstChild.textContent='LOCAL ONLY / Authenticated resume permits queued work. STOP survives restart. ';}
  if(flightManaged&&flightLoggedIn)await loadFlight();
@@ -166,6 +166,8 @@ async function loadFlight(){
   const d=await requestJSON('/api/flight');if(version!==flightVersion||scope!==$('scope').value)return;
   const settings=d.settings,stamp=settings.heartbeat,seconds=stamp?(Date.now()-Date.parse(stamp))/1000:Infinity;
   $('flight-heartbeat').textContent=`${settings.mode==='demo'?'SYNTHETIC OFFLINE WORLD':'LIVE ADAPTER'} / ${settings.scope} / ${settings.paused?'PAUSED':settings.worker_state} / heartbeat ${stamp||'never'} (${seconds>15?'stale: worker liveness unknown':'recent heartbeat'}).`;
+  const drafts=new Map([...$('flight-commands').querySelectorAll('textarea')].map(input=>[input.dataset.commandId,input.value]));
+  const focused=document.activeElement,editing=focused?.tagName==='TEXTAREA'&&$('flight-commands').contains(focused)?{id:focused.dataset.commandId,start:focused.selectionStart,end:focused.selectionEnd}:null;
   $('flight-commands').replaceChildren();
   if(scope&&scope!==settings.scope){$('flight-message').textContent='This historical scope has no command authority.';return;}
   d.commands.forEach(c=>{
@@ -173,11 +175,12 @@ async function loadFlight(){
    const details=node('details');details.append(node('summary','Command, estimates and observed evidence'),node('pre',JSON.stringify(c,null,2)));card.append(details);
    if(c.status==='reconciliation_required'){
     card.append(node('p','Refresh the game snapshot and inspect ship, credits and journal evidence. This review cancels dependent steps; it does not repeat the mutation.'));
-    const label=node('label','Observed outcome explanation (20+ characters)'),input=node('textarea');input.style.minHeight='80px';input.setAttribute('aria-label',`Outcome explanation for command ${c.id}`);label.append(input);card.append(label);
+    const label=node('label','Observed outcome explanation (20+ characters)'),input=node('textarea');input.style.minHeight='80px';input.dataset.commandId=String(c.id);input.value=drafts.get(String(c.id))||'';input.setAttribute('aria-label',`Outcome explanation for command ${c.id}`);label.append(input);card.append(label);
     const button=node('button','Record reviewed outcome and cancel remaining steps');button.onclick=()=>submitFlight({kind:'reconcile',command:c.id,explanation:input.value});card.append(button);
    }
    $('flight-commands').append(card);
   });
+  if(editing){const input=[...$('flight-commands').querySelectorAll('textarea')].find(input=>input.dataset.commandId===editing.id);if(input){input.focus({preventScroll:true});input.setSelectionRange(editing.start,editing.end);}}
  }catch(e){if(version===flightVersion)$('flight-message').textContent=e.message;}
 }
 async function sendFlight(envelope){
@@ -425,23 +428,23 @@ function render(d){
   if(d.scope){$('export').href='/api/report?scope='+encodeURIComponent(d.scope);$('export').removeAttribute('aria-disabled');}else{$('export').removeAttribute('href');$('export').setAttribute('aria-disabled','true');}
    renderRuns(d.automation_runs||[]);syncDesk(d);syncMarket(d);loadFlight();
 }
-async function refresh(){const version=++reportVersion;try{const d=await requestJSON('/api/report?scope='+encodeURIComponent($('scope').value));if(version!==reportVersion)return;render(d);$('error').textContent=''}catch(e){if(version===reportVersion){$('error').textContent=e.message;if(!ledger.scope){$('observed').textContent='Scope data unavailable. Refresh ledger to retry.';$('desk-status').textContent='Scope data unavailable. Refresh ledger to retry.';}}}}
+async function refresh(){if(!authReady||(flightManaged&&!flightLoggedIn))return;const version=++reportVersion;try{const d=await requestJSON('/api/report?scope='+encodeURIComponent($('scope').value));if(version!==reportVersion)return;render(d);$('error').textContent=''}catch(e){if(version===reportVersion){if(e.status===401){clearScope();flightLoggedIn=false;await loadAuth();return;}$('error').textContent=e.message;if(!ledger.scope){$('observed').textContent='Scope data unavailable. Refresh ledger to retry.';$('desk-status').textContent='Scope data unavailable. Refresh ledger to retry.';}}}}
 async function control(action){try{const r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,csrf})});if(!r.ok)throw Error('Control rejected');await refresh()}catch(e){$('error').textContent=e.message}}
 $('contract-select').onchange=loadSources;$('source-reload').onclick=loadSources;$('model-ship').onchange=prefillModel;$('prefill').onclick=prefillModel;$('model-form').onsubmit=calculateModel;$('model-input').oninput=invalidateModel;
 $('builder-form').onsubmit=buildDraft;$('builder-form').oninput=event=>{event.target.removeAttribute('aria-invalid');$('builder-error').textContent='';$('builder-status').textContent='Form changed. Build draft from form to apply; JSON is unchanged.';};
-$('refresh').onclick=refresh;$('scope').onchange=()=>{clearScope();refresh()};$('pause').onclick=()=>control('pause');$('resume').onclick=()=>control('resume');refresh();setInterval(refresh,10000);
+$('refresh').onclick=refresh;$('scope').onchange=()=>{clearScope();refresh()};$('pause').onclick=()=>control('pause');$('resume').onclick=()=>control('resume');setInterval(refresh,10000);
 $('doctor-check').onclick=checkDoctor;
 $('system-select').onchange=()=>{explorerSystem=$('system-select').value;explorerWaypoint='';drawExplorer()};$('explorer-ship').onchange=()=>{explorerShip=$('explorer-ship').value;const ship=ledger.explorer?.ships.find(s=>s.symbol===explorerShip),target=ship?.status==='IN_TRANSIT'?ship.destination:ship?.waypoint,system=target?systemForWaypoint(target):'';if(system){explorerSystem=system;$('system-select').value=system;explorerWaypoint=target;}drawExplorer()};
 $('market-select').onchange=()=>{$('good-select').value='';showMarket();};$('good-select').onchange=loadMarketHistory;
 $('login-form').onsubmit=async e=>{e.preventDefault();try{await flightPost('/api/login',{password:$('owner-password').value});$('owner-password').value='';$('login-error').textContent='';await loadAuth();await refresh();}catch(error){$('owner-password').value='';$('login-error').textContent=error.message;}};
-$('flight-logout').onclick=async()=>{await flightPost('/api/logout',{});flightVersion++;clearScope();await loadAuth();};
+$('flight-logout').onclick=async()=>{try{await flightPost('/api/logout',{});flightVersion++;clearScope();await loadAuth();}catch(e){$('flight-message').textContent='Logout failed: '+e.message;}};
 $('flight-refresh').onclick=()=>submitFlight({kind:'refresh',system:explorerSystem});
 $('flight-orbit').onclick=()=>shipCommand('orbit');$('flight-dock').onclick=()=>shipCommand('dock');$('flight-refuel').onclick=()=>shipCommand('refuel');
 $('trip-dock').onchange=()=>{if(!$('trip-dock').checked)$('trip-refuel').checked=false;};$('trip-refuel').onchange=()=>{if($('trip-refuel').checked)$('trip-dock').checked=true;};
 $('flight-trip').onclick=()=>{if(!explorerShip||!explorerWaypoint){$('flight-message').textContent='Select a ship and destination first.';return;}submitFlight({kind:'trip',ship:explorerShip,destination:explorerWaypoint,dock:$('trip-dock').checked,refuel:$('trip-refuel').checked});};
 $('flight-preview').onclick=async()=>{const scope=$('scope').value,ship=explorerShip,destination=explorerWaypoint;try{const d=await flightPost('/api/flight-preview',{scope,ship,destination});if(scope===$('scope').value&&ship===explorerShip&&destination===explorerWaypoint)$('flight-estimate').textContent=JSON.stringify(d,null,2);}catch(e){$('flight-message').textContent=e.message;}};
 $('flight-retry').hidden=!localStorage.getItem('flight-pending');$('flight-retry').onclick=()=>{const pending=localStorage.getItem('flight-pending');if(pending)sendFlight(JSON.parse(pending));};
-loadAuth().catch(e=>{$('login-error').textContent=e.message;});
+loadAuth().then(refresh).catch(e=>{$('login-error').textContent=e.message;});
 </script>
 </body>
 </html>

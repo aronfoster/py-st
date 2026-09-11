@@ -176,7 +176,8 @@ class HttpTransport:
                     self.dispatch_guard(method, path)
                 except Exception as exc:
                     raise RequestAborted(
-                        "Dispatch authority refused", status=rejection_status
+                        f"Dispatch authority refused: {exc}",
+                        status=rejection_status,
                     ) from exc
             try:
                 response = self._client.request(

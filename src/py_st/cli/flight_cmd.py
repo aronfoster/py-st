@@ -88,9 +88,14 @@ def setup(demo: bool = False) -> None:
                     raise ValueError("Invalid agent identity")
                 scope = f"{status['resetDate']}:{agent['symbol']}"
                 if scope not in store.scopes():
+                    request_stop(root)
                     raise ValueError(
                         "Account/reset absent from existing ledger"
                     )
+        except APIError as exc:
+            if exc.authentication_failed:
+                request_stop(root)
+            raise
         finally:
             store.close()
     save_password(root, password)

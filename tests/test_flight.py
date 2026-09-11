@@ -18,7 +18,9 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from typer.testing import CliRunner
 
+from py_st.cli.flight_cmd import flight_app
 from py_st.client import APIError, SpaceTradersClient
 from py_st.services.automation import SafetyStop, Session
 from py_st.services.dashboard import dashboard_server
@@ -231,6 +233,182 @@ def test_arrival_must_be_observed(runner: FlightWorker) -> None:
         runner.tick()
     assert runner.queue.get(command_id)["status"] == "in_transit"
     assert len(world(runner.root)["mutations"]) == 2
+
+
+def test_transit_poll_is_deferred_without_api_calls(
+    runner: FlightWorker,
+) -> None:
+    world(runner.root, transit_seconds=3600)
+    command_id = submit(runner, TRIP)
+    for _ in range(3):
+        runner.tick()
+    with patch.object(
+        runner.client, "request", wraps=runner.client.request
+    ) as send:
+        for _ in range(30):
+            assert runner.tick() is False
+        send.assert_not_called()
+    assert runner.queue.get(command_id)["status"] == "in_transit"
+    request_stop(runner.root)
+    assert runner.tick() is False
+    assert runner.queue.report()["settings"]["worker_state"] == "paused"
+
+
+def test_simple_step_does_not_duplicate_snapshot_reads(
+    runner: FlightWorker,
+) -> None:
+    command_id = submit(runner, {"kind": "orbit", "ship": "SYNTHETIC-1"})
+    with patch.object(
+        runner.run, "refresh", wraps=runner.run.refresh
+    ) as refresh:
+        runner.tick()
+        assert refresh.call_count == 1
+    assert runner.queue.get(command_id)["status"] == "completed"
+
+
+def test_dispatch_expiry_keeps_actionable_command_reason(
+    runner: FlightWorker,
+) -> None:
+    mutate = runner.run.mutate
+
+    def expired(
+        path: str, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        runner.dispatch_until = time.monotonic() - 1
+        return mutate(path, body)
+
+    with patch.object(runner.run, "mutate", side_effect=expired):
+        result = finish(
+            runner, submit(runner, {"kind": "orbit", "ship": "SYNTHETIC-1"})
+        )
+    assert result["status"] == "blocked"
+    assert "evidence expired" in result["detail"]
+    assert "replan" in result["detail"]
+    assert not world(runner.root)["mutations"]
+
+
+def test_deferred_arrival_survives_restart(flight_root: Path) -> None:
+    world(flight_root, transit_seconds=3600)
+    with demo_client(flight_root) as client:
+        client._transport._interval = 0
+        worker = FlightWorker(flight_root, client)
+        command_id = submit(worker, TRIP)
+        for _ in range(3):
+            worker.tick()
+        worker.close()
+    with demo_client(flight_root) as client:
+        client._transport._interval = 0
+        worker = FlightWorker(flight_root, client)
+        try:
+            with patch.object(client, "request", wraps=client.request) as send:
+                assert worker.tick() is False
+                send.assert_not_called()
+            command = worker.queue.get(command_id)
+            evidence = command["evidence"] | {
+                "arrival_poll_after": "2000-01-01T00:00:00+00:00"
+            }
+            worker.queue.update(
+                command_id, "in_transit", "Due", evidence=evidence
+            )
+            worker.tick()
+            assert worker.queue.get(command_id)["status"] == "in_transit"
+            assert len(world(flight_root)["mutations"]) == 2
+        finally:
+            worker.close()
+
+
+@pytest.mark.parametrize("status,code", [(401, None), (400, 4113)])
+def test_setup_authentication_failure_persists_stop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+    code: int | None,
+) -> None:
+    create_demo(tmp_path)
+    client = SpaceTradersClient(
+        "synthetic",
+        httpx.Client(
+            base_url="https://offline.invalid",
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    status, json={"error": {"code": code}}
+                )
+            ),
+        ),
+    )
+    monkeypatch.setenv("ST_STATE_ROOT", str(tmp_path))
+    monkeypatch.setattr("py_st.cli.flight_cmd.live_client", lambda: client)
+    monkeypatch.setattr(
+        "py_st.cli.flight_cmd.getpass.getpass", lambda prompt: ""
+    )
+    result = CliRunner().invoke(flight_app, ["setup"])
+    assert result.exit_code == 1
+    assert (tmp_path / "STOP").exists()
+    assert not (tmp_path / ".state/flight.sqlite3").exists()
+    assert world(tmp_path)["mutations"] == []
+
+
+def test_unknown_demo_waypoint_blocks_without_crashing(
+    runner: FlightWorker,
+) -> None:
+    result = finish(
+        runner, submit(runner, TRIP | {"destination": "X-DEMO-Z9"})
+    )
+    assert result["status"] == "blocked"
+    assert not world(runner.root)["mutations"]
+    assert finish(runner, submit(runner, TRIP))["status"] == "completed"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/my/ships/UNKNOWN",
+        "/systems/X-DEMO/waypoints/X-DEMO-Z9",
+        "/systems/X-DEMO/waypoints/X-DEMO-Z9/market",
+    ],
+)
+def test_unknown_demo_resources_are_http_404(
+    runner: FlightWorker, path: str
+) -> None:
+    with pytest.raises(APIError) as error:
+        runner.client.request("GET", path)
+    assert error.value.status == 404
+
+
+def test_completed_history_is_not_validated_for_execution(
+    runner: FlightWorker,
+) -> None:
+    historical = submit(runner, TRIP)
+    runner.queue.update(historical, "completed", "Historical command", step=5)
+    with runner.queue.db:
+        runner.queue.db.execute(
+            "UPDATE commands SET version=99,payload=? WHERE id=?",
+            (json.dumps({"kind": "retired-command"}), historical),
+        )
+    active = submit(runner, {"kind": "orbit", "ship": "SYNTHETIC-1"})
+    assert finish(runner, active)["status"] == "completed"
+
+
+def test_worker_guard_explanation_reaches_legacy_cli() -> None:
+    from py_st.cli._errors import handle_errors
+
+    with (
+        SpaceTradersClient("synthetic") as client,
+        patch.object(client._client, "request") as send,
+    ):
+
+        @handle_errors
+        def blocked() -> None:
+            client.request("POST", "/my/ships/SHIP/orbit")
+
+        import typer
+
+        app = typer.Typer()
+        app.command()(blocked)
+        result = CliRunner().invoke(app, [])
+        assert result.exit_code == 1
+        assert "Use the flight worker" in result.output
+        send.assert_not_called()
 
 
 def test_unknown_outcome_blocks_replay_and_owner_review_cancels_steps(
@@ -525,6 +703,100 @@ def login(client: httpx.Client, origin: str) -> str:
     assert response.status_code == 200
     assert "HttpOnly" in response.headers["set-cookie"]
     return csrf
+
+
+def test_successful_logins_do_not_consume_failure_budget(
+    flight_http: str,
+) -> None:
+    with httpx.Client(base_url=flight_http) as client:
+        for _ in range(6):
+            csrf = login(client, flight_http)
+        for attempt in range(6):
+            response = client.post(
+                "/api/login",
+                headers={"Origin": flight_http},
+                json={"csrf": csrf, "password": "incorrect"},
+            )
+            assert response.status_code == (401 if attempt < 5 else 429)
+
+
+@pytest.mark.skipif(
+    os.environ.get("DASHBOARD_BROWSER_TESTS") != "1",
+    reason="Explicit offline browser suite",
+)
+def test_browser_preserves_review_draft_and_handles_auth_errors(
+    flight_http: str,
+    flight_root: Path,
+) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    queue = FlightQueue(flight_root)
+    command = queue.enqueue(SCOPE, uuid.uuid4().hex, TRIP)
+    queue.update(
+        command["id"],
+        "reconciliation_required",
+        "Synthetic unknown",
+        before_action=0,
+        evidence={"id": 1},
+    )
+    queue.close()
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        errors: list[str] = []
+        reports: list[str] = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.on(
+            "request",
+            lambda request: (
+                reports.append(request.url)
+                if "/api/report" in request.url
+                else None
+            ),
+        )
+        page.clock.install()
+        page.goto(flight_http)
+        expect(page.locator("#flight-login")).to_be_visible()
+        page.clock.fast_forward(10000)
+        expect(page.locator("#error")).to_be_empty()
+        assert reports == []
+        page.locator("#owner-password").fill(PASSWORD)
+        page.get_by_role("button", name="Log in", exact=True).click()
+        textarea = page.get_by_role(
+            "textbox", name=f"Outcome explanation for command {command['id']}"
+        )
+        draft = (
+            "Observed my ship in orbit; still inspecting fuel and receipts."
+        )
+        textarea.fill(draft)
+        textarea.press("ArrowLeft")
+        original = textarea.element_handle()
+        assert original is not None
+        with page.expect_response(
+            lambda response: response.url.endswith("/api/flight")
+        ):
+            page.clock.fast_forward(10000)
+        original.wait_for_element_state("hidden")
+        expect(textarea).to_have_value(draft)
+        expect(textarea).to_be_focused()
+        assert (
+            textarea.evaluate("element => element.selectionStart")
+            == len(draft) - 1
+        )
+        page.route(
+            "**/api/logout",
+            lambda route: route.fulfill(
+                status=503,
+                content_type="application/json",
+                body=json.dumps({"error": "Synthetic logout failure"}),
+            ),
+        )
+        page.locator("#flight-logout").click()
+        expect(page.locator("#flight-message")).to_contain_text(
+            "Logout failed"
+        )
+        assert errors == []
+        browser.close()
 
 
 def test_authentication_csrf_and_durable_http_submission(

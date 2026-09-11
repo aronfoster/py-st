@@ -259,8 +259,12 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                                 ),
                             )
                             return
-                        attempts.append(current)
-                    if not verify_password(root, body["password"]):
+                        valid_password = verify_password(
+                            root, body["password"]
+                        )
+                        if not valid_password:
+                            attempts.append(current)
+                    if not valid_password:
                         self.reply(
                             401, json.dumps({"error": "Invalid owner login"})
                         )

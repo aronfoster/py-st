@@ -33,6 +33,11 @@ refueling costs 72 credits: 123,456 → 123,384, ending at B2 with 100/100 fuel.
 The demo deliberately accelerates transit to three seconds; the real travel
 formula is still labeled an estimate and compared with the observed route.
 
+Use the literal IPv4 address `127.0.0.1`: `localhost` and `::1` are deliberately
+not accepted by the Host/Origin boundary. Restarting `flight serve` clears its
+in-memory login sessions, so log in again afterward even if the cookie has not
+expired. This does not clear queued work or the worker's desired pause state.
+
 Closing the page leaves the worker running. Reopen and log in if necessary to
 see persisted commands, fleet, credits and receipts. Browser submissions keep
 their request ID in local storage until acknowledged; a lost application response
@@ -42,6 +47,12 @@ Pause creates STOP and persists desired pause. Resume requires authentication.
 Stopping/restarting `flight worker` preserves the fake world and pending work.
 It never implicitly removes STOP. `worker --once` processes one bounded tick.
 Ctrl-C stops each process; no system service is installed by this task.
+
+During transit the worker records a next observation time, bounded to at most
+30 seconds or the expected arrival, whichever is sooner. Between observations
+it maintains its heartbeat and checks STOP without fetching the fleet again.
+An elapsed arrival time only triggers another observation; it never completes
+the arrival step on its own.
 
 ## Offline failure scenarios
 
@@ -103,10 +114,26 @@ reset/agent on this Linux host cannot dispatch, even from different checkouts.
 
 ## Storage, upgrade and restore
 
+### Interrupted setup
+
+Setup creates several files and is **not a single atomic transaction**. It never
+silently overwrites a partial root on retry. For a disposable demo, use a new
+empty demo root and retain the failed root for inspection. For a live root,
+preserve the existing intelligence ledger, backups and STOP: do not delete the
+root or replace its history. With both processes stopped, inspect only the new
+`owner.json` and `flight.sqlite3` setup artifacts. Retain a copy before removing
+an incomplete owner verifier or an incomplete queue with no submitted commands,
+then rerun setup. If the queue contains commands, use its supported recovery
+instead of reinitializing it. Authentication/reset failures during live setup
+persist STOP even when no flight queue has been created yet.
+
+### Compatibility and backups
+
 - Existing intelligence schema 1 is unchanged. The flight queue is a new,
   separately versioned schema 1 file; normal startup opens existing files only.
-- Queue schema, command kinds/versions/steps and managed identity are checked
-  before dispatch. Unsupported state must be opened with compatible code, not
+- Queue schema, executable command kinds/versions/steps and managed identity are
+  checked before dispatch. Completed/cancelled/blocked history is not revalidated
+  for execution on every poll. Unsupported open state needs compatible code, not
   repaired by deleting commands or resetting schema versions.
 - The root path is recorded. Moving it is not an implicit migration. Keep the same
   absolute root when changing checkouts. A future relocation should be an explicit
@@ -128,13 +155,13 @@ reset/agent on this Linux host cannot dispatch, even from different checkouts.
 
 ## Verification
 
-Final local results: **1,589 passed, 12 skipped** in normal offline pytest;
-**115 passed** in the explicit browser-enabled dashboard/flight invocation
+Review follow-up results: **1,602 passed, 13 skipped** in normal offline pytest;
+**129 passed** in the explicit browser-enabled dashboard/flight invocation
 (includes integration tests). Black, Ruff `--no-fix`, mypy and diff whitespace
 checks pass. Screenshots from this verification are:
 
-- `.cache/nightly/flight-commit-browser/test_browser_trip_1440_0/flight-1440.png`
-- `.cache/nightly/flight-commit-browser/test_browser_trip_390_0/flight-390.png`
+- `.cache/nightly/flight-review-final-browser/test_browser_trip_1440_0/flight-1440.png`
+- `.cache/nightly/flight-review-final-browser/test_browser_trip_390_0/flight-390.png`
 
 No live credentials/API requests or authoritative runtime-state changes were
 needed. Tests use isolated synthetic ledgers and fake remote state.
@@ -158,6 +185,10 @@ fleet/credit views at 1440px and 390px. Screenshots are retained in each browser
 test's ignored temporary root. Integration coverage includes full-trip economics,
 duplicate IDs, scope/ownership, restart boundaries, STOP, changed prerequisites,
 unknown/malformed outcomes, account/authentication mismatch and schema refusal.
+
+Run these test invocations sequentially. They intentionally share a synthetic
+reset/agent identity, so overlapping test processes contend for the same host
+ownership lock just as two workers for a real account would.
 
 ## Known limits / stopping boundary
 

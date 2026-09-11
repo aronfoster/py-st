@@ -156,6 +156,23 @@ def demo_client(root: Path) -> SpaceTradersClient:
 
 def dispatch(world: dict[str, Any], request: httpx.Request) -> httpx.Response:
     path = request.url.path
+    parts = path.split("/")
+    missing = httpx.Response(
+        404, json={"error": {"message": "Unknown synthetic resource"}}
+    )
+    if path.startswith("/my/ships/") and parts[3] not in {
+        ship["symbol"] for ship in world["ships"]
+    }:
+        return missing
+    if path.startswith("/systems/") and (
+        parts[2] != "X-DEMO"
+        or (
+            "/waypoints/" in path
+            and parts[4]
+            not in {point["symbol"] for point in world["waypoints"]}
+        )
+    ):
+        return missing
 
     def ok(data: Any) -> httpx.Response:
         return httpx.Response(200, json={"data": data})
@@ -215,6 +232,10 @@ def dispatch(world: dict[str, Any], request: httpx.Request) -> httpx.Response:
             return ok({"nav": nav})
         if kind == "navigate":
             body = json.loads(request.content)
+            if body.get("waypointSymbol") not in {
+                point["symbol"] for point in world["waypoints"]
+            }:
+                return missing
             target = next(
                 p
                 for p in world["waypoints"]
