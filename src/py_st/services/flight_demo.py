@@ -257,6 +257,11 @@ def dispatch(world: dict[str, Any], request: httpx.Request) -> httpx.Response:
     if request.method == "POST" and path.startswith("/my/ships/"):
         if path.endswith("/negotiate/contract"):
             symbol = parts[3]
+            ship = next(
+                (s for s in world["ships"] if s["symbol"] == symbol), None
+            )
+            if ship is None or ship["nav"]["status"] == "IN_TRANSIT":
+                return missing
             offer = {
                 "id": f"DEMO-CONTRACT-{len(world['contracts']) + 1}",
                 "factionSymbol": "COSMIC",
@@ -516,78 +521,6 @@ def dispatch(world: dict[str, Any], request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             400, json={"error": {"message": "Contract state"}}
         )
-        if kind in ("purchase", "sell") and nav["status"] == "DOCKED":
-            body = json.loads(request.content)
-            quote = next(
-                (
-                    g
-                    for g in world["markets"][nav["waypointSymbol"]][
-                        "tradeGoods"
-                    ]
-                    if g["symbol"] == body.get("symbol")
-                ),
-                None,
-            )
-            units = body.get("units")
-            if (
-                quote is None
-                or type(units) is not int
-                or units <= 0
-                or units > quote["tradeVolume"]
-            ):
-                return httpx.Response(
-                    400, json={"error": {"message": "Invalid trade"}}
-                )
-            inventory = ship["cargo"]["inventory"]
-            item = next(
-                (i for i in inventory if i["symbol"] == body["symbol"]), None
-            )
-            price = quote[
-                "purchasePrice" if kind == "purchase" else "sellPrice"
-            ]
-            total = price * units
-            if kind == "purchase":
-                if (
-                    ship["cargo"]["units"] + units > ship["cargo"]["capacity"]
-                    or world["agent"]["credits"] < total
-                ):
-                    return httpx.Response(
-                        400, json={"error": {"message": "Capacity/funds"}}
-                    )
-                world["agent"]["credits"] -= total
-                if item:
-                    item["units"] += units
-                else:
-                    inventory.append(
-                        {"symbol": body["symbol"], "units": units}
-                    )
-                ship["cargo"]["units"] += units
-            else:
-                if item is None or item["units"] < units:
-                    return httpx.Response(
-                        400, json={"error": {"message": "Cargo"}}
-                    )
-                world["agent"]["credits"] += total
-                item["units"] -= units
-                ship["cargo"]["units"] -= units
-                if item["units"] == 0:
-                    inventory.remove(item)
-            return ok(
-                {
-                    "agent": world["agent"],
-                    "cargo": ship["cargo"],
-                    "transaction": {
-                        "totalPrice": total,
-                        "units": units,
-                        "pricePerUnit": price,
-                        "tradeSymbol": body["symbol"],
-                        "type": kind.upper(),
-                        "shipSymbol": symbol,
-                        "waypointSymbol": nav["waypointSymbol"],
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    },
-                }
-            )
     return httpx.Response(
         404, json={"error": {"message": "Offline endpoint unavailable"}}
     )

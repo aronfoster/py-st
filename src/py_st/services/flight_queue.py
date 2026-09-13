@@ -65,8 +65,10 @@ def validate(payload: Any) -> dict[str, Any]:
         return payload
     if kind in ("accept_contract", "fulfill_contract"):
         fields = {"kind", "contract"}
+        if kind == "accept_contract":
+            fields |= {"evidence"}
     elif kind == "deliver_contract":
-        fields = {"kind", "contract", "ship", "good", "units"}
+        fields = {"kind", "contract", "ship", "good", "destination", "units"}
     else:
         fields = {"kind", "system"} if kind == "refresh" else {"kind", "ship"}
     if kind == "trip":
@@ -81,9 +83,12 @@ def validate(payload: Any) -> dict[str, Any]:
                 raise ValueError(f"Invalid {key}")
             continue
         value = payload[key]
-        if not isinstance(value, str) or not re.fullmatch(
-            r"[A-Z0-9_-]{1,80}", value
-        ):
+        pattern = r"[A-Z0-9_-]{1,80}"
+        if key == "contract":
+            pattern = r"[A-Za-z0-9_-]{1,80}"
+        elif key == "evidence":
+            pattern = r"[a-f0-9]{64}"
+        if not isinstance(value, str) or not re.fullmatch(pattern, value):
             raise ValueError(f"Invalid {key}")
     if kind in ("purchase", "sell"):
         try:
@@ -137,7 +142,8 @@ class FlightQueue:
                         "Explicit verified scope and mode required"
                     )
                 self.db.execute("PRAGMA journal_mode=WAL")
-                self.db.executescript("""
+                self.db.executescript(
+                    """
                     BEGIN IMMEDIATE;
                     CREATE TABLE settings (
                         id INTEGER PRIMARY KEY CHECK(id=1),
@@ -157,7 +163,8 @@ class FlightQueue:
                     );
                     PRAGMA user_version=1;
                     COMMIT;
-                """)
+                """
+                )
                 with self.db:
                     self.db.execute(
                         "INSERT INTO settings "

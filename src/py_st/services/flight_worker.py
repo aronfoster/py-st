@@ -87,6 +87,9 @@ def trade_preview(
                 )
                 if item["tradeSymbol"] == good:
                     procurement_remaining += remaining
+    procurement_remaining = max(
+        0, procurement_remaining - inventory.get(good, 0)
+    )
     credits = agent_row["data"]["credits"]
     total = price * units if type(price) is int and price > 0 else None
     free = ship["cargo"]["capacity"] - ship["cargo"]["units"]
@@ -126,9 +129,9 @@ def trade_preview(
         "trade_volume": volume,
         "credits_before": credits,
         "credits_after": (
-            credits - total
-            if kind == "purchase" and total is not None
-            else credits + total if total is not None else None
+            credits + (total if kind == "sell" else -total)
+            if total is not None
+            else None
         ),
         "cargo_before": ship["cargo"]["units"],
         "cargo_after": ship["cargo"]["units"]
@@ -178,6 +181,7 @@ def contract_preview(
         raise ValueError("Contract observation is unavailable")
     row = rows[0]
     contract = row["data"]
+    markets = store.latest(scope, "market")
     inventory: dict[str, list[dict[str, Any]]] = {}
     for ship_row in store.latest(scope, "ship"):
         for item in ship_row["data"].get("cargo", {}).get("inventory", []):
@@ -187,14 +191,17 @@ def contract_preview(
     sources: dict[str, list[dict[str, Any]]] = {}
     for delivery in contract.get("terms", {}).get("deliver", []):
         good = delivery.get("tradeSymbol")
+        if not isinstance(good, str):
+            raise ValueError("Contract deliverable good is unavailable")
         options = []
-        for market in store.latest(scope, "market"):
+        for market in markets:
             quote = next(
                 (
                     q
                     for q in market["data"].get("tradeGoods", [])
                     if q.get("symbol") == good
                     and type(q.get("purchasePrice")) is int
+                    and q["purchasePrice"] > 0
                 ),
                 None,
             )
@@ -215,15 +222,62 @@ def contract_preview(
                 )
         sources[str(good)] = sorted(options, key=lambda x: x["unit_price"])
     agents = store.latest(scope, "agent")
+    credits = agents[-1]["data"].get("credits") if agents else None
+    procurement_cost = 0
+    blockers: list[str] = []
+    if any(
+        other["data"].get("accepted") is not False
+        and other["data"].get("fulfilled") is not True
+        and other["key"] != contract_id
+        for other in store.latest(scope, "contract")
+    ):
+        blockers.append("Resolve existing uncosted contract obligations first")
+    remaining: dict[str, int] = {}
+    for delivery in contract.get("terms", {}).get("deliver", []):
+        good = delivery["tradeSymbol"]
+        remaining[good] = remaining.get(good, 0) + max(
+            0, delivery["unitsRequired"] - delivery["unitsFulfilled"]
+        )
+    for good, required in remaining.items():
+        held = sum(item["units"] for item in inventory.get(good, []))
+        needed = max(0, required - held)
+        fresh = [
+            source
+            for source in sources[good]
+            if source["freshness"] == "fresh"
+            and type(source["trade_volume"]) is int
+            and source["trade_volume"] >= needed
+        ]
+        if needed and not fresh:
+            blockers.append(f"No fresh funded source for {good}")
+        elif needed:
+            procurement_cost += needed * fresh[0]["unit_price"]
+    if type(credits) is not int:
+        blockers.append("Credit observation is unavailable")
+    elif credits - procurement_cost < CREDIT_FLOOR + FUEL_ALLOWANCE:
+        blockers.append("Procurement estimate violates protected reserves")
+    evidence_body = {
+        "contract": contract,
+        "cargo": inventory,
+        "sources": sources,
+        "credits": credits,
+    }
+    evidence = hashlib.sha256(
+        json.dumps(evidence_body, sort_keys=True).encode()
+    ).hexdigest()
     return {
         "contract": contract,
         "observed_at": row["observed_at"],
         "cargo": inventory,
         "sources": sources,
-        "credits": agents[-1]["data"].get("credits") if agents else None,
+        "credits": credits,
         "fixed_floor": CREDIT_FLOOR,
         "fuel_reserve": FUEL_ALLOWANCE,
         "estimated": True,
+        "procurement_cost": procurement_cost,
+        "feasible": not blockers,
+        "blockers": blockers,
+        "evidence": evidence,
         "warning": "Stored preview only; worker revalidates before dispatch.",
     }
 
@@ -721,8 +775,9 @@ class FlightWorker:
             for p in self.store.latest(self.queue.scope, "position")
         ):
             raise SafetyStop("Recover existing automation exposure first")
-        # Flight/refuel cannot yet cost active obligations. Trades protect
-        # contract cargo; purchases retain the additional fuel reserve.
+        # Contract travel without paid refueling is necessary for delivery.
+        # Refueling remains blocked until obligations are fully costed; trades
+        # separately protect reserves and accepted delivery cargo.
         if (
             not contract_kind
             and (
@@ -766,6 +821,8 @@ class FlightWorker:
                 deadline = contract.get(deadline_key) or terms.get(
                     deadline_key
                 )
+                if step == "accept_contract" and not deadline:
+                    deadline = contract.get("expiration")
                 if (
                     not isinstance(deadline, str)
                     or datetime.fromisoformat(deadline) <= now_at
@@ -774,6 +831,16 @@ class FlightWorker:
                 if step == "accept_contract":
                     if contract["accepted"] or contract["fulfilled"]:
                         raise SafetyStop("Contract is no longer an open offer")
+                    acceptance = contract_preview(
+                        self.store, self.queue.scope, payload["contract"]
+                    )
+                    if (
+                        not acceptance["feasible"]
+                        or acceptance["evidence"] != payload["evidence"]
+                    ):
+                        raise SafetyStop(
+                            "Acceptance evidence changed or is not funded"
+                        )
                     result = self.mutate(
                         command, f"/my/contracts/{payload['contract']}/accept"
                     )
@@ -785,6 +852,8 @@ class FlightWorker:
                         d
                         for d in terms.get("deliver", [])
                         if d.get("tradeSymbol") == payload["good"]
+                        and d.get("destinationSymbol")
+                        == payload["destination"]
                     ]
                     if len(matches) != 1:
                         raise SafetyStop("Good is not a unique deliverable")

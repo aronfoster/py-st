@@ -100,7 +100,8 @@ export interface Contract {
   factionSymbol: string;
   accepted: boolean;
   fulfilled: boolean;
-  deadlineToAccept: string;
+  deadlineToAccept?: string;
+  expiration: string;
   terms: {
     deadline: string;
     payment: { onAccepted: number; onFulfilled: number };
@@ -126,6 +127,10 @@ export interface ContractPreview {
   fixed_floor: number;
   fuel_reserve: number;
   estimated: boolean;
+  procurement_cost: number;
+  feasible: boolean;
+  blockers: string[];
+  evidence: string;
   warning: string;
 }
 
@@ -226,7 +231,16 @@ export function showPage(page: Page) {
 }
 
 /** Presentation guard only. The worker remains the execution authority. */
-export function setManualAvailability(reason: string | null) {
+let availabilityReason: string | null = null;
+let activeObligation = false;
+export function setManualAvailability(
+  reason: string | null,
+  hasActiveObligation = false,
+) {
+  availabilityReason = reason;
+  activeObligation = hasActiveObligation;
+  const paidTrip = (document.getElementById("trip-refuel") as HTMLInputElement)
+    .checked;
   for (const id of [
     "flight-trip",
     "flight-orbit",
@@ -234,8 +248,18 @@ export function setManualAvailability(reason: string | null) {
     "flight-refuel",
   ]) {
     const button = document.getElementById(id) as HTMLButtonElement;
-    button.disabled = reason !== null;
-    button.title = reason || "Submit to the guarded worker";
+    const reserveBlock =
+      activeObligation &&
+      (id === "flight-refuel" || (id === "flight-trip" && paidTrip));
+    button.disabled = reason !== null || reserveBlock;
+    button.title = reserveBlock
+      ? "Active contract: uncheck paid refueling or cost obligations first"
+      : reason || "Submit to the guarded worker";
     button.setAttribute("aria-describedby", "ship-ownership");
   }
 }
+document
+  .getElementById("trip-refuel")
+  ?.addEventListener("change", () =>
+    setManualAvailability(availabilityReason, activeObligation),
+  );

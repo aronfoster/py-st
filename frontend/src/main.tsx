@@ -54,16 +54,31 @@ function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
   const contracts = snapshot.ledger.contracts || [];
   const [selected, setSelected] = useState(contracts[0]?.key || "");
   const [preview, setPreview] = useState<ContractPreview | null>(null);
-  const [good, setGood] = useState("");
+  const [deliveryIndex, setDeliveryIndex] = useState("");
   const [units, setUnits] = useState(1);
   const [message, setMessage] = useState("");
   const row = contracts.find((c) => c.key === selected);
   const contract = row?.data;
+  const acceptanceDeadline =
+    contract?.deadlineToAccept || contract?.expiration || "";
+  const ship = (snapshot.ledger.ships || []).find(
+    (candidate) => candidate.key === snapshot.selectedShip,
+  );
+  const activeContract = contracts.some(
+    (candidate) => candidate.data.accepted && !candidate.data.fulfilled,
+  );
   const block =
     commandBlock(snapshot, true) ||
     (snapshot.ledger.paused || snapshot.flight?.settings.paused
       ? "STOP requested"
       : null);
+  const negotiationReason = !ship
+    ? "Select an owned ship"
+    : ship.data.nav.status === "IN_TRANSIT"
+      ? "Selected ship is in transit"
+      : activeContract
+        ? "Resolve the active contract first"
+        : block;
   const submit = async (payload: object) => {
     setMessage("Submitting durable command…");
     try {
@@ -102,6 +117,7 @@ function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
             onChange={(e) => {
               setSelected(e.target.value);
               setPreview(null);
+              setDeliveryIndex("");
             }}
           >
             <option value="">Choose contract</option>
@@ -111,8 +127,8 @@ function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
           </select>
         </label>
         <button
-          disabled={!snapshot.selectedShip || !!block}
-          title={block || "Negotiate manually"}
+          disabled={!!negotiationReason}
+          title={negotiationReason || "Negotiate manually"}
           onClick={() =>
             submit({ kind: "negotiate_contract", ship: snapshot.selectedShip })
           }
@@ -134,13 +150,14 @@ function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
                 ? "FULFILLED"
                 : contract.accepted
                   ? "ACCEPTED"
-                  : new Date(contract.deadlineToAccept) <= new Date()
+                  : !acceptanceDeadline ||
+                      new Date(acceptanceDeadline) <= new Date()
                     ? "EXPIRED"
                     : "OFFERED"
             }
           >
             <p>
-              Acceptance deadline {contract.deadlineToAccept}
+              Acceptance deadline {acceptanceDeadline || "unknown"}
               <br />
               Fulfillment deadline {contract.terms.deadline}
             </p>
@@ -178,7 +195,7 @@ function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
                     {(preview.sources[d.tradeSymbol] || [])
                       .map(
                         (s) =>
-                          `${s.waypoint} ${s.unit_price}cr (${s.freshness}, estimated)`,
+                          `${s.waypoint} ${s.unit_price}cr (${s.freshness}${s.estimated ? ", estimated" : ""})`,
                       )
                       .join("; ") || "unknown; no detailed observed source"}
                     . Use <a href="#/markets">Markets</a> and{" "}
@@ -195,12 +212,20 @@ function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
               <button
                 disabled={
                   !preview ||
+                  !preview.feasible ||
                   !!block ||
-                  new Date(contract.deadlineToAccept) <= new Date()
+                  !acceptanceDeadline ||
+                  new Date(acceptanceDeadline) <= new Date()
                 }
-                title={block || "Preview required"}
+                title={
+                  block || preview?.blockers.join("; ") || "Preview required"
+                }
                 onClick={() =>
-                  submit({ kind: "accept_contract", contract: contract.id })
+                  submit({
+                    kind: "accept_contract",
+                    contract: contract.id,
+                    evidence: preview!.evidence,
+                  })
                 }
               >
                 Accept previewed contract
@@ -209,14 +234,19 @@ function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
             {contract.accepted && !contract.fulfilled && (
               <>
                 <label>
-                  Good{" "}
+                  Deliverable{" "}
                   <select
-                    value={good}
-                    onChange={(e) => setGood(e.target.value)}
+                    value={deliveryIndex}
+                    onChange={(e) => setDeliveryIndex(e.target.value)}
                   >
                     <option value="">Choose</option>
-                    {contract.terms.deliver.map((d) => (
-                      <option key={d.tradeSymbol}>{d.tradeSymbol}</option>
+                    {contract.terms.deliver.map((d, index) => (
+                      <option
+                        key={`${d.tradeSymbol}-${d.destinationSymbol}`}
+                        value={index}
+                      >
+                        {d.tradeSymbol} → {d.destinationSymbol}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -231,14 +261,21 @@ function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
                 </label>
                 <button
                   disabled={
-                    !good || units < 1 || !snapshot.selectedShip || !!block
+                    deliveryIndex === "" ||
+                    units < 1 ||
+                    !snapshot.selectedShip ||
+                    !!block
                   }
                   onClick={() =>
                     submit({
                       kind: "deliver_contract",
                       contract: contract.id,
                       ship: snapshot.selectedShip,
-                      good,
+                      good: contract.terms.deliver[Number(deliveryIndex)]
+                        .tradeSymbol,
+                      destination:
+                        contract.terms.deliver[Number(deliveryIndex)]
+                          .destinationSymbol,
                       units,
                     })
                   }
@@ -261,9 +298,21 @@ function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
                 Fulfill completed contract
               </button>
             )}
+            {contract.accepted && !contract.fulfilled && (
+              <p className="small">
+                Fulfillment availability uses the last observation; the worker
+                refreshes every obligation before dispatch.
+              </p>
+            )}
           </div>
           {preview && (
             <div className="trade-preview">
+              <p>
+                Estimated procurement {preview.procurement_cost}cr ·{" "}
+                {preview.feasible
+                  ? "Funded by stored evidence; worker revalidates"
+                  : preview.blockers.join("; ")}
+              </p>
               <strong>Acceptance preview · estimated stored evidence</strong>
               <p>{preview.warning}</p>
               <p>
@@ -301,7 +350,7 @@ function Trading({ snapshot, now }: { snapshot: Snapshot; now: number }) {
   const [preview, setPreview] = useState<TradePreview | null>(null);
   const [message, setMessage] = useState("");
   const block =
-    commandBlock(snapshot, kind === "sell") ||
+    commandBlock(snapshot, true) ||
     (snapshot.ledger.paused || snapshot.flight?.settings.paused
       ? "STOP requested"
       : null);
@@ -553,15 +602,18 @@ function App() {
   const obligations = (ledger.contracts || []).filter(
     (c) => c.data.accepted && !c.data.fulfilled,
   );
-  const block = commandBlock(snapshot);
+  const block = commandBlock(snapshot, true);
   const ownership = block
     ? `Inspection only · ${block}`
     : ledger.paused || settings?.paused
       ? "STOP requested · queued work waits for explicit resume"
       : "Manual requests use the worker · authority and reserves revalidated at dispatch";
   useEffect(() => {
-    setManualAvailability(block || (!selected ? "Select a ship first" : null));
-  }, [block, selected]);
+    setManualAvailability(
+      block || (!selected ? "Select a ship first" : null),
+      obligations.length > 0,
+    );
+  }, [block, selected, obligations.length]);
 
   return (
     <>

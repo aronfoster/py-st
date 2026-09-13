@@ -13,6 +13,16 @@ It does not buy or fly. Accepted deliverables can be purchased through Markets;
 those purchases retain the shared fixed credit floor and fuel reserve. Required
 cargo remains protected from sale. Use Explorer for travel and Fleet for cargo.
 
+Acceptance requires fresh detailed sources with enough observed trade volume for
+the missing cargo, and credits covering procurement plus the fixed floor and
+fuel reserve. Existing uncosted obligations block another acceptance. Cargo is
+counted once across repeated-good delivery rows. The command persists a digest
+of the reviewed terms, cargo, sources and credits; dispatch recomputes feasibility
+and rejects changed evidence. Source estimates are not a live route guarantee.
+Purchases subtract cargo already aboard from outstanding procurement needs.
+Travel without paid refueling is allowed with active obligations; paid refueling
+remains blocked until those obligations are costed.
+
 ## Offline walkthrough
 
 Use the existing setup commands in [Flight operations](FLIGHT_OPERATIONS.md) to
@@ -21,8 +31,9 @@ The synthetic world begins with `DEMO-CONTRACT-1`, a 20-unit IRON_ORE offer.
 
 1. Open **Contracts**, choose the offer, and preview obligations and sourcing.
 2. Accept it, then inspect the durable command in **Operations**.
-3. In **Markets**, buy IRON_ORE. Use **Explorer** to travel to `X-DEMO-B2` and
-   dock. Return to Contracts and submit a partial and then final delivery.
+3. In **Markets**, buy IRON_ORE. Use **Explorer** to travel to `X-DEMO-B2`,
+   unchecking paid refueling while the obligation is open, and dock. Return to
+   Contracts and submit a partial and then final delivery.
 4. Fulfill after every row is complete; inspect realized receipts, credits and
    journal evidence in Operations/Reports.
 5. To exercise unknown-outcome recovery, stop the worker, run the documented
