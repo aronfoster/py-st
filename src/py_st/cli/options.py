@@ -36,12 +36,6 @@ AGENT_FACTION_OPTION = typer.Option(
         "Faction. Reads from DEFAULT_AGENT_FACTION " "env var if not provided."
     ),
 )
-CLEAR_CACHE_OPTION = typer.Option(
-    False,
-    "--clear-cache",
-    help="Clear all cached data after registration.",
-)
-
 # Contract-specific
 SHIP_SYMBOL_ARG = typer.Argument(
     ...,
