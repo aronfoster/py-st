@@ -35,6 +35,7 @@ from py_st.services.flight_demo import (
 from py_st.services.flight_queue import FlightQueue, canonical_root, validate
 from py_st.services.flight_worker import (
     FlightWorker,
+    contract_preview,
     preview,
     trade_preview,
     validate_receipt,
@@ -43,6 +44,237 @@ from py_st.services.intelligence import Intelligence
 from py_st.services.stop_control import request_stop
 
 PASSWORD = "synthetic-owner-password"
+
+
+@pytest.mark.parametrize("change", ["credits", "terms", "cargo", "stale"])
+def test_acceptance_rejects_changed_or_unfunded_evidence(
+    runner: FlightWorker, change: str
+) -> None:
+    # Arrange
+    evidence = contract_preview(runner.store, SCOPE, "DEMO-CONTRACT-1")
+    state = world(runner.root)
+    if change == "credits":
+        state["agent"]["credits"] = 50000
+    elif change == "terms":
+        state["contracts"][0]["terms"]["payment"]["onAccepted"] += 1
+    elif change == "cargo":
+        state["ships"][0]["cargo"] = {
+            "capacity": 40,
+            "units": 1,
+            "inventory": [{"symbol": "IRON_ORE", "units": 1}],
+        }
+    else:
+        market = runner.store.latest(SCOPE, "market")[0]
+        runner.store.observe(
+            SCOPE,
+            "market",
+            market["key"],
+            market["data"],
+            "2000-01-01T00:00:00+00:00",
+        )
+    world(runner.root, **state)
+    command = runner.queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "accept_contract",
+            "contract": "DEMO-CONTRACT-1",
+            "evidence": evidence["evidence"],
+        },
+    )
+
+    # Act / Assert
+    assert runner.tick()
+    assert runner.queue.get(command["id"])["status"] == "blocked"
+    assert not world(runner.root)["mutations"]
+
+
+def test_acceptance_uses_legacy_expiration(runner: FlightWorker) -> None:
+    # Arrange
+    state = world(runner.root)
+    state["contracts"][0]["expiration"] = state["contracts"][0][
+        "deadlineToAccept"
+    ]
+    state["contracts"][0]["deadlineToAccept"] = None
+    world(runner.root, **state)
+    runner.fresh()
+    evidence = contract_preview(runner.store, SCOPE, "DEMO-CONTRACT-1")
+    command = runner.queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "accept_contract",
+            "contract": "DEMO-CONTRACT-1",
+            "evidence": evidence["evidence"],
+        },
+    )
+
+    # Act / Assert
+    assert runner.tick()
+    assert runner.queue.get(command["id"])["status"] == "completed"
+
+
+def test_acceptance_counts_cargo_once_for_repeated_goods(
+    runner: FlightWorker,
+) -> None:
+    # Arrange: two destinations share a good, but only one load is aboard.
+    state = world(runner.root)
+    terms = state["contracts"][0]["terms"]["deliver"]
+    terms.append(terms[0] | {"destinationSymbol": "X-DEMO-A1"})
+    state["ships"][0]["cargo"]["units"] = 20
+    state["ships"][0]["cargo"]["inventory"] = [
+        {"symbol": "IRON_ORE", "units": 20}
+    ]
+    world(runner.root, **state)
+    runner.fresh()
+
+    # Act / Assert
+    result = contract_preview(runner.store, SCOPE, "DEMO-CONTRACT-1")
+    assert (
+        result["procurement_cost"]
+        == 20 * result["sources"]["IRON_ORE"][0]["unit_price"]
+    )
+
+
+def test_contract_lifecycle_uses_durable_worker_and_authoritative_state(
+    runner: FlightWorker,
+) -> None:
+    # Arrange: the offline world begins with a dated procurement offer.
+    previewed = contract_preview(runner.store, SCOPE, "DEMO-CONTRACT-1")
+    assert previewed["sources"]["IRON_ORE"]
+    queue = runner.queue
+
+    # Act: accept, acquire via existing trading, deliver, and fulfill.
+    accepted = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "accept_contract",
+            "contract": "DEMO-CONTRACT-1",
+            "evidence": previewed["evidence"],
+        },
+    )
+    assert runner.tick()
+    assert queue.get(accepted["id"])["status"] == "completed"
+
+    estimate = trade_preview(
+        runner.store, SCOPE, "SYNTHETIC-1", "IRON_ORE", 20, "purchase"
+    )
+    purchase = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "purchase",
+            "ship": "SYNTHETIC-1",
+            "good": "IRON_ORE",
+            "units": 20,
+            "waypoint": estimate["waypoint"],
+            "quote": estimate["unit_price"],
+            "observed_at": estimate["observed_at"],
+        },
+    )
+    assert runner.tick()
+    assert queue.get(purchase["id"])["status"] == "completed", queue.get(
+        purchase["id"]
+    )
+    assert not trade_preview(
+        runner.store, SCOPE, "SYNTHETIC-1", "IRON_ORE", 1, "purchase"
+    )["feasible"]
+    trip = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "trip",
+            "ship": "SYNTHETIC-1",
+            "destination": "X-DEMO-B2",
+            "dock": True,
+            "refuel": False,
+        },
+    )
+    assert finish(runner, trip["id"])["status"] == "completed"
+
+    partial = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "deliver_contract",
+            "contract": "DEMO-CONTRACT-1",
+            "ship": "SYNTHETIC-1",
+            "good": "IRON_ORE",
+            "destination": "X-DEMO-B2",
+            "units": 7,
+        },
+    )
+    assert runner.tick()
+    assert queue.get(partial["id"])["status"] == "completed"
+    final = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "deliver_contract",
+            "contract": "DEMO-CONTRACT-1",
+            "ship": "SYNTHETIC-1",
+            "good": "IRON_ORE",
+            "destination": "X-DEMO-B2",
+            "units": 13,
+        },
+    )
+    assert runner.tick()
+    assert queue.get(final["id"])["status"] == "completed"
+    fulfilled = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {"kind": "fulfill_contract", "contract": "DEMO-CONTRACT-1"},
+    )
+    assert runner.tick()
+
+    # Assert: receipts refreshed the durable observations and terminal command.
+    assert queue.get(fulfilled["id"])["status"] == "completed"
+    assert world(runner.root)["contracts"][0]["fulfilled"] is True
+
+
+def test_contract_expiry_between_preview_and_dispatch_blocks_mutation(
+    runner: FlightWorker,
+) -> None:
+    # Arrange: the browser saw the offer, then authoritative state changed.
+    assert contract_preview(runner.store, SCOPE, "DEMO-CONTRACT-1")
+    state = world(runner.root)
+    state["contracts"][0]["deadlineToAccept"] = "2020-01-01T00:00:00+00:00"
+    world(runner.root, contracts=state["contracts"])
+    command = runner.queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "accept_contract",
+            "contract": "DEMO-CONTRACT-1",
+            "evidence": "0" * 64,
+        },
+    )
+
+    # Act
+    assert runner.tick()
+
+    # Assert: dispatch-time refresh wins; no stale preview is forced.
+    result = runner.queue.get(command["id"])
+    assert result["status"] == "blocked"
+    assert "expired" in result["detail"]
+    assert (
+        "/my/contracts/DEMO-CONTRACT-1/accept"
+        not in world(runner.root)["mutations"]
+    )
+
+
+def test_contract_command_accepts_live_lowercase_id() -> None:
+    # Arrange / Act / Assert
+    assert validate(
+        {
+            "kind": "accept_contract",
+            "contract": "cmts1w1oni5liuo6x08fsx690",
+            "evidence": "a" * 64,
+        }
+    )
+
+
 TRIP: dict[str, Any] = {
     "kind": "trip",
     "ship": "SYNTHETIC-1",
@@ -1056,6 +1288,101 @@ def login(client: httpx.Client, origin: str) -> str:
     assert response.status_code == 200
     assert "HttpOnly" in response.headers["set-cookie"]
     return csrf
+
+
+@pytest.mark.skipif(
+    os.environ.get("DASHBOARD_BROWSER_TESTS") != "1",
+    reason="Explicit offline browser suite",
+)
+@pytest.mark.parametrize("width", [1440, 390])
+def test_browser_contract_lifecycle(
+    flight_http: str, runner: FlightWorker, width: int
+) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    # Arrange: real browser, authenticated HTTP, queue and synthetic worker.
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": width, "height": 1000})
+        errors: list[str] = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto(flight_http + "/#/contracts")
+        page.locator("#owner-password").fill(PASSWORD)
+        page.get_by_role("button", name="Log in", exact=True).click()
+        page.locator("#explorer-ship").select_option("SYNTHETIC-1")
+
+        def complete(name: str) -> None:
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/flight")
+                and response.request.method == "POST"
+            ) as response:
+                page.get_by_role("button", name=name, exact=True).click()
+            command = response.value.json()
+            assert finish(runner, command["id"])["status"] == "completed"
+            page.reload()
+
+        def navigate(name: str) -> None:
+            page.get_by_role("navigation").get_by_role(
+                "link", name=name, exact=True
+            ).click()
+
+        # Act: accept, buy, travel, partial/final delivery, then fulfill.
+        navigate("Contracts")
+        page.get_by_role(
+            "combobox", name=re.compile("^Contract")
+        ).select_option("DEMO-CONTRACT-1")
+        page.get_by_role(
+            "button", name="Preview obligations and sourcing"
+        ).click()
+        complete("Accept previewed contract")
+        expect(
+            page.get_by_role("button", name="Negotiate from selected ship")
+        ).to_be_disabled()
+        navigate("Markets")
+        page.get_by_role(
+            "combobox", name=re.compile("^Commodity")
+        ).select_option("IRON_ORE")
+        page.get_by_label("Quantity", exact=True).fill("20")
+        page.get_by_role(
+            "button", name="Preview against stored evidence"
+        ).click()
+        complete("Submit guarded purchase")
+        navigate("Explorer")
+        page.locator("#waypoint-list button").filter(
+            has_text="X-DEMO-B2"
+        ).click()
+        expect(page.locator("#flight-trip")).to_be_disabled()
+        page.locator("#trip-refuel").uncheck()
+        expect(page.locator("#flight-trip")).to_be_enabled()
+        with page.expect_response(
+            lambda response: response.url.endswith("/api/flight")
+            and response.request.method == "POST"
+        ) as response:
+            page.locator("#flight-trip").click()
+        assert (
+            finish(runner, response.value.json()["id"])["status"]
+            == "completed"
+        )
+        page.reload()
+        navigate("Contracts")
+        for units in (7, 13):
+            page.get_by_role(
+                "combobox", name=re.compile("^Contract")
+            ).select_option("DEMO-CONTRACT-1")
+            page.get_by_role(
+                "combobox", name=re.compile("^Deliverable")
+            ).select_option("0")
+            page.get_by_label("Units", exact=True).fill(str(units))
+            complete("Deliver from selected ship")
+        page.get_by_role(
+            "combobox", name=re.compile("^Contract")
+        ).select_option("DEMO-CONTRACT-1")
+        complete("Fulfill completed contract")
+
+        # Assert: authoritative receipts and no browser runtime errors.
+        assert world(runner.root)["contracts"][0]["fulfilled"] is True
+        assert not errors
+        browser.close()
 
 
 def test_successful_logins_do_not_consume_failure_budget(

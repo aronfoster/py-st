@@ -18,6 +18,10 @@ KINDS = {
     "refuel",
     "purchase",
     "sell",
+    "negotiate_contract",
+    "accept_contract",
+    "deliver_contract",
+    "fulfill_contract",
     "reconcile",
 }
 STATES = {
@@ -59,7 +63,14 @@ def validate(payload: Any) -> dict[str, Any]:
                 "Provide command ID and 20..2000 character outcome explanation"
             )
         return payload
-    fields = {"kind", "system"} if kind == "refresh" else {"kind", "ship"}
+    if kind in ("accept_contract", "fulfill_contract"):
+        fields = {"kind", "contract"}
+        if kind == "accept_contract":
+            fields |= {"evidence"}
+    elif kind == "deliver_contract":
+        fields = {"kind", "contract", "ship", "good", "destination", "units"}
+    else:
+        fields = {"kind", "system"} if kind == "refresh" else {"kind", "ship"}
     if kind == "trip":
         fields |= {"destination", "dock", "refuel"}
     if kind in ("purchase", "sell"):
@@ -72,9 +83,12 @@ def validate(payload: Any) -> dict[str, Any]:
                 raise ValueError(f"Invalid {key}")
             continue
         value = payload[key]
-        if not isinstance(value, str) or not re.fullmatch(
-            r"[A-Z0-9_-]{1,80}", value
-        ):
+        pattern = r"[A-Z0-9_-]{1,80}"
+        if key == "contract":
+            pattern = r"[A-Za-z0-9_-]{1,80}"
+        elif key == "evidence":
+            pattern = r"[a-f0-9]{64}"
+        if not isinstance(value, str) or not re.fullmatch(pattern, value):
             raise ValueError(f"Invalid {key}")
     if kind in ("purchase", "sell"):
         try:

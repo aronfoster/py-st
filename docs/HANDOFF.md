@@ -1,4 +1,38 @@
-# Current Handoff — FOS-77 registration hardening
+# Current Handoff — browser contracts
+
+The Contracts section now provides stored offer inspection, acceptance preview,
+dated sourcing evidence, durable negotiation/acceptance/delivery/fulfillment,
+progress and cargo visibility, and links to existing flight, fleet, markets and
+Operations surfaces. Dispatch-time expiry/state/cargo/location checks and the
+existing ambiguity journal remain authoritative. See
+[BROWSER_CONTRACTS.md](BROWSER_CONTRACTS.md) for the offline walkthrough and
+live-verification limits.
+
+## PR #51 review follow-up — 2026-09-13
+
+Integrated the relevant changes from `8d93ae7` on the original
+`codex/implement-browser-contract-workflow` branch. Contract commands accept
+lowercase live IDs, acceptance requires funded evidence bound to dispatch, and
+legacy acceptance expiration is supported. Delivery selection includes its
+destination. Negotiation eligibility and fulfillment observation limits are
+visible; source labels honor their estimate flag. Removed the unreachable demo
+trade-handler duplicate and retained pinned Black 24.8.0 formatting.
+
+Completed the missing purchase/flight presentation alignment with worker guards:
+accepted-contract procurement is preview-gated, onboard cargo reduces purchase
+allowances, and unpaid travel remains available while paid refueling is blocked.
+Acceptance counts shared goods only once and blocks other uncosted obligations.
+
+Verification: **1,689 passed, 21 skipped** in full offline pytest;
+**157 passed** in the actual browser-enabled flight/dashboard suite, including
+desktop and 390px accept → purchase → travel → partial/final deliver → fulfill.
+Regression tests cover changed acceptance evidence, stale sources, the legacy
+expiration fallback and repeated-good cargo accounting. Black `--check`,
+Ruff `--no-fix`, `mypy .`, frontend check/build and `git diff --check` passed.
+Test roots are `.cache/nightly/pr51-full` and `.cache/nightly/pr51-browser`,
+with isolated cache roots and `ST_LIVE_TESTS=0`. No live API calls were made.
+
+# Previous Handoff — FOS-77 registration hardening
 
 ## Registration delivery — 2026-09-13
 
@@ -63,6 +97,8 @@ Ruff `--no-fix`, `mypy .` and `git diff --check` passed. Full test root:
 `.cache/nightly/fos-77-review-full`, cache:
 `.cache/nightly/fos-77-review-full-cache`, with the same offline/TMPDIR flags
 as above. Aron authorized committing and pushing the review fixes.
+
+# Earlier Handoff — browser trading
 
 ## Browser trading delivery — 2026-09-11
 
