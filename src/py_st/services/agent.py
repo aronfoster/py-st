@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
@@ -16,7 +15,11 @@ from py_st._generated.models import Agent, Contract, FactionSymbol, Ship
 from py_st._manual_models import RegisterAgentResponseData
 from py_st.client.client import get_client as SpaceTradersClient
 from py_st.client.transport import APIError
-from py_st.env import save_agent_token, saved_agent_token
+from py_st.env import (
+    registration_env_path,
+    save_agent_token,
+    saved_agent_token,
+)
 from py_st.services.cache_keys import key_for_agent
 
 # Cache configuration for agent info
@@ -78,6 +81,10 @@ def get_agent_info(token: str) -> Agent:
     return agent
 
 
+class RegistrationError(RuntimeError):
+    """Credential-free owner recovery guidance."""
+
+
 def register_new_agent(
     account_token: str | None = None,
     symbol: str | None = None,
@@ -106,8 +113,9 @@ def register_new_agent(
     Raises:
         ValueError: If account_token, symbol, or faction is missing.
     """
+    env_path = registration_env_path()
     try:
-        load_dotenv(Path.cwd() / ".env")
+        load_dotenv(env_path)
     except (OSError, ValueError):
         raise RegistrationError(
             "Cannot read the working directory's .env. Fix its encoding "
@@ -141,8 +149,12 @@ def register_new_agent(
     resolved_faction = resolved_faction.strip().upper()
     if not 3 <= len(resolved_symbol) <= 14:
         raise ValueError("Agent symbol must be 3-14 characters.")
+    # New upstream factions require regenerating the local model enum.
     if resolved_faction not in {f.value for f in FactionSymbol}:
-        raise ValueError("Unknown faction; choose an official faction symbol.")
+        raise ValueError(
+            "Unknown faction; choose an official faction symbol. If it was "
+            "recently added upstream, regenerate the local models first."
+        )
 
     try:
         client = SpaceTradersClient(token=resolved_account_token)
@@ -180,23 +192,31 @@ def register_new_agent(
     return response.data
 
 
-class RegistrationError(RuntimeError):
-    """Credential-free owner recovery guidance."""
-
-
 def verify_registration(
     symbol: str, faction: str
 ) -> tuple[Agent, list[Ship], list[Contract]]:
     """Read saved-token identity and starter state, bypassing cache."""
+    reason = (
+        "Registration directory check failed. Run from the absolute "
+        "ST_STATE_ROOT configured for the worker."
+    )
     try:
+        registration_env_path()
+        reason = "Saved ST_TOKEN is missing or unreadable."
         client = SpaceTradersClient(token=saved_agent_token())
+        reason = "Agent identity request failed."
         current = client.agent.get_agent()
         if (
             current.symbol != symbol.upper()
             or current.startingFaction != faction.upper()
         ):
+            reason = (
+                "Agent symbol/faction does not match the expected identity."
+            )
             raise ValueError("Identity mismatch")
+        reason = "Fleet request failed."
         ships = client.ships.get_ships()
+        reason = "Contracts request failed."
         contracts = client.contracts.get_contracts()
         if (
             not ships
@@ -204,15 +224,25 @@ def verify_registration(
             or any(
                 not s.symbol.startswith(f"{current.symbol}-") for s in ships
             )
-            or not any(s.registration.role.value == "COMMAND" for s in ships)
-            or not any(
-                c.factionSymbol == current.startingFaction for c in contracts
-            )
         ):
-            raise ValueError("Starter state incomplete")
-    except (APIError, httpx.HTTPError, OSError, ValueError):
+            reason = "Fleet is empty or its count/ownership is inconsistent."
+            raise ValueError("Fleet mismatch")
+        if not any(s.registration.role.value == "COMMAND" for s in ships):
+            reason = "No COMMAND ship was found."
+            raise ValueError("Missing command ship")
+        if not any(
+            c.factionSymbol == current.startingFaction for c in contracts
+        ):
+            reason = "No starting-faction contract was found."
+            raise ValueError("Missing starting contract")
+    except (APIError, httpx.HTTPError, OSError, ValueError) as exc:
+        if isinstance(exc, APIError) and exc.authentication_failed:
+            reason = (
+                "Authentication/reset check failed (HTTP 401 or code 4113)."
+            )
         raise RegistrationError(
-            "Registration verification failed; keep gameplay stopped. "
+            f"Registration verification failed: {reason} "
+            "Keep gameplay stopped. "
             "Check the working directory's .env, expected symbol/faction "
             "and account dashboard/reset status. Recover the existing "
             "pilot's token if needed, then rerun agent verify-registration. "

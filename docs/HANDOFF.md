@@ -38,6 +38,32 @@ ST_LIVE_TESTS=0 TMPDIR="$PWD/.cache/nightly" \
 Aron must perform the actual reset-night registration with his account credential
 and chosen symbol/faction; the offline rehearsal consumes no real pilot.
 
+### PR #50 review follow-up — 2026-09-13
+
+Integrated Claude's directory mismatch finding: when `ST_STATE_ROOT` is set in
+the environment or local `.env`, registration and verification require an
+absolute root resolving to cwd before any HTTP request or token/cache change.
+Regression coverage includes wrong, relative, missing and empty roots, matching
+roots, a symlink alias and unchanged token/cache/runtime evidence on refusal.
+
+Verification now reports the failed stage/check without raw exception details.
+Added the faction-enum regeneration guidance, moved `RegistrationError` before
+use, named private staging files `tmp.registration-*`, and documented running
+verification in a new process. Codex reported no major findings.
+
+No disagreement with the substantive fixes. Two review details were corrected:
+the live dispatch guard already exempts `/register`, and collision suffixes do
+not inherently break full-symbol ship-prefix matching. Automatic reset
+registration/collision handling/resume remains a separate product decision from
+FOS-77's explicit owner-driven baseline; no such behavior was introduced here.
+
+Review verification: **1,680 passed, 19 skipped** in full offline pytest;
+**68 passed** in focused registration tests. Repository-wide Black check,
+Ruff `--no-fix`, `mypy .` and `git diff --check` passed. Full test root:
+`.cache/nightly/fos-77-review-full`, cache:
+`.cache/nightly/fos-77-review-full-cache`, with the same offline/TMPDIR flags
+as above. Aron authorized committing and pushing the review fixes.
+
 ## Browser trading delivery — 2026-09-11
 
 Markets now provides a React-owned purchase/sale preview and submission flow.

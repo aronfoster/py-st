@@ -14,7 +14,11 @@ The rehearsal below is offline; live registration remains unperformed.
    take a consistent private backup of `.state` and token configuration using
    [the flight backup procedure](FLIGHT_OPERATIONS.md#compatibility-and-backups).
    Registration does not migrate/delete old ledgers, queues, journals or STOP.
-3. Work from the authoritative checkout root. In a private editor, set
+3. Work from the authoritative checkout root. If `ST_STATE_ROOT` is configured
+   in the environment or local `.env`, registration and verification require it
+   to be absolute and resolve to the working directory, matching the worker.
+   A mismatch fails before any HTTP request or token/cache change. In a private
+   editor, set
    `SPACETRADERS_ACCOUNT_TOKEN` in its ignored `.env` to the account credential.
    Set `DEFAULT_AGENT_SYMBOL` (3–14 characters) and `DEFAULT_AGENT_FACTION`
    (e.g. `COSMIC`) to the deliberate choices. Preserve unrelated configuration.
@@ -38,7 +42,9 @@ The rehearsal below is offline; live registration remains unperformed.
    Keep the same exported `ST_CACHE_DIR` as other clients if using a custom cache.
 5. A successful registration exits 0 with **Verification pending** and prints a
    credential-free command with the returned symbol/faction. Run that command
-   immediately (or replace the placeholders below with your chosen values):
+   immediately in a new process (or replace the placeholders below with your
+   chosen values). Registration loads `.env` into its process environment; do not
+   reuse that process as a clean application session.
 
    ```sh
    .venv/bin/python -m py_st agent verify-registration \
@@ -82,13 +88,18 @@ The rehearsal below is offline; live registration remains unperformed.
   ```
 
   Then run `agent verify-registration` for the expected identity/faction.
-- **Verification failure:** keep gameplay stopped. Check `.env`, expected pilot,
-  account/reset status and connectivity; recover that pilot's token if needed.
+- **Verification failure:** the error identifies the failed stage/check: root,
+  saved credential, identity, fleet, command ship, contract or API/authentication.
+  Raw exception details remain private. Keep gameplay stopped. Check `.env`,
+  expected pilot, account/reset status and connectivity; recover that pilot's
+  token if needed.
   Rerun verification, not registration. Verification changes no local game state.
 - **Process interruption:** inspect the saved credential through verification
   and inspect the account dashboard before retrying registration. The remote
   POST and local file replacement cannot form one transaction. A crash can leave
-  private temporary files, but cannot publish a partially written `.env`.
+  private temporary files (`tmp.registration-*` next to `.env`), but cannot
+  publish a partially written `.env`. Treat leftovers as credentials and never
+  stage them in git.
 - **Rollback:** a real registration cannot be undone locally. Restore the prior
   private token configuration only if that prior pilot is still valid and is
   intentionally selected; clear legacy cache strictly and verify that identity.

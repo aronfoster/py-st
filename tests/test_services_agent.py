@@ -1,5 +1,6 @@
 """Unit tests for agent-related functions in services/agent.py."""
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +9,13 @@ import pytest
 from py_st._manual_models import RegisterAgentResponse
 from py_st.services import agent
 from tests.factories import RegisterAgentResponseDataFactory
+
+
+@pytest.fixture(autouse=True)
+def isolate_env_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        agent, "registration_env_path", lambda: tmp_path / ".env"
+    )
 
 
 @patch("py_st.services.agent.save_agent_token")

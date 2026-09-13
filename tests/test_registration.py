@@ -43,6 +43,7 @@ def isolated_registration(
         "DEFAULT_AGENT_SYMBOL",
         "DEFAULT_AGENT_FACTION",
         "ST_TOKEN",
+        "ST_STATE_ROOT",
     ):
         # Record absent keys too: load_dotenv writes outside monkeypatch.
         monkeypatch.setenv(key, "")
@@ -123,6 +124,7 @@ def test_register_then_verify(
     if source == "flags":
         args = [*REGISTER, "--account-token", ACCOUNT]
     elif source == "environment":
+        monkeypatch.setenv("ST_STATE_ROOT", str(Path.cwd()))
         monkeypatch.setenv("SPACETRADERS_ACCOUNT_TOKEN", ACCOUNT)
         monkeypatch.setenv("DEFAULT_AGENT_SYMBOL", "new")
         monkeypatch.setenv("DEFAULT_AGENT_FACTION", "cosmic")
@@ -132,6 +134,7 @@ def test_register_then_verify(
             stream.write(
                 f"SPACETRADERS_ACCOUNT_TOKEN='{ACCOUNT}'\n"
                 "DEFAULT_AGENT_SYMBOL=NEW\nDEFAULT_AGENT_FACTION=COSMIC\n"
+                f"ST_STATE_ROOT='{Path.cwd()}'\n"
             )
         args = ["agent", "register"]
     monkeypatch.setenv("ST_TOKEN", OLD)
@@ -293,6 +296,7 @@ def test_cli_validation(args: list[str], message: str, code: int) -> None:
         "faction",
         "ships",
         "contracts",
+        "command",
         "auth",
         "timeout",
     ],
@@ -314,6 +318,8 @@ def test_verification_failure_is_read_only_and_actionable(
         starter["ships"] = []
     elif failure == "contracts":
         starter["contract"]["factionSymbol"] = "VOID"
+    elif failure == "command":
+        starter["ships"][0]["registration"]["role"] = "SATELLITE"
     requests = install_peer(monkeypatch, starter)
     if failure in ("auth", "timeout"):
 
@@ -335,6 +341,17 @@ def test_verification_failure_is_read_only_and_actionable(
     # Assert
     assert result.exit_code == 1
     assert "verification failed" in result.output
+    reasons = {
+        "missing-token": "Saved ST_TOKEN is missing or unreadable",
+        "identity": "does not match the expected identity",
+        "faction": "does not match the expected identity",
+        "ships": "Fleet is empty or its count/ownership is inconsistent",
+        "contracts": "No starting-faction contract",
+        "command": "No COMMAND ship",
+        "auth": "Authentication/reset check failed",
+        "timeout": "Agent identity request failed",
+    }
+    assert reasons[failure] in result.output
     assert "Do not register again" in result.output
     assert all(r.method == "GET" for r in requests)
     assert cache.CACHE_FILE.read_bytes() == previous
@@ -437,3 +454,68 @@ def test_empty_token_cannot_replace_previous_identity(token: str) -> None:
 
     # Assert
     assert env.saved_agent_token() == OLD
+
+
+@pytest.mark.parametrize("args", [REGISTER, VERIFY])
+@pytest.mark.parametrize("source", ["environment", "dotenv"])
+@pytest.mark.parametrize(
+    "root_kind", ["other", "relative", "missing", "empty"]
+)
+def test_registration_requires_worker_root_before_any_request(
+    args: list[str],
+    source: str,
+    root_kind: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange: another managed root with its own token and durable evidence.
+    worker_root = Path.cwd() / "worker"
+    worker_root.mkdir()
+    worker_env = worker_root / ".env"
+    worker_env.write_text(f"ST_TOKEN='{OLD}'\n", encoding="utf-8")
+    evidence = worker_root / "runtime-evidence"
+    evidence.write_text("pending operation", encoding="utf-8")
+    values = {
+        "other": str(worker_root),
+        "relative": ".",
+        "missing": str(Path.cwd() / "missing"),
+        "empty": "",
+    }
+    config = f"ST_TOKEN='{TOKEN}'\nSPACETRADERS_ACCOUNT_TOKEN='{ACCOUNT}'\n"
+    if source == "environment":
+        monkeypatch.setenv("ST_STATE_ROOT", values[root_kind])
+    else:
+        config += f"ST_STATE_ROOT='{values[root_kind]}'\n"
+    Path(".env").write_text(config, encoding="utf-8")
+    # A relative cache path must not be cleared in the wrong directory either.
+    monkeypatch.setattr(cache, "CACHE_DIR", Path(".cache"))
+    monkeypatch.setattr(cache, "CACHE_FILE", Path(".cache/data.json"))
+    cache.save_cache({"agent_info": "previous identity"})
+    previous_cache = cache.CACHE_FILE.read_bytes()
+
+    # Act: the default HTTP refusal fixture ensures no request is dispatched.
+    result = runner.invoke(app, args)
+
+    # Assert
+    assert result.exit_code == 1
+    assert "ST_STATE_ROOT" in result.output
+    assert Path(".env").read_text(encoding="utf-8") == config
+    assert worker_env.read_text(encoding="utf-8") == f"ST_TOKEN='{OLD}'\n"
+    assert evidence.read_text(encoding="utf-8") == "pending operation"
+    assert cache.CACHE_FILE.read_bytes() == previous_cache
+    for secret in (ACCOUNT, TOKEN, OLD):
+        assert secret not in result.output
+
+
+def test_resolved_worker_root_alias_is_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange: the same physical root may be addressed through a symlink.
+    alias = Path.cwd() / "root-alias"
+    alias.symlink_to(Path.cwd(), target_is_directory=True)
+    monkeypatch.setenv("ST_STATE_ROOT", str(alias))
+
+    # Act
+    env.save_agent_token(TOKEN)
+
+    # Assert
+    assert env.saved_agent_token() == TOKEN
