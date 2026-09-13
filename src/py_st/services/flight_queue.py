@@ -18,6 +18,10 @@ KINDS = {
     "refuel",
     "purchase",
     "sell",
+    "negotiate_contract",
+    "accept_contract",
+    "deliver_contract",
+    "fulfill_contract",
     "reconcile",
 }
 STATES = {
@@ -59,7 +63,12 @@ def validate(payload: Any) -> dict[str, Any]:
                 "Provide command ID and 20..2000 character outcome explanation"
             )
         return payload
-    fields = {"kind", "system"} if kind == "refresh" else {"kind", "ship"}
+    if kind in ("accept_contract", "fulfill_contract"):
+        fields = {"kind", "contract"}
+    elif kind == "deliver_contract":
+        fields = {"kind", "contract", "ship", "good", "units"}
+    else:
+        fields = {"kind", "system"} if kind == "refresh" else {"kind", "ship"}
     if kind == "trip":
         fields |= {"destination", "dock", "refuel"}
     if kind in ("purchase", "sell"):
@@ -128,8 +137,7 @@ class FlightQueue:
                         "Explicit verified scope and mode required"
                     )
                 self.db.execute("PRAGMA journal_mode=WAL")
-                self.db.executescript(
-                    """
+                self.db.executescript("""
                     BEGIN IMMEDIATE;
                     CREATE TABLE settings (
                         id INTEGER PRIMARY KEY CHECK(id=1),
@@ -149,8 +157,7 @@ class FlightQueue:
                     );
                     PRAGMA user_version=1;
                     COMMIT;
-                """
-                )
+                """)
                 with self.db:
                     self.db.execute(
                         "INSERT INTO settings "

@@ -19,7 +19,11 @@ from py_st.services.contract_sources import contract_sources
 from py_st.services.doctor import diagnose
 from py_st.services.flight_auth import verify_password
 from py_st.services.flight_queue import FlightQueue
-from py_st.services.flight_worker import preview, trade_preview
+from py_st.services.flight_worker import (
+    contract_preview,
+    preview,
+    trade_preview,
+)
 from py_st.services.intelligence import Intelligence
 from py_st.services.market_history import market_history
 from py_st.services.stop_control import request_stop, stop_requested
@@ -240,6 +244,7 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                 "/api/flight",
                 "/api/flight-preview",
                 "/api/trade-preview",
+                "/api/contract-preview",
             ):
                 self.reply(404, "{}")
                 return
@@ -323,6 +328,7 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                     "/api/flight",
                     "/api/flight-preview",
                     "/api/trade-preview",
+                    "/api/contract-preview",
                 ):
                     if not managed:
                         raise ValueError(
@@ -365,7 +371,7 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                                 )
                             finally:
                                 store.close()
-                        else:
+                        elif self.path == "/api/trade-preview":
                             if (
                                 set(body)
                                 != {
@@ -402,6 +408,30 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                                     body["good"],
                                     body["units"],
                                     body["kind"],
+                                )
+                            finally:
+                                store.close()
+                        else:
+                            if (
+                                set(body) != {"csrf", "scope", "contract"}
+                                or body["scope"] != queue.scope
+                                or not isinstance(body["contract"], str)
+                                or not re.fullmatch(
+                                    r"[A-Za-z0-9_-]{1,80}", body["contract"]
+                                )
+                            ):
+                                raise ValueError(
+                                    "Invalid contract preview fields"
+                                )
+                            store = Intelligence(
+                                root / ".state/intelligence.sqlite3",
+                                read_only=True,
+                            )
+                            try:
+                                result = contract_preview(
+                                    store,
+                                    queue.scope,
+                                    body["contract"],
                                 )
                             finally:
                                 store.close()

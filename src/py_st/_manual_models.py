@@ -35,7 +35,7 @@ class RegisterAgentResponseData(BaseModel):
     contract: Contract
     faction: Faction
     ships: list[Ship]
-    token: str
+    token: str = Field(min_length=1, repr=False)
 
 
 class RegisterAgentResponse(BaseModel):

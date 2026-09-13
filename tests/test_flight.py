@@ -35,6 +35,7 @@ from py_st.services.flight_demo import (
 from py_st.services.flight_queue import FlightQueue, canonical_root, validate
 from py_st.services.flight_worker import (
     FlightWorker,
+    contract_preview,
     preview,
     trade_preview,
     validate_receipt,
@@ -43,6 +44,114 @@ from py_st.services.intelligence import Intelligence
 from py_st.services.stop_control import request_stop
 
 PASSWORD = "synthetic-owner-password"
+
+
+def test_contract_lifecycle_uses_durable_worker_and_authoritative_state(
+    runner: FlightWorker,
+) -> None:
+    # Arrange: the offline world begins with a dated procurement offer.
+    previewed = contract_preview(runner.store, SCOPE, "DEMO-CONTRACT-1")
+    assert previewed["sources"]["IRON_ORE"]
+    queue = runner.queue
+
+    # Act: accept, acquire via existing trading, deliver, and fulfill.
+    accepted = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {"kind": "accept_contract", "contract": "DEMO-CONTRACT-1"},
+    )
+    assert runner.tick()
+    assert queue.get(accepted["id"])["status"] == "completed"
+
+    estimate = trade_preview(
+        runner.store, SCOPE, "SYNTHETIC-1", "IRON_ORE", 20, "purchase"
+    )
+    purchase = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "purchase",
+            "ship": "SYNTHETIC-1",
+            "good": "IRON_ORE",
+            "units": 20,
+            "waypoint": estimate["waypoint"],
+            "quote": estimate["unit_price"],
+            "observed_at": estimate["observed_at"],
+        },
+    )
+    assert runner.tick()
+    assert queue.get(purchase["id"])["status"] == "completed", queue.get(
+        purchase["id"]
+    )
+    state = world(runner.root)
+    state["ships"][0]["nav"]["waypointSymbol"] = "X-DEMO-B2"
+    world(runner.root, ships=state["ships"])
+
+    partial = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "deliver_contract",
+            "contract": "DEMO-CONTRACT-1",
+            "ship": "SYNTHETIC-1",
+            "good": "IRON_ORE",
+            "units": 7,
+        },
+    )
+    assert runner.tick()
+    assert queue.get(partial["id"])["status"] == "completed"
+    final = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {
+            "kind": "deliver_contract",
+            "contract": "DEMO-CONTRACT-1",
+            "ship": "SYNTHETIC-1",
+            "good": "IRON_ORE",
+            "units": 13,
+        },
+    )
+    assert runner.tick()
+    assert queue.get(final["id"])["status"] == "completed"
+    fulfilled = queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {"kind": "fulfill_contract", "contract": "DEMO-CONTRACT-1"},
+    )
+    assert runner.tick()
+
+    # Assert: receipts refreshed the durable observations and terminal command.
+    assert queue.get(fulfilled["id"])["status"] == "completed"
+    assert world(runner.root)["contracts"][0]["fulfilled"] is True
+
+
+def test_contract_expiry_between_preview_and_dispatch_blocks_mutation(
+    runner: FlightWorker,
+) -> None:
+    # Arrange: the browser saw the offer, then authoritative state changed.
+    assert contract_preview(runner.store, SCOPE, "DEMO-CONTRACT-1")
+    state = world(runner.root)
+    state["contracts"][0]["deadlineToAccept"] = "2020-01-01T00:00:00+00:00"
+    world(runner.root, contracts=state["contracts"])
+    command = runner.queue.enqueue(
+        SCOPE,
+        uuid.uuid4().hex,
+        {"kind": "accept_contract", "contract": "DEMO-CONTRACT-1"},
+    )
+
+    # Act
+    assert runner.tick()
+
+    # Assert: dispatch-time refresh wins; no stale preview is forced.
+    result = runner.queue.get(command["id"])
+    assert result["status"] == "blocked"
+    assert "expired" in result["detail"]
+    assert (
+        "/my/contracts/DEMO-CONTRACT-1/accept"
+        not in world(runner.root)["mutations"]
+    )
+
+
 TRIP: dict[str, Any] = {
     "kind": "trip",
     "ship": "SYNTHETIC-1",
@@ -191,16 +300,14 @@ def test_browser_pending_journal_and_historical_scope(
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(viewport={"width": width, "height": 900})
-        page.add_init_script(
-            """window.panelFlash = false;
+        page.add_init_script("""window.panelFlash = false;
             new MutationObserver(() => {
                 if (document.querySelectorAll(
                     '#legacy-pages [data-page]:not([hidden])'
                 ).length > 1) window.panelFlash = true;
             }).observe(document, {subtree:true, childList:true,
                 attributes:true, attributeFilter:['hidden']});
-        """
-        )
+        """)
         page.goto(flight_http + "/#/fleet")
         expect(page.locator("#page-title")).to_have_text("Fleet")
         assert not page.evaluate("window.panelFlash")

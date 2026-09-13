@@ -59,7 +59,32 @@ def create_demo(root: Path) -> None:
     world: dict[str, Any] = {
         "agent": {"symbol": "SYNTHETIC", "credits": 123456},
         "ships": [ship],
-        "contracts": [],
+        "contracts": [
+            {
+                "id": "DEMO-CONTRACT-1",
+                "factionSymbol": "COSMIC",
+                "type": "PROCUREMENT",
+                "accepted": False,
+                "fulfilled": False,
+                "deadlineToAccept": (
+                    datetime.now(UTC) + timedelta(days=2)
+                ).isoformat(),
+                "terms": {
+                    "deadline": (
+                        datetime.now(UTC) + timedelta(days=7)
+                    ).isoformat(),
+                    "payment": {"onAccepted": 5000, "onFulfilled": 15000},
+                    "deliver": [
+                        {
+                            "tradeSymbol": "IRON_ORE",
+                            "destinationSymbol": "X-DEMO-B2",
+                            "unitsRequired": 20,
+                            "unitsFulfilled": 0,
+                        }
+                    ],
+                },
+            }
+        ],
         "waypoints": points,
         "loss_next": False,
         "mutations": [],
@@ -106,6 +131,7 @@ def create_demo(root: Path) -> None:
             ("ship", world["ships"], "symbol"),
             ("waypoint", points, "symbol"),
             ("market", list(world["markets"].values()), "symbol"),
+            ("contract", world["contracts"], "id"),
         ):
             for item in items:
                 store.observe(SCOPE, kind, item[key], item, "synthetic-demo")
@@ -229,6 +255,34 @@ def dispatch(world: dict[str, Any], request: httpx.Request) -> httpx.Response:
                 )
             )
     if request.method == "POST" and path.startswith("/my/ships/"):
+        if path.endswith("/negotiate/contract"):
+            symbol = parts[3]
+            offer = {
+                "id": f"DEMO-CONTRACT-{len(world['contracts']) + 1}",
+                "factionSymbol": "COSMIC",
+                "type": "PROCUREMENT",
+                "accepted": False,
+                "fulfilled": False,
+                "deadlineToAccept": (
+                    datetime.now(UTC) + timedelta(days=2)
+                ).isoformat(),
+                "terms": {
+                    "deadline": (
+                        datetime.now(UTC) + timedelta(days=7)
+                    ).isoformat(),
+                    "payment": {"onAccepted": 4000, "onFulfilled": 12000},
+                    "deliver": [
+                        {
+                            "tradeSymbol": "IRON_ORE",
+                            "destinationSymbol": "X-DEMO-B2",
+                            "unitsRequired": 10,
+                            "unitsFulfilled": 0,
+                        }
+                    ],
+                },
+            }
+            world["contracts"].append(offer)
+            return ok({"contract": offer})
         symbol, kind = path.split("/")[-2:]
         ship = next(s for s in world["ships"] if s["symbol"] == symbol)
         nav = ship["nav"]
@@ -305,6 +359,163 @@ def dispatch(world: dict[str, Any], request: httpx.Request) -> httpx.Response:
                     },
                 }
             )
+        if kind in ("purchase", "sell") and nav["status"] == "DOCKED":
+            body = json.loads(request.content)
+            quote = next(
+                (
+                    g
+                    for g in world["markets"][nav["waypointSymbol"]][
+                        "tradeGoods"
+                    ]
+                    if g["symbol"] == body.get("symbol")
+                ),
+                None,
+            )
+            units = body.get("units")
+            if (
+                quote is None
+                or type(units) is not int
+                or units <= 0
+                or units > quote["tradeVolume"]
+            ):
+                return httpx.Response(
+                    400, json={"error": {"message": "Invalid trade"}}
+                )
+            inventory = ship["cargo"]["inventory"]
+            item = next(
+                (i for i in inventory if i["symbol"] == body["symbol"]), None
+            )
+            price = quote[
+                "purchasePrice" if kind == "purchase" else "sellPrice"
+            ]
+            total = price * units
+            if kind == "purchase":
+                if (
+                    ship["cargo"]["units"] + units > ship["cargo"]["capacity"]
+                    or world["agent"]["credits"] < total
+                ):
+                    return httpx.Response(
+                        400, json={"error": {"message": "Capacity/funds"}}
+                    )
+                world["agent"]["credits"] -= total
+                if item:
+                    item["units"] += units
+                else:
+                    inventory.append(
+                        {"symbol": body["symbol"], "units": units}
+                    )
+                ship["cargo"]["units"] += units
+            else:
+                if item is None or item["units"] < units:
+                    return httpx.Response(
+                        400, json={"error": {"message": "Cargo"}}
+                    )
+                world["agent"]["credits"] += total
+                item["units"] -= units
+                ship["cargo"]["units"] -= units
+                if item["units"] == 0:
+                    inventory.remove(item)
+            return ok(
+                {
+                    "agent": world["agent"],
+                    "cargo": ship["cargo"],
+                    "transaction": {
+                        "totalPrice": total,
+                        "units": units,
+                        "pricePerUnit": price,
+                        "tradeSymbol": body["symbol"],
+                        "type": kind.upper(),
+                        "shipSymbol": symbol,
+                        "waypointSymbol": nav["waypointSymbol"],
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                }
+            )
+    if request.method == "POST" and path.startswith("/my/contracts/"):
+        contract_id, kind = path.split("/")[-2:]
+        contract = next(
+            (c for c in world["contracts"] if c["id"] == contract_id), None
+        )
+        if contract is None:
+            return missing
+        if kind == "accept" and not contract["accepted"]:
+            contract["accepted"] = True
+            world["agent"]["credits"] += contract["terms"]["payment"][
+                "onAccepted"
+            ]
+            return ok({"agent": world["agent"], "contract": contract})
+        if (
+            kind == "deliver"
+            and contract["accepted"]
+            and not contract["fulfilled"]
+        ):
+            body = json.loads(request.content)
+            ship = next(
+                (
+                    s
+                    for s in world["ships"]
+                    if s["symbol"] == body.get("shipSymbol")
+                ),
+                None,
+            )
+            term = next(
+                (
+                    d
+                    for d in contract["terms"]["deliver"]
+                    if d["tradeSymbol"] == body.get("tradeSymbol")
+                ),
+                None,
+            )
+            units = body.get("units")
+            if (
+                ship is None
+                or term is None
+                or type(units) is not int
+                or units <= 0
+            ):
+                return httpx.Response(
+                    400, json={"error": {"message": "Invalid delivery"}}
+                )
+            item = next(
+                (
+                    i
+                    for i in ship["cargo"]["inventory"]
+                    if i["symbol"] == term["tradeSymbol"]
+                ),
+                None,
+            )
+            remaining = term["unitsRequired"] - term["unitsFulfilled"]
+            if (
+                ship["nav"]["status"] != "DOCKED"
+                or ship["nav"]["waypointSymbol"] != term["destinationSymbol"]
+                or item is None
+                or units > min(item["units"], remaining)
+            ):
+                return httpx.Response(
+                    400, json={"error": {"message": "Delivery precondition"}}
+                )
+            item["units"] -= units
+            ship["cargo"]["units"] -= units
+            term["unitsFulfilled"] += units
+            if item["units"] == 0:
+                ship["cargo"]["inventory"].remove(item)
+            return ok({"contract": contract, "cargo": ship["cargo"]})
+        if (
+            kind == "fulfill"
+            and contract["accepted"]
+            and all(
+                d["unitsFulfilled"] == d["unitsRequired"]
+                for d in contract["terms"]["deliver"]
+            )
+        ):
+            contract["fulfilled"] = True
+            world["agent"]["credits"] += contract["terms"]["payment"][
+                "onFulfilled"
+            ]
+            return ok({"agent": world["agent"], "contract": contract})
+        return httpx.Response(
+            400, json={"error": {"message": "Contract state"}}
+        )
         if kind in ("purchase", "sell") and nav["status"] == "DOCKED":
             body = json.loads(request.content)
             quote = next(
