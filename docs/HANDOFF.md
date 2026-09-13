@@ -1,4 +1,80 @@
-# Current Handoff — browser trading
+# Current Handoff — browser contracts
+
+The Contracts section now provides stored offer inspection, acceptance preview,
+dated sourcing evidence, durable negotiation/acceptance/delivery/fulfillment,
+progress and cargo visibility, and links to existing flight, fleet, markets and
+Operations surfaces. Dispatch-time expiry/state/cargo/location checks and the
+existing ambiguity journal remain authoritative. See
+[BROWSER_CONTRACTS.md](BROWSER_CONTRACTS.md) for the offline walkthrough and
+live-verification limits.
+
+# Previous Handoff — FOS-77 registration hardening
+
+## Registration delivery — 2026-09-13
+
+FOS-77 was implemented on clean `master`, fast-forwarded to freshly fetched
+`origin/master` at `7e1a650`. Aron authorized committing and pushing branch
+`aron/fos-77-registration-hardening` and will create the PR for LLM review.
+No live API calls, registration or runtime-state changes were performed.
+
+- Checked official OpenAPI 2.3.0 and registration models. Account-token Bearer
+  auth, HTTP 201 and the defined `ships` array are covered at the HTTP boundary;
+  the upstream singular `ship` required-list inconsistency is documented.
+- Registration strictly clears the unscoped JSON cache before atomic, private
+  working-directory `.env` replacement. Removed redundant `--clear-cache`.
+- API failure preserves old local identity/cache/runtime evidence. Cache/write
+  failures after remote registration explicitly direct owner token recovery,
+  without leaking server payloads, credentials or validation details.
+- `agent verify-registration --symbol ... --faction ...` reads the saved token
+  directly and bypasses cache for identity, fleet and contract GETs. Registration
+  reports verification pending; failure leaves gameplay stopped with recovery
+  instructions. Exported old tokens cannot mask the saved-token smoke result.
+- The [reset-night runbook](REGISTRATION.md) covers preparation, verification,
+  interruption, credential recovery, rollback and scoped-state handoff.
+
+Verification: **1,662 passed, 19 skipped** in full offline pytest. Black check,
+Ruff `--no-fix`, strict `mypy .` and `git diff --check` passed. No frontend source
+changed. Test commands:
+
+```sh
+ST_LIVE_TESTS=0 TMPDIR="$PWD/.cache/nightly" \
+  ST_CACHE_DIR=.cache/nightly/fos-77-full-cache \
+  .venv/bin/python -m pytest -q --basetemp=.cache/nightly/fos-77-full
+.venv/bin/python -m black --check .
+.venv/bin/python -m ruff check --no-fix .
+.venv/bin/python -m mypy .
+```
+
+Aron must perform the actual reset-night registration with his account credential
+and chosen symbol/faction; the offline rehearsal consumes no real pilot.
+
+### PR #50 review follow-up — 2026-09-13
+
+Integrated Claude's directory mismatch finding: when `ST_STATE_ROOT` is set in
+the environment or local `.env`, registration and verification require an
+absolute root resolving to cwd before any HTTP request or token/cache change.
+Regression coverage includes wrong, relative, missing and empty roots, matching
+roots, a symlink alias and unchanged token/cache/runtime evidence on refusal.
+
+Verification now reports the failed stage/check without raw exception details.
+Added the faction-enum regeneration guidance, moved `RegistrationError` before
+use, named private staging files `tmp.registration-*`, and documented running
+verification in a new process. Codex reported no major findings.
+
+No disagreement with the substantive fixes. Two review details were corrected:
+the live dispatch guard already exempts `/register`, and collision suffixes do
+not inherently break full-symbol ship-prefix matching. Automatic reset
+registration/collision handling/resume remains a separate product decision from
+FOS-77's explicit owner-driven baseline; no such behavior was introduced here.
+
+Review verification: **1,680 passed, 19 skipped** in full offline pytest;
+**68 passed** in focused registration tests. Repository-wide Black check,
+Ruff `--no-fix`, `mypy .` and `git diff --check` passed. Full test root:
+`.cache/nightly/fos-77-review-full`, cache:
+`.cache/nightly/fos-77-review-full-cache`, with the same offline/TMPDIR flags
+as above. Aron authorized committing and pushing the review fixes.
+
+# Earlier Handoff — browser trading
 
 ## Browser trading delivery — 2026-09-11
 

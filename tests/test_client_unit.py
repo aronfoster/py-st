@@ -1,4 +1,5 @@
 import httpx
+import pytest
 
 from py_st._generated.models import (
     Agent,
@@ -257,7 +258,9 @@ def test_sell_cargo_parses_response() -> None:
     assert result_cargo.capacity == 40, "Cargo capacity should be present"
 
 
-def test_register_agent_parses_response() -> None:
+def test_register_agent_parses_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Arrange
     from tests.factories import (
         RegisterAgentResponseDataFactory,
@@ -265,29 +268,33 @@ def test_register_agent_parses_response() -> None:
 
     response_data_json = RegisterAgentResponseDataFactory.build_minimal()
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(
+        transport: httpx.HTTPTransport, request: httpx.Request
+    ) -> httpx.Response:
         assert request.url.path == "/v2/register"
         assert request.method == "POST"
+        assert request.headers["Authorization"] == "Bearer account-token"
 
         # Verify the payload
         import json
 
         body = json.loads(request.content)
-        assert body["symbol"] == "TEST-AGENT"
-        assert body["faction"] == "COSMIC"
+        assert body == {"symbol": "TEST-AGENT", "faction": "COSMIC"}
 
-        return httpx.Response(200, json={"data": response_data_json})
+        return httpx.Response(201, json={"data": response_data_json})
 
     # Act
-    transport = httpx.MockTransport(handler)
-    fake_client = httpx.Client(
-        transport=transport, base_url="https://api.spacetraders.io/v2"
-    )
-    st = SpaceTradersClient(token="account-token", client=fake_client)
-    response = st.agent.register_agent(symbol="TEST-AGENT", faction="COSMIC")
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handler)
+    with SpaceTradersClient(token="account-token") as st:
+        response = st.agent.register_agent(
+            symbol="TEST-AGENT", faction="COSMIC"
+        )
 
     # Assert
     assert response.data.agent.symbol == "FOO"
     assert response.data.contract.id == "contract-1"
     assert response.data.ships[0].symbol == "SHIP-1"
     assert response.data.token == "test-agent-token-123"
+    assert response.data.faction.symbol.value == "COSMIC"
+    assert response.data.model_dump(mode="json") == response_data_json
+    assert response.data.token not in repr(response)

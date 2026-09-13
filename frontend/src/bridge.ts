@@ -38,7 +38,7 @@ export interface Snapshot {
     paused?: boolean;
     credits?: { observed_at: string; credits: number }[];
     ships?: Observation<Ship>[];
-    contracts?: Observation<{ accepted: boolean; fulfilled: boolean }>[];
+    contracts?: Observation<Contract>[];
     positions?: Observation<{ status: string }>[];
     actions?: {
       id: number;
@@ -82,9 +82,51 @@ declare global {
     ledgerUI: {
       snapshot: Snapshot;
       previewTrade: (body: object) => Promise<TradePreview>;
+      previewContract: (body: object) => Promise<ContractPreview>;
       submitCommand: (payload: object) => Promise<Command>;
     };
   }
+}
+
+export interface ContractDelivery {
+  tradeSymbol: string;
+  destinationSymbol: string;
+  unitsRequired: number;
+  unitsFulfilled: number;
+}
+export interface Contract {
+  id: string;
+  type: string;
+  factionSymbol: string;
+  accepted: boolean;
+  fulfilled: boolean;
+  deadlineToAccept: string;
+  terms: {
+    deadline: string;
+    payment: { onAccepted: number; onFulfilled: number };
+    deliver: ContractDelivery[];
+  };
+}
+export interface ContractPreview {
+  contract: Contract;
+  observed_at: string;
+  cargo: Record<string, { ship: string; units: number }[]>;
+  sources: Record<
+    string,
+    {
+      waypoint: string;
+      unit_price: number;
+      trade_volume?: number;
+      observed_at: string;
+      freshness: string;
+      estimated: boolean;
+    }[]
+  >;
+  credits: number | null;
+  fixed_floor: number;
+  fuel_reserve: number;
+  estimated: boolean;
+  warning: string;
 }
 
 export interface TradePreview {
