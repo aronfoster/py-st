@@ -38,7 +38,7 @@ export interface Snapshot {
     paused?: boolean;
     credits?: { observed_at: string; credits: number }[];
     ships?: Observation<Ship>[];
-    contracts?: Observation<{ accepted: boolean; fulfilled: boolean }>[];
+    contracts?: Observation<Contract>[];
     positions?: Observation<{ status: string }>[];
     actions?: {
       id: number;
@@ -82,9 +82,56 @@ declare global {
     ledgerUI: {
       snapshot: Snapshot;
       previewTrade: (body: object) => Promise<TradePreview>;
+      previewContract: (body: object) => Promise<ContractPreview>;
       submitCommand: (payload: object) => Promise<Command>;
     };
   }
+}
+
+export interface ContractDelivery {
+  tradeSymbol: string;
+  destinationSymbol: string;
+  unitsRequired: number;
+  unitsFulfilled: number;
+}
+export interface Contract {
+  id: string;
+  type: string;
+  factionSymbol: string;
+  accepted: boolean;
+  fulfilled: boolean;
+  deadlineToAccept?: string;
+  expiration: string;
+  terms: {
+    deadline: string;
+    payment: { onAccepted: number; onFulfilled: number };
+    deliver: ContractDelivery[];
+  };
+}
+export interface ContractPreview {
+  contract: Contract;
+  observed_at: string;
+  cargo: Record<string, { ship: string; units: number }[]>;
+  sources: Record<
+    string,
+    {
+      waypoint: string;
+      unit_price: number;
+      trade_volume?: number;
+      observed_at: string;
+      freshness: string;
+      estimated: boolean;
+    }[]
+  >;
+  credits: number | null;
+  fixed_floor: number;
+  fuel_reserve: number;
+  estimated: boolean;
+  procurement_cost: number;
+  feasible: boolean;
+  blockers: string[];
+  evidence: string;
+  warning: string;
 }
 
 export interface TradePreview {
@@ -184,7 +231,16 @@ export function showPage(page: Page) {
 }
 
 /** Presentation guard only. The worker remains the execution authority. */
-export function setManualAvailability(reason: string | null) {
+let availabilityReason: string | null = null;
+let activeObligation = false;
+export function setManualAvailability(
+  reason: string | null,
+  hasActiveObligation = false,
+) {
+  availabilityReason = reason;
+  activeObligation = hasActiveObligation;
+  const paidTrip = (document.getElementById("trip-refuel") as HTMLInputElement)
+    .checked;
   for (const id of [
     "flight-trip",
     "flight-orbit",
@@ -192,8 +248,18 @@ export function setManualAvailability(reason: string | null) {
     "flight-refuel",
   ]) {
     const button = document.getElementById(id) as HTMLButtonElement;
-    button.disabled = reason !== null;
-    button.title = reason || "Submit to the guarded worker";
+    const reserveBlock =
+      activeObligation &&
+      (id === "flight-refuel" || (id === "flight-trip" && paidTrip));
+    button.disabled = reason !== null || reserveBlock;
+    button.title = reserveBlock
+      ? "Active contract: uncheck paid refueling or cost obligations first"
+      : reason || "Submit to the guarded worker";
     button.setAttribute("aria-describedby", "ship-ownership");
   }
 }
+document
+  .getElementById("trip-refuel")
+  ?.addEventListener("change", () =>
+    setManualAvailability(availabilityReason, activeObligation),
+  );

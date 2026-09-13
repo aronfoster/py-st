@@ -132,7 +132,12 @@ This plan enables no live actions and changes no safety guard or allowlist.
   multi-load/multi-good procurement, extraction optimization and cross-system
   discovery remain opportunities, not completed features.
 
-* **Agent Register Command**: Added `py-st agent register` CLI command to create a new agent using an account token. Supports CLI flags `--account-token`, `--symbol`, `--faction`, and `--clear-cache`. Sends POST to `/v2/register`, saves the returned agent token to `.env` (ST_TOKEN), and prints a success summary. Non-interactive implementation with clean error handling.
+* **Agent Register Command (FOS-77 hardened)**: Explicit owner registration now
+  requires automatic legacy-cache invalidation before atomic `.env` token
+  replacement. `--clear-cache` is removed. HTTP 201/account-token authentication,
+  CLI failures and persistence are rehearsed offline; `agent verify-registration`
+  confirms saved-token identity and starter state using fresh GETs. See the
+  [reset-night runbook](docs/REGISTRATION.md) for supervised use and recovery.
 * **CLI Table Alignment**: Fixed column alignment in `contracts list` and `systems waypoints` to handle mixed-digit indexes correctly. Contract columns (IDX, ID6, T, A/F, DUE(REL), DELIVER) now align properly when indexes expand from single to double digits. Waypoint indexes are right-aligned within brackets with fixed-width type fields ensuring "Traits:" column aligns vertically across all rows. Added comprehensive alignment tests.
 * **Document and Normalize Cache Schema**: Created `cache/SCHEMA.md` documenting all cache entry types (agent, ships, contracts, waypoints, markets, shipyards) with JSON structures, refresh policies, and invalidation triggers. Added `src/py_st/services/cache_keys.py` with helper functions for consistent cache key generation. Refactored all services to use centralized key helpers. Added comprehensive tests including drift check to prevent documentation-code divergence.
 * **Transfer Cargo Command**: Added `ships transfer-cargo` CLI command supporting ship index shortcuts (`s-0`, `s-1`) or full symbols. Includes client endpoint, service wrapper with cache invalidation, validation for same-ship and positive units, and comprehensive tests.

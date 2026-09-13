@@ -10,6 +10,7 @@ import {
   setManualAvailability,
   subscribe,
   type Page,
+  type ContractPreview,
   type Snapshot,
   type TradePreview,
 } from "./bridge";
@@ -45,11 +46,285 @@ const descriptions: Record<Page, string> = {
 const deferred: Partial<Record<Page, string>> = {
   fleet:
     "Purchase, outfitting and maintenance controls: later FOS-63 fleet slice. Recorded shipyard detail remains in Explorer.",
-  contracts:
-    "Accept, deliver and fulfill controls: FOS-71 browser contracts slice. The existing cost model is offline only.",
   automation:
     "Goal scheduling and manual takeover: FOS-71 persistent pilot slice. Pause requests STOP; it does not transfer ownership.",
 };
+
+function Contracts({ snapshot, now }: { snapshot: Snapshot; now: number }) {
+  const contracts = snapshot.ledger.contracts || [];
+  const [selected, setSelected] = useState(contracts[0]?.key || "");
+  const [preview, setPreview] = useState<ContractPreview | null>(null);
+  const [deliveryIndex, setDeliveryIndex] = useState("");
+  const [units, setUnits] = useState(1);
+  const [message, setMessage] = useState("");
+  const row = contracts.find((c) => c.key === selected);
+  const contract = row?.data;
+  const acceptanceDeadline =
+    contract?.deadlineToAccept || contract?.expiration || "";
+  const ship = (snapshot.ledger.ships || []).find(
+    (candidate) => candidate.key === snapshot.selectedShip,
+  );
+  const activeContract = contracts.some(
+    (candidate) => candidate.data.accepted && !candidate.data.fulfilled,
+  );
+  const block =
+    commandBlock(snapshot, true) ||
+    (snapshot.ledger.paused || snapshot.flight?.settings.paused
+      ? "STOP requested"
+      : null);
+  const negotiationReason = !ship
+    ? "Select an owned ship"
+    : ship.data.nav.status === "IN_TRANSIT"
+      ? "Selected ship is in transit"
+      : activeContract
+        ? "Resolve the active contract first"
+        : block;
+  const submit = async (payload: object) => {
+    setMessage("Submitting durable command…");
+    try {
+      const command = await window.ledgerUI.submitCommand(payload);
+      setMessage(
+        `Command #${command.id} ${command.status}. Track it in Operations.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Submission was not confirmed",
+      );
+    }
+  };
+  const inspect = async () => {
+    if (!contract) return;
+    try {
+      setPreview(
+        await window.ledgerUI.previewContract({
+          scope: snapshot.ledger.scope,
+          contract: contract.id,
+        }),
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Preview failed");
+    }
+  };
+  return (
+    <Panel title="Contract desk · durable manual authority">
+      <div className="trade-form">
+        <label>
+          Contract{" "}
+          <select
+            value={selected}
+            onChange={(e) => {
+              setSelected(e.target.value);
+              setPreview(null);
+            }}
+          >
+            <option value="">Choose contract</option>
+            {contracts.map((c) => (
+              <option key={c.key}>{c.key}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          disabled={!!negotiationReason}
+          title={negotiationReason || "Negotiate manually"}
+          onClick={() =>
+            submit({ kind: "negotiate_contract", ship: snapshot.selectedShip })
+          }
+        >
+          Negotiate from selected ship
+        </button>
+      </div>
+      {!contract ? (
+        <EmptyState>
+          No stored contracts. Refresh observations or negotiate from an
+          eligible ship.
+        </EmptyState>
+      ) : (
+        <>
+          <EntitySummary
+            name={`${contract.type} · ${contract.factionSymbol}`}
+            state={
+              contract.fulfilled
+                ? "FULFILLED"
+                : contract.accepted
+                  ? "ACCEPTED"
+                  : !acceptanceDeadline ||
+                      new Date(acceptanceDeadline) <= new Date()
+                    ? "EXPIRED"
+                    : "OFFERED"
+            }
+          >
+            <p>
+              Acceptance deadline {acceptanceDeadline || "unknown"}
+              <br />
+              Fulfillment deadline {contract.terms.deadline}
+            </p>
+            <p>
+              Payment on acceptance {contract.terms.payment.onAccepted}; on
+              completion {contract.terms.payment.onFulfilled} (forecast until
+              receipts confirm it).
+            </p>
+            <p className="small">
+              <Freshness stamp={row?.observed_at} now={now} />
+            </p>
+          </EntitySummary>
+          {contract.terms.deliver.map((d) => {
+            const remaining = d.unitsRequired - d.unitsFulfilled;
+            const aboard = (preview?.cargo[d.tradeSymbol] || []).reduce(
+              (n, x) => n + x.units,
+              0,
+            );
+            return (
+              <EntitySummary
+                key={`${d.tradeSymbol}-${d.destinationSymbol}`}
+                name={d.tradeSymbol}
+                state={remaining ? "OUTSTANDING" : "DELIVERED"}
+              >
+                <p>
+                  {d.unitsFulfilled}/{d.unitsRequired} delivered · {remaining}{" "}
+                  remaining · destination {d.destinationSymbol} ·{" "}
+                  {preview
+                    ? `${aboard} aboard owned ships`
+                    : "cargo not yet inspected"}
+                </p>
+                {preview && (
+                  <p className="small">
+                    Sources:{" "}
+                    {(preview.sources[d.tradeSymbol] || [])
+                      .map(
+                        (s) =>
+                          `${s.waypoint} ${s.unit_price}cr (${s.freshness}${s.estimated ? ", estimated" : ""})`,
+                      )
+                      .join("; ") || "unknown; no detailed observed source"}
+                    . Use <a href="#/markets">Markets</a> and{" "}
+                    <a href="#/explorer">Explorer</a>; recommendations never
+                    buy or fly.
+                  </p>
+                )}
+              </EntitySummary>
+            );
+          })}
+          <div className="trade-form">
+            <button onClick={inspect}>Preview obligations and sourcing</button>
+            {!contract.accepted && (
+              <button
+                disabled={
+                  !preview ||
+                  !preview.feasible ||
+                  !!block ||
+                  !acceptanceDeadline ||
+                  new Date(acceptanceDeadline) <= new Date()
+                }
+                title={block || "Preview required"}
+                onClick={() =>
+                  submit({
+                    kind: "accept_contract",
+                    contract: contract.id,
+                    evidence: preview!.evidence,
+                  })
+                }
+              >
+                Accept previewed contract
+              </button>
+            )}
+            {contract.accepted && !contract.fulfilled && (
+              <>
+                <label>
+                  Deliverable{" "}
+                  <select
+                    value={deliveryIndex}
+                    onChange={(e) => setDeliveryIndex(e.target.value)}
+                  >
+                    <option value="">Choose</option>
+                    {contract.terms.deliver.map((d, index) => (
+                      <option
+                        key={`${d.tradeSymbol}-${d.destinationSymbol}`}
+                        value={index}
+                      >
+                        {d.tradeSymbol} → {d.destinationSymbol}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Units{" "}
+                  <input
+                    type="number"
+                    min="1"
+                    value={units}
+                    onChange={(e) => setUnits(Number(e.target.value))}
+                  />
+                </label>
+                <button
+                  disabled={
+                    deliveryIndex === "" ||
+                    units < 1 ||
+                    !snapshot.selectedShip ||
+                    !!block
+                  }
+                  onClick={() =>
+                    submit({
+                      kind: "deliver_contract",
+                      contract: contract.id,
+                      ship: snapshot.selectedShip,
+                      good: contract.terms.deliver[Number(deliveryIndex)]
+                        .tradeSymbol,
+                      destination:
+                        contract.terms.deliver[Number(deliveryIndex)]
+                          .destinationSymbol,
+                      units,
+                    })
+                  }
+                >
+                  Deliver from selected ship
+                </button>
+              </>
+            )}
+            {contract.accepted && !contract.fulfilled && (
+              <button
+                disabled={
+                  contract.terms.deliver.some(
+                    (d) => d.unitsFulfilled !== d.unitsRequired,
+                  ) || !!block
+                }
+                onClick={() =>
+                  submit({ kind: "fulfill_contract", contract: contract.id })
+                }
+              >
+                Fulfill completed contract
+              </button>
+            )}
+            {contract.accepted && !contract.fulfilled && (
+              <p className="small">
+                Fulfillment availability uses the last observation; the worker
+                refreshes every obligation before dispatch.
+              </p>
+            )}
+          </div>
+          {preview && (
+            <div className="trade-preview">
+              <strong>Acceptance preview · estimated stored evidence</strong>
+              <p>{preview.warning}</p>
+              <p>
+                Credits {preview.credits ?? "unknown"}; fixed floor{" "}
+                {preview.fixed_floor}; known fuel reserve{" "}
+                {preview.fuel_reserve}. Fixed-floor headroom is not freely
+                spendable cash.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+      {block && <p className="small">Inspection only · {block}</p>}
+      <p role="status">{message}</p>
+      <p>
+        <a href="#/fleet">Fleet cargo</a> ·{" "}
+        <a href="#/operations">Commands and reconciliation</a>
+      </p>
+    </Panel>
+  );
+}
 
 function Trading({ snapshot, now }: { snapshot: Snapshot; now: number }) {
   const markets = snapshot.ledger.markets || [];
@@ -318,15 +593,18 @@ function App() {
   const obligations = (ledger.contracts || []).filter(
     (c) => c.data.accepted && !c.data.fulfilled,
   );
-  const block = commandBlock(snapshot);
+  const block = commandBlock(snapshot, true);
   const ownership = block
     ? `Inspection only · ${block}`
     : ledger.paused || settings?.paused
       ? "STOP requested · queued work waits for explicit resume"
       : "Manual requests use the worker · authority and reserves revalidated at dispatch";
   useEffect(() => {
-    setManualAvailability(block || (!selected ? "Select a ship first" : null));
-  }, [block, selected]);
+    setManualAvailability(
+      block || (!selected ? "Select a ship first" : null),
+      obligations.length > 0,
+    );
+  }, [block, selected, obligations.length]);
 
   return (
     <>
@@ -413,6 +691,7 @@ function App() {
       <p className="ui-intent">{descriptions[page]}</p>
       {deferred[page] && <p className="ui-deferred">{deferred[page]}</p>}
       {page === "markets" && <Trading snapshot={snapshot} now={now} />}
+      {page === "contracts" && <Contracts snapshot={snapshot} now={now} />}
       {shipPages.includes(page) &&
         createPortal(
           <>

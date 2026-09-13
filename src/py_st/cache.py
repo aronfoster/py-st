@@ -66,10 +66,11 @@ def save_cache(data: dict[str, Any]) -> None:
         logging.error("Failed to save cache: %s", e)
 
 
-def clear_cache() -> None:
-    """Remove the cache file if it exists."""
-    if CACHE_FILE.exists():
-        try:
-            CACHE_FILE.unlink()
-        except OSError as e:
-            logging.error("Failed to clear cache: %s", e)
+def clear_cache(*, strict: bool = False) -> None:
+    """Remove cached data; identity transitions must require success."""
+    try:
+        CACHE_FILE.unlink(missing_ok=True)
+    except OSError as e:
+        if strict:
+            raise
+        logging.error("Failed to clear cache: %s", e)

@@ -62,6 +62,7 @@ def trade_preview(
         for item in ship["cargo"].get("inventory", [])
     }
     protected: dict[str, int] = {}
+    procurement_remaining = 0
     open_contracts = False
     unknown_contracts = False
     for row in store.latest(scope, "contract"):
@@ -84,6 +85,11 @@ def trade_preview(
                 protected[item["tradeSymbol"]] = max(
                     protected.get(item["tradeSymbol"], 0), remaining
                 )
+                if item["tradeSymbol"] == good:
+                    procurement_remaining += remaining
+    procurement_remaining = max(
+        0, procurement_remaining - inventory.get(good, 0)
+    )
     credits = agent_row["data"]["credits"]
     total = price * units if type(price) is int and price > 0 else None
     free = ship["cargo"]["capacity"] - ship["cargo"]["units"]
@@ -105,7 +111,7 @@ def trade_preview(
         and (
             (
                 kind == "purchase"
-                and not open_contracts
+                and (not open_contracts or units <= procurement_remaining)
                 and units <= free
                 and credits - total >= CREDIT_FLOOR + FUEL_ALLOWANCE
             )
@@ -143,9 +149,9 @@ def trade_preview(
         "estimated": True,
         "feasible": feasible,
         "reason": (
-            "Purchases are blocked until active contract obligations are "
-            "costed"
-            if kind == "purchase" and open_contracts
+            "Purchase is limited to a known active deliverable; worker still "
+            "protects the fixed floor and fuel reserve"
+            if kind == "purchase" and open_contracts and procurement_remaining
             else (
                 "Contract acceptance is unknown; trade is blocked"
                 if unknown_contracts
@@ -159,6 +165,110 @@ def trade_preview(
                 )
             )
         ),
+    }
+
+
+def contract_preview(
+    store: Intelligence, scope: str, contract_id: str
+) -> dict[str, Any]:
+    """Describe an offer and its obligations from dated stored evidence."""
+    rows = [
+        row
+        for row in store.latest(scope, "contract")
+        if row["key"] == contract_id
+    ]
+    if len(rows) != 1:
+        raise ValueError("Contract observation is unavailable")
+    row = rows[0]
+    contract = row["data"]
+    markets = store.latest(scope, "market")
+    inventory: dict[str, list[dict[str, Any]]] = {}
+    for ship_row in store.latest(scope, "ship"):
+        for item in ship_row["data"].get("cargo", {}).get("inventory", []):
+            inventory.setdefault(item["symbol"], []).append(
+                {"ship": ship_row["key"], "units": item["units"]}
+            )
+    sources: dict[str, list[dict[str, Any]]] = {}
+    for delivery in contract.get("terms", {}).get("deliver", []):
+        good = delivery.get("tradeSymbol")
+        if not isinstance(good, str):
+            raise ValueError("Contract deliverable good is unavailable")
+        options = []
+        for market in markets:
+            quote = next(
+                (
+                    q
+                    for q in market["data"].get("tradeGoods", [])
+                    if q.get("symbol") == good
+                    and type(q.get("purchasePrice")) is int
+                ),
+                None,
+            )
+            if quote:
+                age = (
+                    datetime.now(UTC)
+                    - datetime.fromisoformat(market["observed_at"])
+                ).total_seconds()
+                options.append(
+                    {
+                        "waypoint": market["key"],
+                        "unit_price": quote["purchasePrice"],
+                        "trade_volume": quote.get("tradeVolume"),
+                        "observed_at": market["observed_at"],
+                        "freshness": "fresh" if age <= 900 else "stale",
+                        "estimated": True,
+                    }
+                )
+        sources[str(good)] = sorted(options, key=lambda x: x["unit_price"])
+    agents = store.latest(scope, "agent")
+    credits = agents[-1]["data"].get("credits") if agents else None
+    procurement_cost = 0
+    blockers: list[str] = []
+    for delivery in contract.get("terms", {}).get("deliver", []):
+        good = delivery["tradeSymbol"]
+        held = sum(item["units"] for item in inventory.get(good, []))
+        needed = max(
+            0,
+            delivery["unitsRequired"] - delivery["unitsFulfilled"] - held,
+        )
+        fresh = [
+            source
+            for source in sources[good]
+            if source["freshness"] == "fresh"
+            and type(source["trade_volume"]) is int
+            and source["trade_volume"] >= needed
+        ]
+        if needed and not fresh:
+            blockers.append(f"No fresh funded source for {good}")
+        elif needed:
+            procurement_cost += needed * fresh[0]["unit_price"]
+    if type(credits) is not int:
+        blockers.append("Credit observation is unavailable")
+    elif credits - procurement_cost < CREDIT_FLOOR + FUEL_ALLOWANCE:
+        blockers.append("Procurement estimate violates protected reserves")
+    evidence_body = {
+        "contract": contract,
+        "cargo": inventory,
+        "sources": sources,
+        "credits": credits,
+    }
+    evidence = hashlib.sha256(
+        json.dumps(evidence_body, sort_keys=True).encode()
+    ).hexdigest()
+    return {
+        "contract": contract,
+        "observed_at": row["observed_at"],
+        "cargo": inventory,
+        "sources": sources,
+        "credits": credits,
+        "fixed_floor": CREDIT_FLOOR,
+        "fuel_reserve": FUEL_ALLOWANCE,
+        "estimated": True,
+        "procurement_cost": procurement_cost,
+        "feasible": not blockers,
+        "blockers": blockers,
+        "evidence": evidence,
+        "warning": "Stored preview only; worker revalidates before dispatch.",
     }
 
 
@@ -304,6 +414,12 @@ def validate_receipt(path: str, result: dict[str, Any]) -> None:
             or transaction["units"] <= 0
         ):
             raise SafetyStop("Invalid trade receipt; reconcile outcome")
+    if kind in ("accept", "deliver", "fulfill", "contract"):
+        contract = result.get("contract", result)
+        if not isinstance(contract, dict) or not isinstance(
+            contract.get("id"), str
+        ):
+            raise SafetyStop("Invalid contract receipt; reconcile outcome")
 
 
 class FlightWorker:
@@ -629,9 +745,19 @@ class FlightWorker:
                 command, {"waypoints": len(points), "observed": now()}
             )
             return
-        symbol = payload["ship"]
+        contract_kind = payload["kind"] in (
+            "negotiate_contract",
+            "accept_contract",
+            "deliver_contract",
+            "fulfill_contract",
+        )
+        symbol = payload.get("ship", "")
         state = self.fresh(symbol)
-        ship = next(s for s in state["ships"] if s["symbol"] == symbol)
+        ship = (
+            next(s for s in state["ships"] if s["symbol"] == symbol)
+            if symbol
+            else None
+        )
         if self.store.pending(self.queue.scope):
             raise SafetyStop("Pending journal outcome requires reconciliation")
         if any(
@@ -639,15 +765,133 @@ class FlightWorker:
             for p in self.store.latest(self.queue.scope, "position")
         ):
             raise SafetyStop("Recover existing automation exposure first")
-        # Flight/refuel cannot yet cost active obligations. Trades protect
-        # contract cargo; purchases retain the additional fuel reserve.
-        if step != "sell" and any(
-            c.get("accepted") is not False and c.get("fulfilled") is not True
-            for c in state["contracts"]
+        # Contract travel without paid refueling is necessary for delivery.
+        # Refueling remains blocked until obligations are fully costed; trades
+        # separately protect reserves and accepted delivery cargo.
+        if (
+            not contract_kind
+            and (
+                step == "refuel"
+                or (step == "orbit" and payload.get("refuel") is True)
+            )
+            and any(
+                c.get("accepted") is not False
+                and c.get("fulfilled") is not True
+                for c in state["contracts"]
+            )
         ):
             raise SafetyStop(
                 "Active contracts need a costed obligation reserve"
             )
+        if contract_kind:
+            current = {c["id"]: c for c in state["contracts"]}
+            now_at = datetime.now(UTC)
+            if step == "negotiate_contract":
+                assert ship is not None
+                if ship["nav"]["status"] == "IN_TRANSIT":
+                    raise SafetyStop("Negotiating ship cannot be in transit")
+                if any(
+                    c["accepted"] and not c["fulfilled"]
+                    for c in state["contracts"]
+                ):
+                    raise SafetyStop("Resolve the active contract first")
+                result = self.mutate(
+                    command, f"/my/ships/{symbol}/negotiate/contract"
+                )
+            else:
+                contract = current.get(payload["contract"])
+                if contract is None:
+                    raise SafetyStop("Contract no longer exists")
+                terms = contract.get("terms", {})
+                deadline_key = (
+                    "deadlineToAccept"
+                    if step == "accept_contract"
+                    else "deadline"
+                )
+                deadline = contract.get(deadline_key) or terms.get(
+                    deadline_key
+                )
+                if step == "accept_contract" and not deadline:
+                    deadline = contract.get("expiration")
+                if (
+                    not isinstance(deadline, str)
+                    or datetime.fromisoformat(deadline) <= now_at
+                ):
+                    raise SafetyStop("Contract deadline has expired")
+                if step == "accept_contract":
+                    if contract["accepted"] or contract["fulfilled"]:
+                        raise SafetyStop("Contract is no longer an open offer")
+                    acceptance = contract_preview(
+                        self.store, self.queue.scope, payload["contract"]
+                    )
+                    if (
+                        not acceptance["feasible"]
+                        or acceptance["evidence"] != payload["evidence"]
+                    ):
+                        raise SafetyStop(
+                            "Acceptance evidence changed or is not funded"
+                        )
+                    result = self.mutate(
+                        command, f"/my/contracts/{payload['contract']}/accept"
+                    )
+                elif step == "deliver_contract":
+                    assert ship is not None
+                    if not contract["accepted"] or contract["fulfilled"]:
+                        raise SafetyStop("Contract is not active")
+                    matches = [
+                        d
+                        for d in terms.get("deliver", [])
+                        if d.get("tradeSymbol") == payload["good"]
+                        and d.get("destinationSymbol")
+                        == payload["destination"]
+                    ]
+                    if len(matches) != 1:
+                        raise SafetyStop("Good is not a unique deliverable")
+                    term = matches[0]
+                    remaining = term["unitsRequired"] - term["unitsFulfilled"]
+                    inventory = {
+                        i["symbol"]: i["units"]
+                        for i in ship["cargo"].get("inventory", [])
+                    }
+                    if (
+                        ship["nav"]["status"] != "DOCKED"
+                        or ship["nav"]["waypointSymbol"]
+                        != term["destinationSymbol"]
+                    ):
+                        raise SafetyStop(
+                            "Ship must be docked at the destination"
+                        )
+                    if payload["units"] > min(
+                        remaining, inventory.get(payload["good"], 0)
+                    ):
+                        raise SafetyStop(
+                            "Delivery exceeds cargo or remaining units"
+                        )
+                    result = self.mutate(
+                        command,
+                        f"/my/contracts/{payload['contract']}/deliver",
+                        {
+                            "shipSymbol": symbol,
+                            "tradeSymbol": payload["good"],
+                            "units": payload["units"],
+                        },
+                    )
+                    self.run.ship(symbol)
+                else:
+                    if not contract["accepted"] or contract["fulfilled"]:
+                        raise SafetyStop("Contract is not ready to fulfill")
+                    if any(
+                        d["unitsFulfilled"] != d["unitsRequired"]
+                        for d in terms.get("deliver", [])
+                    ):
+                        raise SafetyStop("Delivery obligations remain")
+                    result = self.mutate(
+                        command, f"/my/contracts/{payload['contract']}/fulfill"
+                    )
+            self.fresh(symbol)
+            self.advance(command, {"receipt": result})
+            return
+        assert ship is not None
         nav = ship["nav"]
         if step in ("purchase", "sell"):
             if (

@@ -5,13 +5,11 @@ import logging
 
 import typer
 
-from ..client.transport import APIError
 from ..services import agent
 from .options import (
     ACCOUNT_TOKEN_OPTION,
     AGENT_FACTION_OPTION,
     AGENT_SYMBOL_OPTION,
-    CLEAR_CACHE_OPTION,
     SHOW_OPTION,
     TOKEN_OPTION,
     VERBOSE_OPTION,
@@ -45,7 +43,6 @@ def register(
     account_token: str | None = ACCOUNT_TOKEN_OPTION,
     symbol: str | None = AGENT_SYMBOL_OPTION,
     faction: str | None = AGENT_FACTION_OPTION,
-    clear_cache_flag: bool = CLEAR_CACHE_OPTION,
     verbose: bool = VERBOSE_OPTION,
 ) -> None:
     """
@@ -61,20 +58,45 @@ def register(
             account_token=account_token,
             symbol=symbol,
             faction=faction,
-            clear_cache_after=clear_cache_flag,
         )
-
-        if clear_cache_flag:
-            print("Cache cleared.")
 
         print(
-            f"Successfully registered agent {data.agent.symbol}. "
-            "Token saved to .env."
+            f"Registered agent {data.agent.symbol}. "
+            "Token saved to the working directory's .env; cache cleared."
+        )
+        print(
+            "Verification pending. Run: py-st agent verify-registration "
+            f"--symbol {data.agent.symbol} "
+            f"--faction {data.agent.startingFaction}"
         )
 
-    except APIError as e:
-        print(f"API Error: {e}")
-        raise typer.Exit(code=1) from e
-    except ValueError as e:
+    except (agent.RegistrationError, ValueError) as e:
         print(f"Registration failed: {e}")
         raise typer.Exit(code=1) from e
+
+
+@agent_app.command("verify-registration")
+def verify_registration(
+    symbol: str = typer.Option(..., "--symbol", help="Expected agent symbol."),
+    faction: str = typer.Option(..., "--faction", help="Expected faction."),
+) -> None:
+    """Verify the local saved token using fresh read-only GETs."""
+    try:
+        current, ships, contracts = agent.verify_registration(symbol, faction)
+    except agent.RegistrationError as exc:
+        print(str(exc))
+        raise typer.Exit(code=1) from exc
+    print(
+        f"Verified agent {current.symbol}; faction {current.startingFaction}; "
+        f"HQ {current.headquarters}; credits {current.credits}."
+    )
+    for ship in ships:
+        print(
+            f"Ship {ship.symbol}: {ship.registration.role.value}, "
+            f"{ship.nav.waypointSymbol}, {ship.nav.status.value}."
+        )
+    for contract in contracts:
+        print(
+            f"Contract {contract.id}: {contract.factionSymbol}, "
+            f"accepted={contract.accepted}, fulfilled={contract.fulfilled}."
+        )
