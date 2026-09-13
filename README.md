@@ -61,6 +61,10 @@ See [stationary multi-good procurement](docs/LOCAL_PROCUREMENT.md) for limits.
 
 ## Optional Live Observation
 
+For owner-driven new-pilot setup after a reset, use the
+[supervised registration runbook](docs/REGISTRATION.md), including the separate
+read-only `agent verify-registration` smoke command.
+
 Run live commands from the authoritative repository directory. Previews and
 execution now require its existing initialized ledger and matching recorded
 agent identity; they will not silently create new history in another folder.

@@ -1,4 +1,42 @@
-# Current Handoff — browser trading
+# Current Handoff — FOS-77 registration hardening
+
+## Registration delivery — 2026-09-13
+
+FOS-77 was implemented on clean `master`, fast-forwarded to freshly fetched
+`origin/master` at `7e1a650`. Aron authorized committing and pushing branch
+`aron/fos-77-registration-hardening` and will create the PR for LLM review.
+No live API calls, registration or runtime-state changes were performed.
+
+- Checked official OpenAPI 2.3.0 and registration models. Account-token Bearer
+  auth, HTTP 201 and the defined `ships` array are covered at the HTTP boundary;
+  the upstream singular `ship` required-list inconsistency is documented.
+- Registration strictly clears the unscoped JSON cache before atomic, private
+  working-directory `.env` replacement. Removed redundant `--clear-cache`.
+- API failure preserves old local identity/cache/runtime evidence. Cache/write
+  failures after remote registration explicitly direct owner token recovery,
+  without leaking server payloads, credentials or validation details.
+- `agent verify-registration --symbol ... --faction ...` reads the saved token
+  directly and bypasses cache for identity, fleet and contract GETs. Registration
+  reports verification pending; failure leaves gameplay stopped with recovery
+  instructions. Exported old tokens cannot mask the saved-token smoke result.
+- The [reset-night runbook](REGISTRATION.md) covers preparation, verification,
+  interruption, credential recovery, rollback and scoped-state handoff.
+
+Verification: **1,662 passed, 19 skipped** in full offline pytest. Black check,
+Ruff `--no-fix`, strict `mypy .` and `git diff --check` passed. No frontend source
+changed. Test commands:
+
+```sh
+ST_LIVE_TESTS=0 TMPDIR="$PWD/.cache/nightly" \
+  ST_CACHE_DIR=.cache/nightly/fos-77-full-cache \
+  .venv/bin/python -m pytest -q --basetemp=.cache/nightly/fos-77-full
+.venv/bin/python -m black --check .
+.venv/bin/python -m ruff check --no-fix .
+.venv/bin/python -m mypy .
+```
+
+Aron must perform the actual reset-night registration with his account credential
+and chosen symbol/faction; the offline rehearsal consumes no real pilot.
 
 ## Browser trading delivery — 2026-09-11
 

@@ -41,7 +41,6 @@ def test_register_new_agent_with_all_params(
         account_token="account-token-123",
         symbol="TEST",
         faction="COSMIC",
-        clear_cache_after=True,
     )
 
     # Assert
@@ -54,7 +53,7 @@ def test_register_new_agent_with_all_params(
         symbol="TEST", faction="COSMIC"
     )
     mock_save_token.assert_called_once_with("test-agent-token-123")
-    mock_clear_cache.assert_called_once()
+    mock_clear_cache.assert_called_once_with(strict=True)
 
 
 @patch("py_st.services.agent.save_agent_token")
@@ -76,7 +75,7 @@ def test_register_new_agent_from_env_vars(
         env_vars = {
             "SPACETRADERS_ACCOUNT_TOKEN": "env-account-token",
             "DEFAULT_AGENT_SYMBOL": "ENV-AGENT",
-            "DEFAULT_AGENT_FACTION": "ENV-FACTION",
+            "DEFAULT_AGENT_FACTION": "COSMIC",
         }
         return env_vars.get(key)
 
@@ -102,10 +101,10 @@ def test_register_new_agent_from_env_vars(
         result.token == "test-agent-token-123"
     ), "Should return correct token"
     mock_client.agent.register_agent.assert_called_once_with(
-        symbol="ENV-AGENT", faction="ENV-FACTION"
+        symbol="ENV-AGENT", faction="COSMIC"
     )
     mock_save_token.assert_called_once_with("test-agent-token-123")
-    mock_clear_cache.assert_not_called()
+    mock_clear_cache.assert_called_once_with(strict=True)
 
 
 @patch("py_st.services.agent.load_dotenv")

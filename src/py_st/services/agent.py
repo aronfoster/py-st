@@ -5,15 +5,18 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from py_st import cache
-from py_st._generated.models import Agent
+from py_st._generated.models import Agent, Contract, FactionSymbol, Ship
 from py_st._manual_models import RegisterAgentResponseData
 from py_st.client.client import get_client as SpaceTradersClient
-from py_st.env import save_agent_token
+from py_st.client.transport import APIError
+from py_st.env import save_agent_token, saved_agent_token
 from py_st.services.cache_keys import key_for_agent
 
 # Cache configuration for agent info
@@ -79,14 +82,14 @@ def register_new_agent(
     account_token: str | None = None,
     symbol: str | None = None,
     faction: str | None = None,
-    clear_cache_after: bool = False,
 ) -> RegisterAgentResponseData:
     """
     Register a new agent using the account token.
 
     Resolves account_token, symbol, and faction from environment
     variables if not provided. Validates required fields, registers
-    the agent, saves the token to .env, and optionally clears cache.
+    the agent, invalidates legacy cache, then atomically saves the token to
+    the working directory's .env. Stop other application processes first.
 
     Args:
         account_token: Account token (reads from
@@ -95,7 +98,6 @@ def register_new_agent(
             env var if not provided).
         faction: Faction (reads from DEFAULT_AGENT_FACTION
             env var if not provided).
-        clear_cache_after: Whether to clear cache after registration.
 
     Returns:
         The registration response data (contains agent, contract,
@@ -104,7 +106,13 @@ def register_new_agent(
     Raises:
         ValueError: If account_token, symbol, or faction is missing.
     """
-    load_dotenv()
+    try:
+        load_dotenv(Path.cwd() / ".env")
+    except (OSError, ValueError):
+        raise RegistrationError(
+            "Cannot read the working directory's .env. Fix its encoding "
+            "or permissions before registration; no request was sent."
+        ) from None
 
     resolved_account_token = account_token or os.getenv(
         "SPACETRADERS_ACCOUNT_TOKEN"
@@ -129,14 +137,85 @@ def register_new_agent(
             "DEFAULT_AGENT_FACTION env var."
         )
 
-    client = SpaceTradersClient(token=resolved_account_token)
-    response = client.agent.register_agent(
-        symbol=resolved_symbol, faction=resolved_faction
-    )
+    resolved_symbol = resolved_symbol.strip().upper()
+    resolved_faction = resolved_faction.strip().upper()
+    if not 3 <= len(resolved_symbol) <= 14:
+        raise ValueError("Agent symbol must be 3-14 characters.")
+    if resolved_faction not in {f.value for f in FactionSymbol}:
+        raise ValueError("Unknown faction; choose an official faction symbol.")
 
-    save_agent_token(response.data.token)
+    try:
+        client = SpaceTradersClient(token=resolved_account_token)
+        response = client.agent.register_agent(
+            symbol=resolved_symbol, faction=resolved_faction
+        )
+    except (APIError, httpx.HTTPError, ValueError) as exc:
+        # API messages and validation errors can contain credentials/payloads.
+        if isinstance(exc, APIError) and exc.authentication_failed:
+            guidance = "Check the account token and reset/account status."
+        else:
+            guidance = (
+                "Check the account dashboard for an existing pilot before "
+                "retrying; the remote outcome may be unknown."
+            )
+        raise RegistrationError(
+            "Registration not completed locally. Previous saved token, "
+            f"cache and runtime state are unchanged. {guidance} "
+            "See docs/REGISTRATION.md."
+        ) from None
 
-    if clear_cache_after:
-        cache.clear_cache()
+    try:
+        # Never publish a new identity while the unscoped cache can survive.
+        cache.clear_cache(strict=True)
+        save_agent_token(response.data.token)
+    except (OSError, ValueError):
+        raise RegistrationError(
+            "Pilot registered remotely, but local activation failed. "
+            "The previous saved token is unchanged; cache may be cleared. "
+            "Do not register again. Fix .env/cache permissions, regenerate "
+            "this pilot's agent token in the account dashboard and save it "
+            "privately. Follow docs/REGISTRATION.md before resuming."
+        ) from None
 
     return response.data
+
+
+class RegistrationError(RuntimeError):
+    """Credential-free owner recovery guidance."""
+
+
+def verify_registration(
+    symbol: str, faction: str
+) -> tuple[Agent, list[Ship], list[Contract]]:
+    """Read saved-token identity and starter state, bypassing cache."""
+    try:
+        client = SpaceTradersClient(token=saved_agent_token())
+        current = client.agent.get_agent()
+        if (
+            current.symbol != symbol.upper()
+            or current.startingFaction != faction.upper()
+        ):
+            raise ValueError("Identity mismatch")
+        ships = client.ships.get_ships()
+        contracts = client.contracts.get_contracts()
+        if (
+            not ships
+            or len(ships) != current.shipCount
+            or any(
+                not s.symbol.startswith(f"{current.symbol}-") for s in ships
+            )
+            or not any(s.registration.role.value == "COMMAND" for s in ships)
+            or not any(
+                c.factionSymbol == current.startingFaction for c in contracts
+            )
+        ):
+            raise ValueError("Starter state incomplete")
+    except (APIError, httpx.HTTPError, OSError, ValueError):
+        raise RegistrationError(
+            "Registration verification failed; keep gameplay stopped. "
+            "Check the working directory's .env, expected symbol/faction "
+            "and account dashboard/reset status. Recover the existing "
+            "pilot's token if needed, then rerun agent verify-registration. "
+            "Do not register again. See docs/REGISTRATION.md."
+        ) from None
+    return current, ships, contracts
