@@ -1,0 +1,31 @@
+# Set PY_ST_PUBLIC_ORIGIN and PY_ST_BACKEND_PORT in Caddy's environment.
+# A DNS hostname and public certificate must be proved in Task 05B.
+{
+    servers {
+        timeouts {
+            read_header 10s
+            read_body 15s
+            write 30s
+            idle 60s
+        }
+        max_header_size 16KB
+    }
+}
+
+{$PY_ST_PUBLIC_ORIGIN} {
+    request_body {
+        max_size 64KB
+    }
+    reverse_proxy 127.0.0.1:{$PY_ST_BACKEND_PORT} {
+        # Preserve the original Host, including a nonstandard port.
+        # Never rewrite arbitrary inbound Host to the configured authority.
+        header_up -Forwarded
+        header_up -X-Forwarded-Host
+        header_up -X-Forwarded-Proto
+        header_up -X-Forwarded-For
+        transport http {
+            dial_timeout 3s
+            response_header_timeout 25s
+        }
+    }
+}

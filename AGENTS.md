@@ -1,7 +1,7 @@
 # Agent Instructions
 
 The primary goal is the best application for a human or automated process to
-play SpaceTraders. Current assignment: FOS-72, browser UI/UX foundation.
+play SpaceTraders. Current assignment: FOS-71 Task 05A, offline hosted package.
 Use docs/UI_UX.md for the design checkpoint, surface inventory and downstream
 UI contract. Flight operations and FOS-73 capability snapshots are merged.
 FOS-63 owns the wider product roadmap. Live verification is separate.

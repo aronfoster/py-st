@@ -8,6 +8,7 @@ import sqlite3
 import time
 from collections.abc import Callable
 from functools import wraps
+from pathlib import Path
 from typing import ParamSpec, TypeVar
 
 import httpx
@@ -16,6 +17,7 @@ from dotenv import load_dotenv
 
 from py_st.client import APIError, SpaceTradersClient
 from py_st.services.automation import SafetyStop
+from py_st.services.checkpoint import checkpoint, restore
 from py_st.services.dashboard import dashboard_server
 from py_st.services.flight_auth import save_password
 from py_st.services.flight_demo import (
@@ -26,6 +28,8 @@ from py_st.services.flight_demo import (
 )
 from py_st.services.flight_queue import FlightQueue, canonical_root
 from py_st.services.flight_worker import FlightWorker
+from py_st.services.hosted_config import PublicOrigin
+from py_st.services.hosted_server import hosted_server
 from py_st.services.intelligence import Intelligence
 from py_st.services.stop_control import request_stop
 
@@ -61,11 +65,29 @@ def live_client() -> SpaceTradersClient:
     return SpaceTradersClient(token)
 
 
+@flight_app.command("checkpoint")
+@safe_errors
+def checkpoint_command(destination: Path) -> None:
+    """Checkpoint paused, quiesced state to a new private directory."""
+    checkpoint(canonical_root(), destination)
+    typer.echo("Full-state checkpoint complete; keep it private")
+
+
+@flight_app.command("restore")
+@safe_errors
+def restore_command(source: Path, target: Path) -> None:
+    """Restore exact-code checkpoint into an empty target, always stopped."""
+    restore(source, target)
+    typer.echo("Restored stopped; live state requires authority review")
+
+
 @flight_app.command()
 @safe_errors
-def setup(demo: bool = False) -> None:
+def setup(demo: bool = False, public_origin: str = "") -> None:
     """Initialize flight commands over existing history or a new demo."""
     root = canonical_root()
+    if public_origin:
+        PublicOrigin.parse(public_origin)
     if (root / ".state/flight.sqlite3").exists():
         raise typer.BadParameter(
             "Flight state already exists; do not reinitialize"
@@ -73,6 +95,8 @@ def setup(demo: bool = False) -> None:
     password = getpass.getpass("New local owner password (blank allowed): ")
     if password != getpass.getpass("Confirm local owner password: "):
         raise typer.BadParameter("Passwords differ")
+    if public_origin and not password:
+        raise typer.BadParameter("Hosted owner password must not be blank")
     if demo:
         create_demo(root)
         scope = SCOPE
@@ -112,11 +136,26 @@ def setup(demo: bool = False) -> None:
 
 @flight_app.command()
 @safe_errors
-def serve(port: int = 8765) -> None:
+def serve(
+    port: int = 8765,
+    public_origin: str = typer.Option("", envvar="ST_PUBLIC_ORIGIN"),
+    hosted: bool = False,
+) -> None:
     """Serve the authenticated loopback application; holds no game token."""
     root = canonical_root()
     queue = FlightQueue(root)
     queue.close()
+    if hosted or public_origin:
+        PublicOrigin.parse(public_origin)
+        production = hosted_server(root, public_origin, port)
+        typer.echo("Hosted Flight Ledger ready on loopback behind HTTPS proxy")
+        try:
+            production.run()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            production.close()
+        return
     server = dashboard_server(root, port)
     typer.echo(f"Flight Ledger: http://127.0.0.1:{server.server_port}")
     try:

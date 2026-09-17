@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from py_st.services.state_lease import StateLease
+
 KINDS = {
     "refresh",
     "trip",
@@ -125,6 +127,23 @@ class FlightQueue:
         create: bool = False,
         scope: str = "",
         mode: str = "live",
+        _checkpoint: bool = False,
+    ) -> None:
+        self.lease = None if _checkpoint else StateLease(root)
+        try:
+            self._open(root, create=create, scope=scope, mode=mode)
+        except BaseException:
+            if self.lease:
+                self.lease.close()
+            raise
+
+    def _open(
+        self,
+        root: Path,
+        *,
+        create: bool = False,
+        scope: str = "",
+        mode: str = "live",
     ) -> None:
         self.root = root.resolve(strict=True)
         path = self.root / ".state/flight.sqlite3"
@@ -191,6 +210,8 @@ class FlightQueue:
 
     def close(self) -> None:
         self.db.close()
+        if self.lease:
+            self.lease.close()
 
     def check_compatibility(self) -> None:
         if self.db.execute("PRAGMA user_version").fetchone()[0] != 1:
@@ -316,6 +337,11 @@ class FlightQueue:
             )
 
     def control(self, paused: bool) -> None:
+        handoff = self.root / "HANDOFF_REQUIRED"
+        if not paused and (handoff.exists() or handoff.is_symlink()):
+            raise ValueError(
+                "Restored state requires authority-transfer review"
+            )
         with self.db:
             self.db.execute("UPDATE settings SET paused=?", (int(paused),))
 
