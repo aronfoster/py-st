@@ -191,6 +191,11 @@ def restore(source: Path, target: Path) -> None:
     manifest = json.loads(manifest_path.read_text())
     if (
         not isinstance(manifest, dict)
+        or any(
+            not isinstance(manifest.get(key), str) or not manifest[key]
+            for key in ("source_root", "scope", "mode")
+        )
+        or manifest["mode"] not in ("demo", "live")
         or manifest.get("format") != 1
         or manifest.get("code") != code_identity()
         or manifest.get("files") != files(source)

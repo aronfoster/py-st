@@ -193,7 +193,9 @@ deployment; existing live roots require checkpoint/restore and handoff review.
    the supplied Caddy service drop-in both read this file, so the backend port
    and public origin cannot drift between two configuration files. The
    dashboard does not need a game token. Keep tokens private/server-side;
-   never put them in this shared file. Review/install the drop-in under
+   never put them in this shared file. Ensure both Caddy and py-st users can read
+   the shared file and traverse its parent directory. Keep it owned and
+   writable only by the deployment administrator. Install the drop-in under
    `caddy.service.d` and adapt `deploy/Caddyfile` with the installed Caddy
    version before activation. Restart both services after changing the file.
 4. With both processes stopped, take a checkpoint. Serialize activation and

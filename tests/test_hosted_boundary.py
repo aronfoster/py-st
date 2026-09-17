@@ -357,6 +357,30 @@ def test_checkpoint_refuses_running_server(
         checkpoint(managed, tmp_path / "backup")
 
 
+@pytest.mark.parametrize("key", ["source_root", "scope", "mode"])
+@pytest.mark.parametrize("damage", ["missing", None, 42, False, [], {}, ""])
+def test_invalid_checkpoint_identity(
+    managed: Path, tmp_path: Path, key: str, damage: object
+) -> None:
+    backup = tmp_path / "backup"
+    checkpoint(managed, backup)
+    manifest_path = backup / "checkpoint.json"
+    manifest = json.loads(manifest_path.read_text())
+    if damage == "missing":
+        del manifest[key]
+    else:
+        manifest[key] = damage
+    manifest_path.write_text(json.dumps(manifest))
+    target = tmp_path / "restored"
+    with patch(
+        "py_st.services.checkpoint.tempfile.TemporaryDirectory"
+    ) as stage:
+        with pytest.raises(ValueError, match="Incomplete"):
+            restore(backup, target)
+        stage.assert_not_called()
+    assert not target.exists()
+
+
 def test_incomplete_manifest(managed: Path, tmp_path: Path) -> None:
     backup = tmp_path / "backup"
     checkpoint(managed, backup)
