@@ -1,0 +1,28 @@
+[Unit]
+Description=py-st hosted dashboard
+After=network.target
+RequiresMountsFor=/srv/py-st
+ConditionPathIsMountPoint=/srv/py-st
+
+[Service]
+Type=simple
+User=py-st
+Group=py-st
+WorkingDirectory=/srv/py-st/state
+Environment=ST_STATE_ROOT=/srv/py-st/state
+EnvironmentFile=/etc/py-st/hosted.env
+# Mandatory argument: a missing origin cannot fall back to local mode.
+ExecStart=/opt/py-st/current/.venv/bin/python -m py_st flight serve --hosted --public-origin ${ST_PUBLIC_ORIGIN} --port ${PY_ST_BACKEND_PORT}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/py-st/state
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

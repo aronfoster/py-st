@@ -1,4 +1,65 @@
-# Current Handoff — browser contracts
+# Current Handoff — Task 05A hosted package (2026-09-16)
+
+Based on verified upstream master `5aac3f5773d3503efdfe714c7f122d51a35af174`.
+The reviewable local diff adds explicit HTTPS origin validation, fail-closed
+hosted authentication/state checks, Secure cookies, a loopback Waitress WSGI
+adapter, Caddy/systemd templates, runtime dependency version capture and private
+quiesced checkpoint/restore. Local blank-password behavior remains intact.
+See [HOSTED_OPERATIONS.md](HOSTED_OPERATIONS.md) for exact launch, testing,
+installation, rollback and remaining authority-transfer gates.
+
+Checkpoint restores retain STOP and uncertain command outcomes. Live imports
+add HANDOFF_REQUIRED, blocking worker startup and resume. Neither the service
+templates nor tests initialize production state, arm a live worker, install
+host services or modify GCP. No live API call, registration, merge or deployment
+was performed. Frontend source/assets were unchanged; wheel inspection confirms
+the dashboard, generated JS/CSS and hosted modules are included.
+
+PR #54 review follow-up (2026-09-17): Waitress is pinned in the runtime lock;
+the bundle installs in a fresh Python 3.12 venv with `--no-index`, passes
+`pip check`, and loads `python -m py_st flight serve --help`. Restore targets
+the `/srv/py-st/state` child of the data mount, rejects mount points early,
+and supports an existing empty directory. Dashboard and Caddy share one
+non-secret origin/port configuration. Checkpoints exclude `.env`, preserve
+handoff markers, and fingerprint Python plus shipped HTML/JS/CSS. Lease
+cancellation retains the original exception after descriptor cleanup.
+
+Review verification: **63 passed, 2 browser cases skipped** in the hosted
+suite, including actual Caddy HTTPS, 405/413/431 boundaries and new recovery
+regressions. Black, Ruff, mypy and Caddy template adaptation with a non-default
+backend port pass. The full suite with proxy variables removed stops at the
+first Unix-socket EPERM: **400 passed, 10 skipped, 1 error**. This runtime's
+socket restriction remains; no authority guard was weakened. The earlier
+reviewer's full-suite success was on the original PR head, not this follow-up.
+Per-request state validation and strict matching-release restore are retained
+deliberately. Browser/Caddy provisioning in CI remains future work.
+
+Initial implementation verification in this runtime:
+
+- Hosted boundary/checkpoint suite: **47 passed, 2 browser cases skipped**.
+  Includes the explicit-hosted CLI regression and actual
+  Caddy 2.10.2 HTTPS login/data/logout with an explicitly verified test certificate.
+- Full offline suite with proxy environment removed: **401 passed, 14 skipped,
+  10 errors**, stopped at the configured failure limit. All ten errors are
+  existing worker setup's `socket(AF_UNIX)` rejected with EPERM by this runtime.
+  The single-authority guard was not weakened or mocked.
+- Actual browser-enabled invocation attempted: fails at Chromium launch because
+  no browser executable is installed. Playwright browser downloads timed out/
+  failed (including HTTP 502). Runnable desktop/390px HTTPS flight tests remain.
+- Black 24.8.0, Ruff 0.6.9 and strict mypy passed; final results are recorded in
+  the Linear journal. Caddy configuration adaptation passed. Systemd static
+  verification reports only absent future release executables; no host install
+  was attempted. Wheel build and packaged-asset inspection passed.
+
+These results do NOT prove the complete worker/browser workflow on this diff.
+Next: rerun the recorded offline/browser commands in a Linux execution runtime
+supporting the existing Unix-socket lock and browser binaries, review the diff,
+then proceed with FOS-74's supervised Task 05B. Public TLS renewal, GCP fit,
+cross-host authority handoff and live acceptance remain separate. Tasks 06 and
+substantial unattended automation remain after hosted proof. FOS-78's offline
+transition work must consume the new state lease and live-import STOP barrier.
+
+# Previous Handoff — browser contracts
 
 The Contracts section now provides stored offer inspection, acceptance preview,
 dated sourcing evidence, durable negotiation/acceptance/delivery/fulfillment,

@@ -1,6 +1,8 @@
 tmp/
 .state/
 STOP
+HANDOFF_REQUIRED
+.state-lease
 
 # Cache directory
 src/.cache/

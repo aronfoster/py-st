@@ -24,14 +24,20 @@ from py_st.services.flight_worker import (
     preview,
     trade_preview,
 )
+from py_st.services.hosted_config import PublicOrigin, validate_hosted_state
 from py_st.services.intelligence import Intelligence
 from py_st.services.market_history import market_history
+from py_st.services.state_lease import StateLease
 from py_st.services.stop_control import request_stop, stop_requested
 from py_st.services.system_explorer import system_explorer
 
 
-def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
+def dashboard_handler(
+    root: Path, public_origin: PublicOrigin | None = None
+) -> type[BaseHTTPRequestHandler]:
     root = root.resolve()
+    if public_origin:
+        validate_hosted_state(root)
     csrf = secrets.token_hex(32)
     html = (
         Path(__file__).with_name("dashboard.html").read_text(encoding="utf-8")
@@ -84,10 +90,17 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
             self.wfile.write(data)
 
         def local(self) -> bool:
+            if public_origin:
+                return self.headers.get("Host") == public_origin.authority
             port = cast(ThreadingHTTPServer, self.server).server_port
             return self.headers.get("Host") == f"127.0.0.1:{port}"
 
         def authenticated(self) -> bool:
+            if public_origin:
+                try:
+                    validate_hosted_state(root)
+                except (OSError, ValueError, TypeError, sqlite3.Error):
+                    return False
             if not managed:
                 return True
             cookies = SimpleCookie()
@@ -231,8 +244,12 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                     store.close()
 
         def do_POST(self) -> None:
-            port = cast(ThreadingHTTPServer, self.server).server_port
-            origin = f"http://127.0.0.1:{port}"
+            origin = (
+                public_origin.origin
+                if public_origin
+                else "http://127.0.0.1:"
+                f"{cast(ThreadingHTTPServer, self.server).server_port}"
+            )
             if not self.local() or self.headers.get("Origin") != origin:
                 self.reply(403, "{}")
                 return
@@ -267,6 +284,8 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                     self.reply(403, "{}")
                     return
                 if managed and self.path == "/api/login":
+                    if public_origin:
+                        validate_hosted_state(root)
                     if set(body) != {"csrf", "password"} or not isinstance(
                         body["password"], str
                     ):
@@ -304,7 +323,8 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                         200,
                         "{}",
                         cookie=f"flight_session={token}; Path=/; HttpOnly; "
-                        "SameSite=Strict; Max-Age=28800",
+                        "SameSite=Strict; Max-Age=28800"
+                        + ("; Secure" if public_origin else ""),
                     )
                     return
                 if not self.authenticated():
@@ -321,7 +341,8 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                         200,
                         "{}",
                         cookie="flight_session=; Path=/; HttpOnly; "
-                        "SameSite=Strict; Max-Age=0",
+                        "SameSite=Strict; Max-Age=0"
+                        + ("; Secure" if public_origin else ""),
                     )
                     return
                 if self.path in (
@@ -514,4 +535,21 @@ def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
                 return
             self.reply(200, json.dumps({"paused": paused}))
 
-    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    return Handler
+
+
+def dashboard_server(root: Path, port: int = 8765) -> ThreadingHTTPServer:
+    lease = StateLease(root)
+
+    class Server(ThreadingHTTPServer):
+        def server_close(self) -> None:
+            try:
+                super().server_close()
+            finally:
+                lease.close()
+
+    try:
+        return Server(("127.0.0.1", port), dashboard_handler(root))
+    except BaseException:
+        lease.close()
+        raise

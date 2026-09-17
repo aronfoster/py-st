@@ -434,6 +434,12 @@ def validate_receipt(path: str, result: dict[str, Any]) -> None:
 
 class FlightWorker:
     def __init__(self, root: Path, client: SpaceTradersClient) -> None:
+        if (root / "HANDOFF_REQUIRED").exists() or (
+            root / "HANDOFF_REQUIRED"
+        ).is_symlink():
+            raise SafetyStop(
+                "Restored state requires authority-transfer review"
+            )
         self.queue = FlightQueue(root)
         self.root = self.queue.root
         self.client = client

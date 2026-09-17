@@ -10,14 +10,17 @@ automation (FOS-63). FOS-71 tracks bounded end-to-end implementation tasks.
    refuel; durable worker, local authentication and stateful offline proof.
 3. FOS-73 read-only capability snapshot: merged in PR #47.
 4. FOS-72 browser UI/UX foundation: design checkpoint and shell migration.
-5. Browser trading, then contracts, then persistent pilot controls, using the
-   [UI contract](docs/UI_UX.md#ui-contract-for-subsequent-slices).
-6. Fleet purchase/outfitting, maintenance, industrial coordination, supply chains,
-   reconnaissance, seasons, multi-system progression and authenticated GCP hosting.
+5. Browser trading and contracts: merged in PRs #49 and #51.
+6. Task 05A hosted application package: local implementation; see
+   [hosted operations](docs/HOSTED_OPERATIONS.md) for verification gates.
+7. Task 05B secure GCP execution and authority handoff, then persistent pilot
+   controls using the [UI contract](docs/UI_UX.md#ui-contract-for-subsequent-slices).
+8. Fleet purchase/outfitting, maintenance, industrial coordination, supply chains,
+   reconnaissance, seasons and multi-system progression.
 
-Task 02 is merged in PR #46. FOS-72 establishes the browser foundation before
-Task 03 trading is dispatched. The sections below retain earlier backlog and
-dated evidence.
+Task 02 is merged in PR #46, FOS-72 in #48 and registration hardening in #50.
+Substantial unattended automation follows hosted execution proof. The sections
+below retain earlier backlog and dated evidence.
 
 ---
 

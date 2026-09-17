@@ -9,11 +9,12 @@ dependencies = [
   "typer",
   "python-dotenv",
   "responses>=0.25.0",
+  "waitress==3.0.2",
 ]
 
 [project.optional-dependencies]
 # Keep formatters aligned with .pre-commit-config.yaml.
-dev = ["black==24.8.0", "ruff==0.6.9", "mypy", "pytest", "pre-commit"]
+dev = ["black==24.8.0", "ruff==0.6.9", "mypy", "pytest", "pre-commit", "types-waitress", "packaging"]
 browser = ["playwright"]
 
 [project.scripts]
