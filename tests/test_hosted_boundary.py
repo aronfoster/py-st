@@ -11,14 +11,19 @@ import ssl
 import subprocess
 import threading
 import time
+import tomllib
 from collections.abc import Iterator
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 import pytest
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 from typer.testing import CliRunner
 
 from py_st.cli.flight_cmd import flight_app
+from py_st.services import checkpoint as checkpoint_module
 from py_st.services.checkpoint import checkpoint, restore
 from py_st.services.flight_auth import save_password
 from py_st.services.flight_demo import SCOPE, create_demo, demo_client
@@ -26,6 +31,7 @@ from py_st.services.flight_queue import FlightQueue
 from py_st.services.flight_worker import FlightWorker
 from py_st.services.hosted_config import PublicOrigin
 from py_st.services.hosted_server import hosted_server
+from py_st.services.state_lease import StateLease
 from py_st.services.stop_control import request_stop
 
 PASSWORD = "synthetic-hosted-owner"
@@ -207,12 +213,15 @@ def test_startup_refusal(managed: Path, damage: str) -> None:
         hosted_server(managed, ORIGIN, 0)
 
 
+@pytest.mark.parametrize("existing", [False, True])
 def test_checkpoint_restore_and_integrity(
-    managed: Path, tmp_path: Path
+    managed: Path, tmp_path: Path, existing: bool
 ) -> None:
     backup = tmp_path / "backup"
     checkpoint(managed, backup)
     restored = tmp_path / "restored"
+    if existing:
+        restored.mkdir()
     restore(backup, restored)
     queue = FlightQueue(restored)
     try:
@@ -226,6 +235,118 @@ def test_checkpoint_restore_and_integrity(
     (backup / ".state/owner.json").write_text("{}")
     with pytest.raises(ValueError):
         restore(backup, tmp_path / "altered")
+
+
+def test_restore_rejects_mount_before_copying(
+    managed: Path, tmp_path: Path
+) -> None:
+    backup = tmp_path / "backup"
+    checkpoint(managed, backup)
+    target = tmp_path / "data-mount"
+    target.mkdir()
+    with (
+        patch.object(Path, "is_mount", return_value=True),
+        pytest.raises(ValueError, match="beneath the state mount"),
+    ):
+        restore(backup, target)
+    assert target.is_dir()
+    assert not list(target.iterdir())
+    assert not list(tmp_path.glob(".restore-*"))
+
+
+def test_checkpoint_excludes_token_and_preserves_handoff(
+    managed: Path, tmp_path: Path
+) -> None:
+    (managed / ".env").write_text("ST_TOKEN=synthetic-never-live\n")
+    (managed / "HANDOFF_REQUIRED").write_text("Retain authority review\n")
+    backup, target = tmp_path / "backup", tmp_path / "restored"
+    checkpoint(managed, backup)
+    manifest = json.loads((backup / "checkpoint.json").read_text())
+    assert ".env" not in manifest["files"]
+    assert not (backup / ".env").exists()
+    restore(backup, target)
+    assert not (target / ".env").exists()
+    assert (target / "HANDOFF_REQUIRED").read_text() == (
+        "Retain authority review\n"
+    )
+    assert (target / "STOP").is_file()
+    queue = FlightQueue(target)
+    try:
+        with pytest.raises(ValueError, match="authority"):
+            queue.control(False)
+    finally:
+        queue.close()
+
+
+@pytest.mark.parametrize("name", ["app.py", "page.html", "ui.js", "ui.css"])
+def test_release_identity_covers_sources_and_assets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    package = tmp_path / "py_st"
+    services = package / "services"
+    services.mkdir(parents=True)
+    monkeypatch.setattr(
+        checkpoint_module, "__file__", str(services / "checkpoint.py")
+    )
+    asset = services / name
+    asset.write_text("before")
+    before = checkpoint_module.code_identity()
+    asset.write_text("after")
+    assert checkpoint_module.code_identity() != before
+    after = checkpoint_module.code_identity()
+    (services / "cache.pyc").write_bytes(b"ignored cache")
+    assert checkpoint_module.code_identity() == after
+
+
+@pytest.mark.parametrize(
+    "error", [KeyboardInterrupt, OSError, BlockingIOError]
+)
+def test_lease_preserves_interrupts_and_closes_descriptor(
+    tmp_path: Path, error: type[BaseException]
+) -> None:
+    expected = ValueError if error is BlockingIOError else error
+    with (
+        patch("py_st.services.state_lease.fcntl.flock", side_effect=error),
+        patch("py_st.services.state_lease.os.close", wraps=os.close) as close,
+    ):
+        with pytest.raises(expected):
+            StateLease(tmp_path)
+        close.assert_called_once()
+
+
+def test_runtime_lock_covers_project_requirements() -> None:
+    root = Path(__file__).resolve().parents[1]
+    pins = {}
+    for line in (
+        (root / "deploy/requirements-py312.lock").read_text().splitlines()
+    ):
+        if line and not line.startswith("#"):
+            name, version = line.split("==")
+            pins[canonicalize_name(name)] = version
+    project = tomllib.loads((root / "pyproject.toml").read_text())["project"]
+    for text in project["dependencies"]:
+        requirement = Requirement(text)
+        version = pins[canonicalize_name(requirement.name)]
+        assert version in requirement.specifier, text
+
+
+@pytest.mark.parametrize("method", ["PUT", "DELETE", "PATCH", "OPTIONS"])
+def test_adapter_rejects_unsupported_methods(
+    backend: httpx.Client, method: str
+) -> None:
+    response = backend.request(method, "/api/control")
+    assert response.status_code == 405
+    assert response.json() == {}
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_waitress_request_limits(backend: httpx.Client) -> None:
+    assert backend.post("/api/login", content=b"x" * 65537).status_code == 413
+    assert (
+        backend.get("/", headers={"X-Oversized": "x" * 17000}).status_code
+        == 431
+    )
+    assert backend.get("/").status_code == 200
 
 
 def test_checkpoint_refuses_running_server(

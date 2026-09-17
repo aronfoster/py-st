@@ -30,6 +30,9 @@ logout expiration. Login sessions expire on application restart. Missing or
 incompatible managed ledgers, malformed/private-permission failures or a blank
 hosted owner verifier fail closed. Removing state during service does not
 activate the local unmanaged fallback. Password input stays in private prompts.
+Every authenticated request checks the existing owner and both ledgers again.
+This deliberately favors prompt refusal after state loss over caching these
+checks. Measure before optimizing this single-owner workload.
 
 ## Build and synthetic launch
 
@@ -47,6 +50,22 @@ architecture, prepare an offline wheel directory and retain it with the release:
   -r deploy/requirements-py312.lock -d .cache/nightly/wheels
 .venv/bin/python -m pip wheel --no-deps . -w .cache/nightly/wheels
 ```
+
+Verify the bundle in a NEW isolated venv before moving it to the VM:
+
+```sh
+python3.12 -m venv .cache/nightly/offline-install
+.cache/nightly/offline-install/bin/python -m pip install --no-index \
+  --find-links .cache/nightly/wheels -r deploy/requirements-py312.lock py-st
+.cache/nightly/offline-install/bin/python -m pip check
+.cache/nightly/offline-install/bin/python -m py_st flight serve --help
+```
+
+Do not generate this lock from stale editable-install metadata. After any
+`pyproject.toml` dependency change, reinstall the project before resolving its
+installed dependency tree. The regression suite checks that the lock includes
+every declared runtime requirement, including the exact Waitress pin; the
+clean `--no-index` install validates the transitive wheel set.
 
 Install that directory in the final release venv using `pip install --no-index
 --find-links WHEEL_DIRECTORY -r deploy/requirements-py312.lock py-st`. Review
@@ -109,11 +128,16 @@ exclusion. Do not stub or disable that guard to claim a passing workflow.
    legacy tools that use this root. Keep services stopped for the operation.
 2. Run `flight checkpoint NEW_DIRECTORY` with the canonical `ST_STATE_ROOT`.
    Destination must be outside that root and must not exist.
-3. Protect the checkpoint as a secret: it includes `.state`, STOP and, when
-   present, `.env` and HANDOFF_REQUIRED. Keep any separately managed external
-   credentials under their own private recovery procedure.
-4. Run `flight restore CHECKPOINT EMPTY_TARGET` using exactly matching Python
-   sources. Do not overwrite a populated target. Retain old state separately.
+3. Protect the checkpoint as private authentication/game data: it includes
+   `.state` (including the owner password verifier), STOP and, when present,
+   HANDOFF_REQUIRED. Canonical-root `.env` is deliberately excluded, so its
+   live `ST_TOKEN` is not copied or restored. Recover tokens and other external
+   credentials through a separate private procedure during Task 05B, before
+   deliberately arming a restored worker.
+4. Run `flight restore CHECKPOINT EMPTY_TARGET` using exactly matching Python,
+   HTML, JavaScript and CSS package files. The target may be nonexistent or an
+   existing empty directory, but not a mount point. Do not overwrite a populated
+   target. Retain old state separately.
 5. Inspect restored queue, journal and STOP before deciding the next action.
 
 The shared process lease excludes running dashboard/queue/worker instances.
@@ -125,6 +149,13 @@ missing ledgers, incompatible schema, missing STOP, symlinks/special files and
 nonempty destinations. A final file-hash manifest plus code identity detects
 incomplete/altered snapshots. Hashes detect corruption, not hostile tampering:
 checkpoint directories must remain private and trusted.
+
+The conservative release fingerprint includes shipped UI assets, not just
+Python. Even a comment-only Python hotfix or CSS-only change makes an old
+checkpoint require its original release. Retain both release and checkpoint:
+a state rollback after upgrading/hotfixing means restoring matching code first,
+then restoring its state; there is no inferred forward migration. The initial
+unmerged PR #54 fingerprint format is superseded by this corrected fingerprint.
 
 Restore validates and stages privately, rewrites only the canonical root and
 paused setting, preserves command/journal uncertainty, creates STOP and
@@ -139,19 +170,32 @@ does not prevent a worker on another machine. Never clear STOP to test restore.
 Templates in `deploy/` are reviewable examples; this task installs none of them.
 Their conventional paths are parameters to adjust together before installation:
 versioned code under `/opt/py-st/releases/<revision>`, a `current` symlink,
-canonical mounted state `/srv/py-st`, protected configuration `/etc/py-st`, and
+data mount `/srv/py-st`, canonical root `/srv/py-st/state`, protected
+configuration `/etc/py-st`, and
 an unprivileged service user. Code belongs to the deployment owner; runtime
 state belongs to the service user. Both service units require the state mount.
+The canonical root is a CHILD of the mount, so restore can stage on the same
+filesystem and atomically publish it without trying to remove a mount point.
+Runtime writes are restricted to that child; the service user should not be
+able to replace the mount directory or release code. With services stopped, a
+supervised restore operator stages in the mount and assigns the restored child
+to the runtime user before starting services. Do not move an initialized root
+by hand: its recorded path must match. This layout is for the inactive/new
+deployment; existing live roots require checkpoint/restore and handoff review.
 
 1. Build the reviewed revision and wheel/dependency artifacts off-VM. Record
    the exact Python/dependency versions and retain that release for rollback.
    Install its venv in its final versioned location (venvs are not relocatable).
 2. Review the state mount and ownership, private owner verifier, ingress and
    secret delivery in Task 05B. No template runs setup or initializes state.
-3. Put only `ST_PUBLIC_ORIGIN` in the dashboard environment file. The dashboard
-   does not need a game token. Keep tokens private/server-side. Supply
-   `PY_ST_PUBLIC_ORIGIN` and `PY_ST_BACKEND_PORT` to the Caddy service; adapt
-   `deploy/Caddyfile` with the installed version before activation.
+3. Use `deploy/hosted.env.example` as the non-secret `/etc/py-st/hosted.env`:
+   set `ST_PUBLIC_ORIGIN` and `PY_ST_BACKEND_PORT` once. The dashboard unit and
+   the supplied Caddy service drop-in both read this file, so the backend port
+   and public origin cannot drift between two configuration files. The
+   dashboard does not need a game token. Keep tokens private/server-side;
+   never put them in this shared file. Review/install the drop-in under
+   `caddy.service.d` and adapt `deploy/Caddyfile` with the installed Caddy
+   version before activation. Restart both services after changing the file.
 4. With both processes stopped, take a checkpoint. Serialize activation and
    atomically switch `current` to the reviewed release. Run offline compatibility
    checks against the canonical root; start dashboard first and verify login.
@@ -166,7 +210,11 @@ state belongs to the service user. Both service units require the state mount.
    migrations or CI/CD activation are added here.
 8. For rollback, stop both processes and restore the matching prior release.
    If state compatibility is uncertain, preserve current evidence and restore
-   the matching checkpoint to an empty target with matching code. Never mix
+   the matching checkpoint with matching code. With all services stopped,
+   retain the old `state` child under a distinct recovery name on the data
+   mount, then restore to the canonical `/srv/py-st/state` (absent or empty).
+   Never rename/unmount `/srv/py-st` itself. Check ownership and privately
+   restore credentials; retain STOP/HANDOFF_REQUIRED pending review. Never mix
    databases from different checkpoints or replay an uncertain command.
 
 Remaining Task 05B gates: public certificate issuance and renewal (especially

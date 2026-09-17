@@ -15,7 +15,26 @@ host services or modify GCP. No live API call, registration, merge or deployment
 was performed. Frontend source/assets were unchanged; wheel inspection confirms
 the dashboard, generated JS/CSS and hosted modules are included.
 
-Verification in this runtime:
+PR #54 review follow-up (2026-09-17): Waitress is pinned in the runtime lock;
+the bundle installs in a fresh Python 3.12 venv with `--no-index`, passes
+`pip check`, and loads `python -m py_st flight serve --help`. Restore targets
+the `/srv/py-st/state` child of the data mount, rejects mount points early,
+and supports an existing empty directory. Dashboard and Caddy share one
+non-secret origin/port configuration. Checkpoints exclude `.env`, preserve
+handoff markers, and fingerprint Python plus shipped HTML/JS/CSS. Lease
+cancellation retains the original exception after descriptor cleanup.
+
+Review verification: **63 passed, 2 browser cases skipped** in the hosted
+suite, including actual Caddy HTTPS, 405/413/431 boundaries and new recovery
+regressions. Black, Ruff, mypy and Caddy template adaptation with a non-default
+backend port pass. The full suite with proxy variables removed stops at the
+first Unix-socket EPERM: **400 passed, 10 skipped, 1 error**. This runtime's
+socket restriction remains; no authority guard was weakened. The earlier
+reviewer's full-suite success was on the original PR head, not this follow-up.
+Per-request state validation and strict matching-release restore are retained
+deliberately. Browser/Caddy provisioning in CI remains future work.
+
+Initial implementation verification in this runtime:
 
 - Hosted boundary/checkpoint suite: **47 passed, 2 browser cases skipped**.
   Includes the explicit-hosted CLI regression and actual

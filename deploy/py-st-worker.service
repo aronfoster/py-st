@@ -5,14 +5,14 @@ Wants=network-online.target
 RequiresMountsFor=/srv/py-st
 ConditionPathIsMountPoint=/srv/py-st
 ConditionPathExists=/etc/py-st/worker-armed
-ConditionPathExists=!/srv/py-st/HANDOFF_REQUIRED
+ConditionPathExists=!/srv/py-st/state/HANDOFF_REQUIRED
 
 [Service]
 Type=simple
 User=py-st
 Group=py-st
-WorkingDirectory=/srv/py-st
-Environment=ST_STATE_ROOT=/srv/py-st
+WorkingDirectory=/srv/py-st/state
+Environment=ST_STATE_ROOT=/srv/py-st/state
 ExecStart=/opt/py-st/current/.venv/bin/python -m py_st flight worker
 Restart=on-failure
 RestartSec=5
@@ -22,7 +22,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/srv/py-st
+ReadWritePaths=/srv/py-st/state
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]

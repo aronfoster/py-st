@@ -1,4 +1,4 @@
-# Set PY_ST_PUBLIC_ORIGIN and PY_ST_BACKEND_PORT in Caddy's environment.
+# Use /etc/py-st/hosted.env for both dashboard and Caddy (see drop-in).
 # A DNS hostname and public certificate must be proved in Task 05B.
 {
     servers {
@@ -12,7 +12,7 @@
     }
 }
 
-{$PY_ST_PUBLIC_ORIGIN} {
+{$ST_PUBLIC_ORIGIN} {
     request_body {
         max_size 64KB
     }

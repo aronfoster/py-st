@@ -21,12 +21,15 @@ class StateLease:
                 (fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
                 | fcntl.LOCK_NB,
             )
-        except BaseException:
-            os.close(self.fd)
-            self.fd = -1
+        except BlockingIOError:
+            self.close()
             raise ValueError(
                 "State is in use; stop all writers first"
             ) from None
+        except BaseException:
+            # Clean up even on cancellation, but preserve the actual error.
+            self.close()
+            raise
 
     def close(self) -> None:
         if self.fd >= 0:

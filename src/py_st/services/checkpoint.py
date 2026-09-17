@@ -22,12 +22,17 @@ DATABASES = ("flight.sqlite3", "intelligence.sqlite3")
 
 
 def code_identity() -> str:
-    """Conservative rollback policy: restore using the exact Python sources."""
+    """Restore with matching Python sources AND shipped frontend assets."""
     base = Path(__file__).parent.parent
     digest = hashlib.sha256()
-    for path in sorted(base.rglob("*.py")):
-        digest.update(str(path.relative_to(base)).encode())
-        digest.update(path.read_bytes())
+    for path in sorted(base.rglob("*")):
+        if path.is_file() and path.suffix in {".py", ".html", ".js", ".css"}:
+            name = path.relative_to(base).as_posix().encode()
+            content = path.read_bytes()
+            digest.update(len(name).to_bytes(8, "big"))
+            digest.update(name)
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
     return digest.hexdigest()
 
 
@@ -139,7 +144,9 @@ def checkpoint(root: Path, destination: Path) -> None:
                 target_db.close()
                 source_db.close()
             (destination / ".state" / name).chmod(0o600)
-        for name in ("STOP", ".env", "HANDOFF_REQUIRED"):
+        # Credentials are deliberately recovered through a separate private
+        # channel; never copy the live token from canonical-root .env.
+        for name in ("STOP", "HANDOFF_REQUIRED"):
             source = root / name
             if source.exists() or source.is_symlink():
                 if source.is_symlink() or not source.is_file():
@@ -170,19 +177,25 @@ def restore(source: Path, target: Path) -> None:
     if target.is_symlink():
         raise ValueError("Restore refuses symbolic-link targets")
     target = target.resolve()
+    if target.is_mount():
+        raise ValueError(
+            "Restore target must be a directory beneath the state mount"
+        )
     if source.is_relative_to(target) or target.is_relative_to(source):
         raise ValueError("Restore target must be separate from checkpoint")
-    if target.is_symlink() or (target.exists() and any(target.iterdir())):
+    if target.exists() and any(target.iterdir()):
         raise ValueError("Restore refuses nonempty targets")
     manifest_path = source / "checkpoint.json"
     if manifest_path.is_symlink():
         raise ValueError("Invalid checkpoint manifest")
     manifest = json.loads(manifest_path.read_text())
     if (
-        manifest.get("format") != 1
+        not isinstance(manifest, dict)
+        or manifest.get("format") != 1
         or manifest.get("code") != code_identity()
         or manifest.get("files") != files(source)
         or "STOP" not in manifest["files"]
+        or ".env" in manifest["files"]
         or any(".state/" + name not in manifest["files"] for name in DATABASES)
     ):
         raise ValueError("Incomplete, altered or incompatible checkpoint")
