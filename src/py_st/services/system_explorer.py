@@ -65,6 +65,9 @@ def system_explorer(store: Intelligence, scope: str) -> dict[str, Any]:
         )
         nav_value = ship_data.get("nav")
         nav: dict[str, Any] = nav_value if isinstance(nav_value, dict) else {}
+        ship_system = nav.get("systemSymbol")
+        if isinstance(ship_system, str) and ship_system:
+            systems.setdefault(ship_system, [])
         route_value = nav.get("route")
         route: dict[str, Any] = (
             route_value if isinstance(route_value, dict) else {}
