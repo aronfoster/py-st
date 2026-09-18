@@ -1,7 +1,52 @@
 from pathlib import Path
 
+import pytest
+
 from py_st.services.intelligence import Intelligence
 from py_st.services.system_explorer import system_explorer
+
+
+def test_explorer_includes_fleet_systems_before_waypoint_refresh(
+    tmp_path: Path,
+) -> None:
+    # Arrange: initial observation has fleet evidence but no waypoint history.
+    store = Intelligence(tmp_path / "ledger.sqlite3")
+    for scope, ship, system in (
+        ("r:a", "A-1", "X-A"),
+        ("r:a", "A-2", "X-A"),
+        ("r:a", "A-3", "X-B"),
+        ("old:a", "A-1", "X-OLD"),
+        ("r:other", "OTHER-1", "X-OTHER"),
+    ):
+        store.observe(scope, "ship", ship, {"nav": {"systemSymbol": system}})
+
+    # Act / Assert: deduplicate current fleet systems without inventing points.
+    assert system_explorer(store, "r:a")["systems"] == [
+        {"symbol": "X-A", "waypoints": []},
+        {"symbol": "X-B", "waypoints": []},
+    ]
+    store.observe("r:a", "waypoint", "X-A-1", {"systemSymbol": "X-A"})
+    result = system_explorer(store, "r:a")
+    assert [system["symbol"] for system in result["systems"]] == [
+        "X-A",
+        "X-B",
+    ]
+    assert len(result["systems"][0]["waypoints"]) == 1
+    assert result["systems"][1]["waypoints"] == []
+    store.close()
+
+
+@pytest.mark.parametrize("system", [None, "", 123, []])
+def test_explorer_ignores_missing_or_nonstring_fleet_system(
+    tmp_path: Path, system: object
+) -> None:
+    # Arrange
+    store = Intelligence(tmp_path / "ledger.sqlite3")
+    store.observe("r:a", "ship", "A-1", {"nav": {"systemSymbol": system}})
+
+    # Act / Assert
+    assert system_explorer(store, "r:a")["systems"] == []
+    store.close()
 
 
 def test_explorer_shapes_details_transit_and_missing_data(

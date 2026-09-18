@@ -1,4 +1,28 @@
-# Current Handoff — Task 05A hosted package (2026-09-16)
+# Current Handoff — FOS-74 fresh-game explorer fix (2026-09-18)
+
+Hosted release `b51f9d3` exposed a bootstrap dependency: `auto observe` records
+agent/fleet/contracts, but Explorer listed systems only from waypoint history.
+With no waypoints yet, the first browser snapshot refresh submitted an empty
+system and was rejected. Include systems from same-scope stored ship navigation
+with empty waypoint lists until the normal worker refresh fills them. No fake
+waypoint observations or alternate command path are needed.
+
+Regression evidence: the new fresh-history unit test failed before the fix.
+The browser test now starts without waypoint/market history, selects the fleet's
+system, resumes, submits refresh through the UI and executes the real synthetic
+worker. Desktop and 390px both show refreshed waypoints with unchanged credits
+and no mutations. The explorer/flight/dashboard browser suite passed **166**
+tests; full offline pytest passed **1,777**, with **26 skipped**. Black, Ruff,
+mypy and diff whitespace checks passed. Temporary evidence is under
+`.cache/nightly/fos74-bootstrap-browser` and `fos74-bootstrap-full`.
+
+Owner authorized delivery on `aron/fos-74-fresh-game-explorer` for review and
+merge before returning for GCP redeployment. FOS-74 records the live deployment
+evidence and requested pause. Next after merge: a supervised release update,
+preserving the original release and its matching initial checkpoint, then repeat
+the first browser refresh. Old checkpoints still require their original code.
+
+# Previous Handoff — Task 05A hosted package (2026-09-16)
 
 Based on verified upstream master `5aac3f5773d3503efdfe714c7f122d51a35af174`.
 The reviewable local diff adds explicit HTTPS origin validation, fail-closed

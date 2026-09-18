@@ -1525,6 +1525,73 @@ def test_authentication_csrf_and_durable_http_submission(
     reason="Explicit offline browser suite",
 )
 @pytest.mark.parametrize("width", [1440, 390])
+def test_browser_refresh_without_recorded_waypoints(
+    flight_http: str, flight_root: Path, width: int
+) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    # Arrange: fresh auto observe has only account, fleet and contracts.
+    with sqlite3.connect(flight_root / ".state/intelligence.sqlite3") as db:
+        db.execute(
+            "DELETE FROM observations WHERE kind NOT IN "
+            "('agent', 'ship', 'contract')"
+        )
+    queue = FlightQueue(flight_root)
+    queue.control(True)
+    queue.close()
+    errors: list[str] = []
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": width, "height": 1000})
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto(flight_http)
+        page.locator("#owner-password").fill(PASSWORD)
+        page.get_by_role("button", name="Log in", exact=True).click()
+        page.get_by_role("navigation").get_by_role(
+            "link", name="Explorer", exact=True
+        ).click()
+
+        # Act: choose an occupied system before its first waypoint refresh.
+        expect(page.locator("#system-select")).to_be_enabled()
+        expect(page.locator("#system-select")).to_have_value("X-DEMO")
+        expect(page.locator("#waypoint-list button")).to_have_count(0)
+        page.get_by_role("button", name="Resume worker", exact=True).click()
+        page.locator("#flight-refresh").click()
+        expect(page.locator("#flight-message")).to_contain_text("Command #")
+        with demo_client(flight_root) as client:
+            client._transport._interval = 0
+            worker = FlightWorker(flight_root, client)
+            try:
+                assert worker.tick()
+                commands = worker.queue.report()["commands"]
+                assert len(commands) == 1
+                assert commands[0]["payload"] == {
+                    "kind": "refresh",
+                    "system": "X-DEMO",
+                }
+                assert commands[0]["status"] == "completed"
+            finally:
+                worker.close()
+
+        # Assert: real worker refreshed observations, with no game mutation.
+        expect(page.locator("#waypoint-list button")).to_have_count(
+            3, timeout=15000
+        )
+        expect(page.locator("#credits")).to_have_text("123,456")
+        assert not world(flight_root)["mutations"]
+        assert not errors, errors
+        page.screenshot(
+            path=str(flight_root / f"fresh-refresh-{width}.png"),
+            full_page=True,
+        )
+        browser.close()
+
+
+@pytest.mark.skipif(
+    os.environ.get("DASHBOARD_BROWSER_TESTS") != "1",
+    reason="Explicit offline browser suite",
+)
+@pytest.mark.parametrize("width", [1440, 390])
 def test_browser_trip(flight_http: str, flight_root: Path, width: int) -> None:
     from playwright.sync_api import sync_playwright
 
