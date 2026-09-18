@@ -16,6 +16,15 @@ tests; full offline pytest passed **1,777**, with **26 skipped**. Black, Ruff,
 mypy and diff whitespace checks passed. Temporary evidence is under
 `.cache/nightly/fos74-bootstrap-browser` and `fos74-bootstrap-full`.
 
+Review follow-ups: listing a system before its first waypoint refresh makes
+the zero-waypoint explorer map reachable for the first time, where spreading
+an empty coordinate list into `Math.min`/`Math.max` left the map offsets
+`NaN`. Nothing consumed them, because the only reader is the per-waypoint
+loop, so this is a defensive guard that centers the empty map rather than a
+behavior change. The browser test now also pins its bootstrap precondition,
+failing during Arrange if the surviving observation kinds ever stop matching
+`Session.refresh`.
+
 Owner authorized delivery on `aron/fos-74-fresh-game-explorer` for review and
 merge before returning for GCP redeployment. FOS-74 records the live deployment
 evidence and requested pause. Next after merge: a supervised release update,

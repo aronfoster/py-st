@@ -1530,12 +1530,18 @@ def test_browser_refresh_without_recorded_waypoints(
 ) -> None:
     from playwright.sync_api import expect, sync_playwright
 
-    # Arrange: fresh auto observe has only account, fleet and contracts.
+    # Arrange: Session.refresh records only agent, ship and contract.
     with sqlite3.connect(flight_root / ".state/intelligence.sqlite3") as db:
         db.execute(
             "DELETE FROM observations WHERE kind NOT IN "
             "('agent', 'ship', 'contract')"
         )
+        kinds = {
+            row[0]
+            for row in db.execute("SELECT DISTINCT kind FROM observations")
+        }
+    # Fail loudly here if the bootstrap precondition ever drifts.
+    assert kinds == {"agent", "ship", "contract"}
     queue = FlightQueue(flight_root)
     queue.control(True)
     queue.close()
