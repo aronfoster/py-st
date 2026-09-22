@@ -443,7 +443,13 @@ def test_browser_pending_journal_and_historical_scope(
         page.locator("#owner-password").fill(PASSWORD)
         page.get_by_role("button", name="Log in", exact=True).click()
         page.locator("#scope").select_option(SCOPE)
-        assert page.locator("#ui-navigation nav").is_visible(), page_errors
+        assert page.locator("#ui-navigation nav").is_visible(), (
+            page_errors,
+            page.evaluate(
+                "({nav:document.querySelector('#ui-navigation').outerHTML, "
+                "root:document.querySelector('#ui-root').outerHTML.slice(0,500)})"
+            ),
+        )
         page.get_by_role("navigation").get_by_role(
             "link", name="Explorer", exact=True
         ).click()
