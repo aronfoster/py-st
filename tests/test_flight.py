@@ -413,6 +413,8 @@ def test_browser_pending_journal_and_historical_scope(
 ) -> None:
     from playwright.sync_api import expect, sync_playwright
 
+    page_errors: list[str] = []
+
     # Arrange: journal uncertainty independent of the current command queue.
     store = Intelligence(flight_root / ".state/intelligence.sqlite3")
     ship = store.latest(SCOPE, "ship")[0]
@@ -423,6 +425,7 @@ def test_browser_pending_journal_and_historical_scope(
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(viewport={"width": width, "height": 900})
+        page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.add_init_script(
             """window.panelFlash = false;
             new MutationObserver(() => {
@@ -440,6 +443,7 @@ def test_browser_pending_journal_and_historical_scope(
         page.locator("#owner-password").fill(PASSWORD)
         page.get_by_role("button", name="Log in", exact=True).click()
         page.locator("#scope").select_option(SCOPE)
+        assert page.locator("#ui-navigation nav").is_visible(), page_errors
         page.get_by_role("navigation").get_by_role(
             "link", name="Explorer", exact=True
         ).click()
