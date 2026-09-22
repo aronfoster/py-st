@@ -51,9 +51,6 @@ jobs:
       - name: Mypy
         run: mypy .
 
-      - name: Pytest
-        run: pytest -q
-
       - name: Browser dependencies
         run: |
           pip install -e '.[browser]'
@@ -71,6 +68,9 @@ jobs:
             --basetemp=.cache/nightly/ci-browser-focus
           pytest tests/test_flight.py tests/test_dashboard.py -q --maxfail=1 \
             --basetemp=.cache/nightly/ci-browser
+
+      - name: Pytest
+        run: pytest -q
 
       - name: Upload browser screenshots
         if: always()
