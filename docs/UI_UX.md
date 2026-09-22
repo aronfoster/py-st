@@ -1,5 +1,17 @@
 # Browser UI foundation — FOS-72
 
+## FOS-97 dense destination discovery
+
+The explorer's React surface presents a searchable list before the map. The
+legacy controller still owns ship, system and waypoint selection and flight
+preview/submission. The map groups identical coordinates and screen-space
+neighbors; a selected stack's detail lists each colocated waypoint separately.
+The list remains the keyboard path and the primary selection path at phone
+width. Its facility labels and price text refer only to stored observations;
+an unobserved market quote is unknown, including when a marketplace trait is
+known. The deterministic `flight setup --demo --demo-layout dense` layout
+provides 88 waypoints for local acceptance, without contacting the live game.
+
 ## Checkpoint and evidence
 
 Design checkpoint: 2026-09-11, before shell changes. Canonical requirements:

@@ -83,9 +83,17 @@ def restore_command(source: Path, target: Path) -> None:
 
 @flight_app.command()
 @safe_errors
-def setup(demo: bool = False, public_origin: str = "") -> None:
+def setup(
+    demo: bool = False, public_origin: str = "", demo_layout: str = "basic"
+) -> None:
     """Initialize flight commands over existing history or a new demo."""
     root = canonical_root()
+    if demo_layout not in {"basic", "dense"} or (
+        not demo and demo_layout != "basic"
+    ):
+        raise typer.BadParameter(
+            "--demo-layout requires --demo and basic or dense"
+        )
     if public_origin:
         PublicOrigin.parse(public_origin)
     if (root / ".state/flight.sqlite3").exists():
@@ -98,7 +106,7 @@ def setup(demo: bool = False, public_origin: str = "") -> None:
     if public_origin and not password:
         raise typer.BadParameter("Hosted owner password must not be blank")
     if demo:
-        create_demo(root)
+        create_demo(root, layout=demo_layout)
         scope = SCOPE
     else:
         store = Intelligence(

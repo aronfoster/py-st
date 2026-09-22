@@ -1275,6 +1275,115 @@ def flight_http(flight_root: Path) -> Iterator[str]:
         thread.join()
 
 
+@pytest.mark.skipif(
+    os.environ.get("DASHBOARD_BROWSER_TESTS") != "1",
+    reason="Explicit offline browser suite",
+)
+@pytest.mark.parametrize("width", [1280, 390])
+def test_browser_dense_destination_discovery(
+    tmp_path: Path, width: int
+) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    # Arrange: 88 waypoints, shared coordinates and mixed evidence.
+    create_demo(tmp_path, layout="dense")
+    save_password(tmp_path, PASSWORD)
+    queue = FlightQueue(tmp_path, create=True, scope=SCOPE, mode="demo")
+    queue.control(False)
+    server = dashboard_server(tmp_path, 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                channel="chrome", headless=True
+            )
+            page = browser.new_page(viewport={"width": width, "height": 900})
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{server.server_port}/#/explorer")
+            page.locator("#owner-password").fill(PASSWORD)
+            page.get_by_role("button", name="Log in", exact=True).click()
+            page.locator("#explorer-ship").select_option("SYNTHETIC-1")
+            expect(page.locator("#waypoint-list button")).to_have_count(88)
+            if width == 390:
+                assert not page.locator(".ui-map-panel").evaluate(
+                    "el => el.open"
+                )
+                assert page.evaluate(
+                    "document.documentElement.scrollWidth <= innerWidth"
+                )
+            page.screenshot(
+                path=str(tmp_path / f"dense-fit-{width}.png"), full_page=True
+            )
+
+            # Discover a facility without knowing its identifier, then preview.
+            page.get_by_role("button", name="Marketplace", exact=True).click()
+            expect(page.locator("#waypoint-list button")).to_have_count(4)
+            page.locator("#waypoint-search").fill("A4")
+            page.locator("#waypoint-search").press("ArrowDown")
+            page.keyboard.press("Enter")
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "X-DEMO-A4"
+            )
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "Detailed prices unknown"
+            )
+            page.get_by_role(
+                "button", name="Preview trip from SYNTHETIC-1"
+            ).click()
+            expect(page.locator("#flight-estimate")).to_contain_text(
+                '"estimated": true'
+            )
+            assert not queue.report()["commands"]
+
+            # Every member of the shared coordinate is explicitly selectable.
+            page.locator("#waypoint-search").fill("")
+            page.get_by_role("button", name="Marketplace", exact=True).click()
+            for member in ("A2", "A3", "A4"):
+                page.locator("#waypoint-list button").filter(
+                    has_text=f"X-DEMO-{member}"
+                ).click()
+                expect(page.locator("#flight-selection")).to_contain_text(
+                    f"X-DEMO-{member}"
+                )
+            page.locator("#waypoint-search").fill("A1")
+            page.locator("#waypoint-search").press("ArrowDown")
+            page.keyboard.press("Enter")
+            page.get_by_role("button", name="X-DEMO-A3 · MOON").click()
+            expect(page.locator("#flight-selection")).to_contain_text(
+                "X-DEMO-A3"
+            )
+            if width == 1280:
+                before = page.locator("#map").get_attribute("data-zoom-k")
+                page.get_by_role("button", name="Focus selection").click()
+                for _ in range(6):
+                    page.get_by_role("button", name="Zoom in").click()
+                page.wait_for_function(
+                    "before => document.querySelector('#map').dataset.zoomK "
+                    "!== before",
+                    arg=before,
+                )
+                page.locator("#map [data-stack='4'] circle").click()
+                page.locator(".ui-colocated").get_by_role(
+                    "button", name="X-DEMO-A2 · MOON"
+                ).click()
+                expect(page.locator("#flight-selection")).to_contain_text(
+                    "X-DEMO-A2"
+                )
+                page.get_by_role("button", name="Fit system").click()
+                page.screenshot(
+                    path=str(tmp_path / "dense-zoom-1280.png"), full_page=True
+                )
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+        queue.close()
+
+
 def login(client: httpx.Client, origin: str) -> str:
     page = client.get("/")
     match = re.search('nonce="([a-f0-9]+)"', page.text)
