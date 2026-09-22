@@ -452,6 +452,8 @@ def test_browser_pending_journal_and_historical_scope(
         page.locator("#owner-password").fill(PASSWORD)
         page.get_by_role("button", name="Log in", exact=True).click()
         page.locator("#scope").select_option(SCOPE)
+        if not page.locator("#ui-navigation nav").is_visible():
+            print("FOS97 browser console:", *console_errors, sep="\n")
         assert page.locator("#ui-navigation nav").is_visible(), (
             page_errors,
             console_errors,
