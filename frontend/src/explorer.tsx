@@ -353,9 +353,10 @@ function SystemMap({
 }
 
 export function Explorer({ snapshot }: { snapshot: Snapshot }) {
-  const data: ExplorerData = snapshot.ledger.explorer || {
-    systems: [],
-    ships: [],
+  const observed: Partial<ExplorerData> = snapshot.ledger.explorer || {};
+  const data: ExplorerData = {
+    systems: observed.systems || [],
+    ships: observed.ships || [],
   };
   const system = data.systems.find(
     (s) => s.symbol === snapshot.selectedSystem,
