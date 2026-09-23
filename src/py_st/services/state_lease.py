@@ -8,11 +8,16 @@ from pathlib import Path
 
 
 class StateLease:
-    def __init__(self, root: Path, *, exclusive: bool = False) -> None:
+    def __init__(
+        self, root: Path, *, exclusive: bool = False, read_only: bool = False
+    ) -> None:
+        if exclusive and read_only:
+            raise ValueError("Exclusive lease cannot be read-only")
         # Outside .state: restore cannot replace the locked inode.
         self.fd = os.open(
             root / ".state-lease",
-            os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
+            (os.O_RDONLY if read_only else os.O_CREAT | os.O_RDWR)
+            | os.O_NOFOLLOW,
             0o600,
         )
         try:

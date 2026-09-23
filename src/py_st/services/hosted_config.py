@@ -68,13 +68,15 @@ class PublicOrigin:
         return cls(f"https://{authority}", authority)
 
 
-def validate_hosted_state(root: Path) -> None:
+def validate_hosted_state(root: Path, *, read_only: bool = False) -> None:
     """Open existing compatible state only; never initialize a missing file."""
     validate_owner(root, hosted=True)
-    queue = FlightQueue(root)
+    queue = FlightQueue(root, read_only=read_only)
     try:
         store = Intelligence(
-            root / ".state/intelligence.sqlite3", existing_only=True
+            root / ".state/intelligence.sqlite3",
+            existing_only=True,
+            read_only=read_only,
         )
         try:
             if queue.scope not in store.scopes():

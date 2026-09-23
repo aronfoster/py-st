@@ -25,10 +25,21 @@ class Intelligence:
             self.db = sqlite3.connect(
                 path.resolve().as_uri() + "?mode=ro", uri=True, timeout=10
             )
-            self.db.row_factory = sqlite3.Row
-            if self.db.execute("PRAGMA user_version").fetchone()[0] != 1:
+            try:
+                self.db.row_factory = sqlite3.Row
+                if self.db.execute("PRAGMA user_version").fetchone()[0] != 1:
+                    raise ValueError("Unsupported intelligence schema version")
+                self.db.execute(
+                    "SELECT id,scope,kind,key,observed_at,source,data "
+                    "FROM observations LIMIT 0"
+                )
+                self.db.execute(
+                    "SELECT id,scope,started_at,finished_at,path,body,status,"
+                    "result FROM actions LIMIT 0"
+                )
+            except BaseException:
                 self.db.close()
-                raise ValueError("Unsupported intelligence schema version")
+                raise
             return
         if existing_or_create and not existing_only:
             path.parent.mkdir(parents=True, exist_ok=True)

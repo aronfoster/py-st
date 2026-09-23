@@ -128,10 +128,21 @@ class FlightQueue:
         scope: str = "",
         mode: str = "live",
         _checkpoint: bool = False,
+        read_only: bool = False,
     ) -> None:
-        self.lease = None if _checkpoint else StateLease(root)
+        if create and read_only:
+            raise ValueError("Cannot create a read-only flight queue")
+        self.lease = (
+            None if _checkpoint else StateLease(root, read_only=read_only)
+        )
         try:
-            self._open(root, create=create, scope=scope, mode=mode)
+            self._open(
+                root,
+                create=create,
+                scope=scope,
+                mode=mode,
+                read_only=read_only,
+            )
         except BaseException:
             if self.lease:
                 self.lease.close()
@@ -144,11 +155,17 @@ class FlightQueue:
         create: bool = False,
         scope: str = "",
         mode: str = "live",
+        read_only: bool = False,
     ) -> None:
         self.root = root.resolve(strict=True)
         path = self.root / ".state/flight.sqlite3"
         self.db = sqlite3.connect(
-            path.as_uri() + ("?mode=rwc" if create else "?mode=rw"),
+            path.as_uri()
+            + (
+                "?mode=ro"
+                if read_only
+                else "?mode=rwc" if create else "?mode=rw"
+            ),
             uri=True,
             timeout=10,
         )
@@ -194,7 +211,8 @@ class FlightQueue:
                 raise ValueError(
                     "Unsupported flight schema; restore matching code/backup"
                 )
-            self.db.execute("PRAGMA synchronous=FULL")
+            if not read_only:
+                self.db.execute("PRAGMA synchronous=FULL")
             self.settings = dict(
                 self.db.execute("SELECT * FROM settings WHERE id=1").fetchone()
             )
