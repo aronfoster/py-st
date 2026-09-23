@@ -8,10 +8,12 @@ import json
 import os
 import pwd
 import shlex
+import sqlite3
 import tarfile
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -117,6 +119,17 @@ def test_inspect_state_sanitizes_credentials(
     queue.close()
     request_stop(root)
     monkeypatch.setenv("ST_STATE_ROOT", str(root))
+    opened: list[str] = []
+    original = sqlite3.connect
+
+    def read_only_connect(database: Any, *args: Any, **kwargs: Any) -> Any:
+        if "flight.sqlite3" in str(database) or "intelligence.sqlite3" in str(
+            database
+        ):
+            opened.append(str(database))
+        return original(database, *args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", read_only_connect)
 
     result = CliRunner().invoke(flight_app, ["inspect-state"])
 
@@ -124,6 +137,32 @@ def test_inspect_state_sanitizes_credentials(
     assert json.loads(result.stdout)["paused"] is True
     assert SECRET not in result.stdout
     assert "digest" not in result.stdout
+    assert len(opened) == 3 and all("?mode=ro" in uri for uri in opened)
+
+
+def test_read_only_inspect_never_creates_missing_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "state"
+    root.mkdir()
+    create_demo(root)
+    save_password(root, "synthetic-owner")
+    queue = FlightQueue(root, create=True, scope=SCOPE, mode="demo")
+    queue.close()
+    (root / ".state-lease").unlink()
+    monkeypatch.setenv("ST_STATE_ROOT", str(root))
+    result = CliRunner().invoke(flight_app, ["inspect-state"])
+    assert result.exit_code != 0
+    assert not (root / ".state-lease").exists()
+
+
+def test_wheel_asset_gate_rejects_missing_javascript(tmp_path: Path) -> None:
+    wheel = tmp_path / "py_st-0.1.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr("py_st/services/dashboard.html", "<main></main>")
+        archive.writestr("py_st/services/ui/shell.css", "body {}")
+    with pytest.raises(release.ReleaseError, match="JavaScript"):
+        release.check_wheel(wheel)
 
 
 @pytest.fixture
@@ -138,6 +177,9 @@ def host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     (base / "current").symlink_to(base / "releases" / OLD)
     (root / ".env").write_text("ST_TOKEN=" + SECRET)
     (root / "STOP").touch()
+    gate = ops / "worker-armed"
+    gate.touch()
+    monkeypatch.setattr(release, "WORKER_GATE", gate)
     monkeypatch.setattr(release, "BASE", base)
     monkeypatch.setattr(release, "DATA", data)
     monkeypatch.setattr(release, "ROOT", root)
@@ -254,6 +296,108 @@ def test_success_and_repeat_preserve_pause_and_private_state(
     release.deploy(path, digest)
     assert len(host.events) == 10
     assert "Already deployed" in capsys.readouterr().out
+
+
+def test_same_sha_refuses_stale_heartbeat(
+    host: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, digest = rehearse(host, monkeypatch)
+    release.deploy(path, digest)
+    monkeypatch.setattr(
+        release,
+        "state_summary",
+        lambda: {
+            "stop": True,
+            "paused": True,
+            "worker_state": "paused",
+            "heartbeat": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+        },
+    )
+    with pytest.raises(release.ReleaseError, match="stale"):
+        release.deploy(path, digest)
+    receipt = release.last_receipt()
+    assert receipt is not None and receipt["result"] == "success"
+
+
+def test_recover_acknowledge_preserves_receipt_and_allows_explicit_retry(
+    host: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, digest = rehearse(host, monkeypatch, "checkpoint")
+    with pytest.raises(release.ReleaseError, match="incomplete"):
+        release.deploy(path, digest)
+    failed = release.last_receipt()
+    assert failed is not None
+    run_id = failed["run_id"]
+    with pytest.raises(release.ReleaseError, match="matching incomplete"):
+        release.acknowledge("0" * 32)
+    host.active[release.SERVICES[1]] = "inactive"
+    with pytest.raises(release.ReleaseError, match="Recovery not verified"):
+        release.acknowledge(run_id)
+    host.active[release.SERVICES[1]] = "active"
+    host.ops.joinpath("worker-armed").unlink()
+    with pytest.raises(release.ReleaseError, match="Recovery not verified"):
+        release.acknowledge(run_id)
+    host.ops.joinpath("worker-armed").touch()
+    release.acknowledge(run_id)
+    recovered = release.last_receipt()
+    assert recovered is not None and recovered["result"] == "recovered"
+    assert recovered["failure_observed"] == failed["observed"]
+    history = host.ops / "runs" / f"{run_id}.json"
+    assert json.loads(history.read_text())["result"] == "recovered"
+    monkeypatch.setattr(
+        release,
+        "checkpoint",
+        lambda _p, _r: host.data / "checkpoints" / "retry",
+    )
+    release.deploy(path, digest)
+    retried = release.last_receipt()
+    assert retried is not None and retried["result"] == "success"
+    assert retried["run_id"] != run_id
+    assert history.is_file()
+
+
+def test_bad_bundle_digest_exits_before_manifest_parse(
+    host: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = host.ops / "truncated.tar.gz"
+    path.write_bytes(b"truncated transfer")
+    monkeypatch.setattr(
+        release,
+        "manifest_from",
+        lambda _p: pytest.fail("Malformed bundle must not be parsed"),
+    )
+    with pytest.raises(release.ReleaseError, match="SHA256 mismatch"):
+        release.deploy(path, "0" * 64)
+    assert release.last_receipt() is None
+
+
+def test_corrupt_receipt_fails_with_manual_guidance(
+    host: SimpleNamespace,
+) -> None:
+    for record in ("{incomplete", '{"run_id":"bad","result":"unknown"}'):
+        (host.ops / "receipt.json").write_text(record)
+        with pytest.raises(release.ReleaseError, match="inspect it manually"):
+            release.status(False)
+
+
+def test_stage_failure_removes_new_partial_release(
+    host: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, digest = bundle(host.ops / "bundle.tar.gz")
+    manifest = release.manifest_from(path)
+    target = host.base / "releases" / NEW
+
+    def failed_install(*_args: Any, **_kwargs: Any) -> str:
+        raise release.ReleaseError("synthetic pip failure")
+
+    monkeypatch.setattr(release, "run", failed_install)
+    with pytest.raises(release.ReleaseError, match="pip failure"):
+        release.stage(path, manifest, digest)
+    assert not target.exists()
 
 
 @pytest.mark.parametrize(
@@ -379,10 +523,13 @@ def test_transfer_uses_pinned_private_directory_and_quoted_command(
     artifact, digest = bundle(tmp_path / "bundle with space.tar.gz")
     calls: list[tuple[str, ...]] = []
 
-    def fake(
-        _project: str, _zone: str, _instance: str, *args: str, **_kwargs: Any
-    ) -> str:
+    def fake(_project: str, _zone: str, *args: str, **_kwargs: Any) -> str:
         calls.append(args)
+        if args[:1] == ("ssh",) and "sha256sum" in args[-1]:
+            return (
+                f"{digest}  bundle\n"
+                f"{release.sha256(Path(release.__file__))}  script"
+            )
         return (
             "/home/operator"
             if args[:1] == ("ssh",) and any("printf" in a for a in args)
@@ -394,17 +541,42 @@ def test_transfer_uses_pinned_private_directory_and_quoted_command(
     output = capsys.readouterr().out
     assert f"/incoming/{NEW}/release.py" in output
     assert "'" in output  # shell quotes the bundle path with spaces
+    assert "systemd-run" in output and "--wait" in output
     assert sum(call[0] == "scp" for call in calls) == 2
     assert (
         shlex.quote(
             f"/home/operator/.local/share/py-st-deploy/incoming/"
             f"{NEW}/bundle with space.tar.gz.partial"
         )
-        in calls[-1][-1]
+        in calls[-2][-1]
     )
     monkeypatch.setattr(release, "gcloud", lambda *_a, **_kw: "/home/o;bad")
     with pytest.raises(release.ReleaseError, match="home path"):
         release.transfer(artifact, digest, "proj", "zone", "instance")
+
+
+def test_transfer_rejects_remote_corruption(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    artifact, digest = bundle(tmp_path / "release.tar.gz")
+    monkeypatch.setattr(
+        release,
+        "gcloud",
+        lambda _project, _zone, *args, **_kw: (
+            "/home/operator"
+            if "printf" in args[-1]
+            else (
+                "0" * 64 + "  damaged\n" + "0" * 64 + "  script"
+                if "sha256sum" in args[-1]
+                else ""
+            )
+        ),
+    )
+    with pytest.raises(release.ReleaseError, match="Remote bundle"):
+        release.transfer(artifact, digest, "proj", "zone", "instance")
+    assert "VM activation command" not in capsys.readouterr().out
 
 
 def test_condition_skipped_worker_and_public_failure_are_distinct(
@@ -445,7 +617,10 @@ def test_checkpoint_runs_old_interpreter_and_keeps_private_evidence(
     monkeypatch.setattr(
         pwd,
         "getpwnam",
-        lambda _u: SimpleNamespace(pw_uid=host.root.stat().st_uid),
+        lambda _u: SimpleNamespace(
+            pw_uid=host.root.stat().st_uid,
+            pw_gid=host.root.stat().st_gid,
+        ),
     )
 
     def fake(args: list[str], **_kwargs: Any) -> str:

@@ -26,6 +26,14 @@ If stock `venv` or downloads fail, repair the Cloud Shell prerequisite before
 building. The development environment verified Python 3.12 and venv; Cloud
 Shell itself is not available for this offline implementation.
 
+On first use, **in Cloud Shell**, run this interactive SSH check once. It lets
+`gcloud` show any key creation/passphrase prompt before the release script uses
+`--quiet` with captured output:
+
+```sh
+gcloud compute ssh py-st-1 --project py-st-508516 --zone us-central1-a --tunnel-through-iap --command true
+```
+
 In **Cloud Shell**, first clone the public repository into a dedicated build
 checkout (no GitHub token or private state):
 
@@ -55,13 +63,19 @@ prints an exact `transfer` retry command for the same completed bundle.
 `prepare --prepare-only` builds and checks locally without GCP access and
 prints the same retry command for later transfer. Generated frontend resources
 are checked in and validated in the wheel; their freshness remains a CI gate.
+Transfer verifies the SHA256 of both files on the VM before printing activation.
 
 ## VM SSH terminal: pause and activate
 
 Open the hosted browser's **Operations** page and pause gameplay. Confirm STOP
 and desired pause. In the **VM SSH terminal**, paste the exact activation
-command printed by Cloud Shell. It begins `sudo python3.12` and includes
-absolute paths plus `--sha256`. No editing is needed.
+command printed by Cloud Shell. It begins `sudo systemd-run`, runs the pinned
+Python command as a transient root service, and includes absolute paths plus
+`--sha256`. No editing is needed. `--wait --pipe` shows its output while your
+SSH connection is up. If SSH disconnects, the transient service continues;
+the terminal client may exit, so use the independent status command afterward.
+The unit name starts `py-st-deploy-` followed by the first twelve SHA characters.
+Its journal is available with `sudo journalctl -u UNIT_NAME -n 80 --no-pager`.
 
 The command checks the mount, installed services, existing authority gates,
 credentials' presence/ownership, paused ledger and STOP before downtime. It
@@ -85,8 +99,9 @@ The private incoming path includes the pinned full SHA and stays reachable if
 `/opt/py-st/current` changes.
 
 This command changes no service or state and calls no game API. A second deploy
-against a successful same-SHA release reports already installed. A partial
-activation is deliberately refused on retry: inspect the receipt, actual
+against a successful same-SHA release reports already installed only when both
+services are active and the heartbeat is fresh. A partial activation is
+deliberately refused on retry: inspect the receipt, actual
 `systemctl status py-st-dashboard.service py-st-worker.service`, and private
 checkpoint. Do not delete STOP or automatically restore a checkpoint.
 
@@ -104,6 +119,23 @@ or switch around it. A failure **after switch** needs inspection of both
 service journals and the recorded checkpoint. A public TLS/DNS failure with
 healthy local services does not require stopping them.
 
+After a failed **staging** attempt, the script removes its newly created
+incomplete release directory so the same bundle can be retried. If it cannot
+remove that directory, first verify `current` points to a different full SHA,
+inspect the exact incomplete path reported by status, and remove only that
+unreferenced directory before retrying. Never remove `current` or a release
+with a valid `.release.json` marker.
+
+After an **activation** failure, first recover manually and verify both units
+are active, STOP and desired pause remain, the worker has a fresh paused
+heartbeat, and `current` points to the known old or new release. Then run the
+exact `acknowledge --run-id` command printed by status. Acknowledgement checks
+those conditions again, validates the state with the staged code, and records
+the failure and recovery in `/var/lib/py-st-deploy/runs/<run-id>.json`. It does
+not restart, switch, restore or resume anything. A subsequent deployment is
+explicit and creates a new run receipt. If status says `receipt.json` is
+unreadable, inspect it and the per-run receipts manually; do not delete them.
+
 Code-only switch-back requires an explicit compatibility check against the
 current state. State restoration is a separate owner decision: preserve the
 latest state and uncertain outcomes, use the *exact matching old code* and
@@ -111,12 +143,15 @@ the existing quiesced `flight restore` procedure in
 [HOSTED_OPERATIONS.md](HOSTED_OPERATIONS.md). Checkpoints omit root `.env` and
 cannot recover the game token. No receipt or transfer artifact is a secret
 backup; protect checkpoints as private state.
+Checkpoints accumulate under `/srv/py-st/checkpoints`; review retained
+checkpoint/release pairs and free space before a later cleanup. This workflow
+does not prune evidence automatically.
 
 ## Sanitized example outcomes
 
 ```text
 Prepared master 0123456789abcdef0123456789abcdef01234567 SHA256 <digest>: ...
-VM activation command: sudo python3.12 /home/operator/.../release.py deploy ...
+VM activation command: sudo systemd-run --wait --collect --pipe ... python3.12 /home/operator/.../release.py deploy ...
 Deployed 0123456789abcdef0123456789abcdef01234567 from <old-sha>; checkpoint /srv/py-st/checkpoints/<old-sha>-<run-id>
 Current: <new-sha>; services: {'py-st-dashboard.service': 'active', 'py-st-worker.service': 'active'}; state: {'stop': True, 'paused': True, 'worker_state': 'paused', ...}
 Log in again; verify Explorer destination → detail → preview; resume deliberately when ready.

@@ -39,7 +39,6 @@ ADMIN_UID = 0
 SERVICES = ("py-st-dashboard.service", "py-st-worker.service")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
-ASSETS = ("src/py_st/services/dashboard.html",)
 
 
 class ReleaseError(Exception):
@@ -407,9 +406,7 @@ def verify_archive(path: Path, manifest: dict[str, Any]) -> None:
     )
 
 
-def gcloud(
-    project: str, zone: str, instance: str, *args: str, timeout: int = 180
-) -> str:
+def gcloud(project: str, zone: str, *args: str, timeout: int = 180) -> str:
     return run(
         [
             "gcloud",
@@ -420,6 +417,7 @@ def gcloud(
             "--zone",
             zone,
             "--tunnel-through-iap",
+            "--quiet",
         ],
         timeout=timeout,
     )
@@ -428,9 +426,7 @@ def gcloud(
 def remote_command(
     project: str, zone: str, instance: str, command: str
 ) -> str:
-    return gcloud(
-        project, zone, instance, "ssh", instance, "--command", command
-    )
+    return gcloud(project, zone, "ssh", instance, "--command", command)
 
 
 def transfer(
@@ -451,7 +447,6 @@ def transfer(
         gcloud(
             project,
             zone,
-            instance,
             "scp",
             str(local),
             f"{instance}:{stage}/{local.name}.partial",
@@ -467,8 +462,29 @@ def transfer(
             for p in local_paths
         ),
     )
+    remote_hashes = remote_command(
+        project,
+        zone,
+        instance,
+        "sha256sum -- "
+        + " ".join(
+            shlex.quote(stage + "/" + path.name) for path in local_paths
+        ),
+    ).splitlines()
+    require(
+        len(remote_hashes) == 2
+        and [line[:64] for line in remote_hashes] == [digest, sha256(script)],
+        "Remote bundle/entrypoint digest differs; rerun the transfer command",
+    )
     command = [
         "sudo",
+        "systemd-run",
+        f"--unit=py-st-deploy-{manifest['sha'][:12]}",
+        "--wait",
+        "--collect",
+        "--pipe",
+        "--service-type=exec",
+        "--",
         "python3.12",
         f"{stage}/{script.name}",
         "deploy",
@@ -622,21 +638,17 @@ def observation() -> dict[str, Any]:
     return result
 
 
-def save_receipt(receipt: dict[str, Any]) -> None:
-    OPS.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path = OPS / "receipt.json"
-    receipt["updated_at"] = datetime.now(UTC).isoformat()
-    receipt["observed"] = observation()
-    fd, name = tempfile.mkstemp(dir=OPS, prefix="receipt.")
+def atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    fd, name = tempfile.mkstemp(dir=path.parent, prefix="receipt.")
     try:
         with os.fdopen(fd, "w") as output:
-            json.dump(receipt, output, sort_keys=True, indent=2)
+            json.dump(payload, output, sort_keys=True, indent=2)
             output.write("\n")
             output.flush()
             os.fsync(output.fileno())
         os.chmod(name, 0o600)
         os.replace(name, path)
-        directory = os.open(OPS, os.O_RDONLY)
+        directory = os.open(path.parent, os.O_RDONLY)
         try:
             os.fsync(directory)
         finally:
@@ -645,9 +657,125 @@ def save_receipt(receipt: dict[str, Any]) -> None:
         Path(name).unlink(missing_ok=True)
 
 
+def save_receipt(receipt: dict[str, Any]) -> None:
+    OPS.mkdir(mode=0o700, parents=True, exist_ok=True)
+    history = OPS / "runs"
+    history.mkdir(mode=0o700, exist_ok=True)
+    receipt["updated_at"] = datetime.now(UTC).isoformat()
+    receipt["observed"] = observation()
+    run_id = receipt["run_id"]
+    require(
+        isinstance(run_id, str)
+        and re.fullmatch(r"[0-9a-f]{32}", run_id) is not None,
+        "Invalid receipt run ID",
+    )
+    atomic_json(history / f"{run_id}.json", receipt)
+    atomic_json(OPS / "receipt.json", receipt)
+
+
 def last_receipt() -> dict[str, Any] | None:
     path = OPS / "receipt.json"
-    return json.loads(path.read_text()) if path.exists() else None
+    if not path.exists():
+        return None
+    try:
+        record = json.loads(path.read_text())
+        if (
+            not isinstance(record, dict)
+            or not isinstance(record.get("run_id"), str)
+            or re.fullmatch(r"[0-9a-f]{32}", record["run_id"]) is None
+            or record.get("result")
+            not in {"incomplete", "success", "recovered"}
+            or record.get("phase")
+            not in {
+                "preflight",
+                "stage",
+                "stop",
+                "checkpoint",
+                "compatibility",
+                "switch",
+                "start",
+                "heartbeat",
+                "http",
+                "complete",
+            }
+            or not isinstance(record.get("source_sha"), str)
+            or SHA.fullmatch(record["source_sha"]) is None
+        ):
+            raise ValueError("Invalid receipt shape")
+        return record
+    except (OSError, ValueError, TypeError) as exc:
+        raise ReleaseError(
+            f"Receipt unreadable at {path}; inspect it manually; "
+            "do not delete recovery evidence"
+        ) from exc
+
+
+def recent_heartbeat(state: dict[str, Any], *, max_age: int = 60) -> bool:
+    try:
+        stamp = datetime.fromisoformat(str(state["heartbeat"]))
+        age = (datetime.now(UTC) - stamp).total_seconds()
+        return stamp.tzinfo is not None and -5 <= age <= max_age
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def acknowledge(run_id: str) -> None:
+    """After explicit paused recovery, preserve and clear one refusal gate."""
+    require(os.geteuid() == 0, "Run acknowledge with sudo")
+    require(
+        re.fullmatch(r"[0-9a-f]{32}", run_id) is not None,
+        "Pass the exact run ID printed by status --json",
+    )
+    with (OPS / "deploy.lock").open("a+") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ReleaseError(
+                "Another deployment holds the host lock"
+            ) from exc
+        receipt = last_receipt()
+        require(
+            receipt is not None
+            and receipt.get("run_id") == run_id
+            and receipt.get("result") == "incomplete"
+            and receipt.get("phase")
+            in {
+                "stop",
+                "checkpoint",
+                "compatibility",
+                "switch",
+                "start",
+                "heartbeat",
+                "http",
+            },
+            "No matching incomplete activation to acknowledge",
+        )
+        assert receipt is not None
+        actual = observation()
+        state = actual["state"]
+        require(
+            actual["current_sha"]
+            in {receipt.get("previous_sha"), receipt.get("source_sha")}
+            and all(s == "active" for s in actual["services"].values())
+            and len(actual["services"]) == len(SERVICES)
+            and bool(state.get("stop") and state.get("paused"))
+            and state.get("worker_state") == "paused"
+            and recent_heartbeat(state)
+            and WORKER_GATE.is_file()
+            and not state.get("handoff"),
+            "Recovery not verified: require known current SHA, both "
+            "active services, fresh paused heartbeat, STOP and worker gate",
+        )
+        source = str(receipt["source_sha"])
+        inspect(BASE / "releases" / source / ".venv/bin/python")
+        receipt["failure_observed"] = receipt.get("observed")
+        receipt["result"] = "recovered"
+        receipt["recovered_at"] = datetime.now(UTC).isoformat()
+        save_receipt(receipt)
+        print(
+            f"Acknowledged {run_id}; original failure retained in "
+            f"{OPS / 'runs' / (run_id + '.json')}; STOP remains"
+        )
 
 
 def status(json_output: bool) -> None:
@@ -675,6 +803,33 @@ def status(json_output: bool) -> None:
             f"Last receipt: {last.get('result') if last else 'none'} "
             f"({OPS / 'receipt.json'})"
         )
+        if (
+            last
+            and last.get("result") == "incomplete"
+            and last.get("phase")
+            in {
+                "stop",
+                "checkpoint",
+                "compatibility",
+                "switch",
+                "start",
+                "heartbeat",
+                "http",
+            }
+        ):
+            print(
+                "After manual paused recovery, acknowledge with: "
+                + shlex.join(
+                    [
+                        "sudo",
+                        "python3.12",
+                        str(Path(__file__).resolve()),
+                        "acknowledge",
+                        "--run-id",
+                        str(last["run_id"]),
+                    ]
+                )
+            )
 
 
 def unit_checks() -> None:
@@ -858,25 +1013,49 @@ def preflight(bundle: Path, digest: str) -> tuple[dict[str, Any], str]:
 
 
 def inspect(python: Path) -> dict[str, Any]:
-    output = run(
-        [
-            "runuser",
-            "-u",
-            USER,
-            "--",
-            "env",
-            f"ST_STATE_ROOT={ROOT}",
-            str(python),
-            "-m",
-            "py_st",
-            "flight",
-            "inspect-state",
-        ],
-        cwd=ROOT,
-        timeout=40,
-    )
+    args = [
+        "runuser",
+        "-u",
+        USER,
+        "--",
+        "env",
+        f"ST_STATE_ROOT={ROOT}",
+        str(python),
+        "-m",
+        "py_st",
+        "flight",
+        "inspect-state",
+    ]
     try:
-        data: dict[str, Any] = json.loads(output)
+        result = subprocess.run(
+            args,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=40,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ReleaseError(
+            "State inspection unavailable or timed out"
+        ) from exc
+    if result.returncode:
+        diagnostic = result.stderr.lower()
+        reason = "inspect service logs and ledger permissions"
+        for clue, label in (
+            ("owner authentication", "owner verifier unavailable"),
+            ("unsupported", "persisted state incompatible"),
+            ("state is in use", "state lease unavailable"),
+            ("managed scope", "managed scope missing"),
+            ("permission denied", "state permissions rejected"),
+            ("no such table", "ledger schema incomplete"),
+        ):
+            if clue in diagnostic:
+                reason = label
+                break
+        raise ReleaseError(f"Read-only state inspection failed: {reason}")
+    try:
+        data: dict[str, Any] = json.loads(result.stdout)
         require(
             data["stop"] and data["paused"],
             "State is not paused with STOP; pause in Operations",
@@ -906,31 +1085,41 @@ def stage(bundle: Path, manifest: dict[str, Any], digest: str) -> Path:
         return final
     final.mkdir(parents=True, mode=0o755)
     # Extract into the final path: virtual environments embed this exact path.
-    expected = dict(manifest["files"])
-    expected["manifest.json"] = sha256_manifest(bundle)
-    extract(bundle, final, files=expected)
-    python = final / ".venv/bin/python"
-    run([sys.executable, "-m", "venv", str(final / ".venv")], timeout=90)
-    run(
-        [
-            str(python),
-            "-m",
-            "pip",
-            "install",
-            "--no-index",
-            "--find-links",
-            str(final / "wheels"),
-            "-r",
-            str(final / "deploy/requirements-py312.lock"),
-            "py-st",
-        ],
-        timeout=180,
-    )
-    run([str(python), "-m", "pip", "check"])
-    run([str(python), "-m", "py_st", "flight", "inspect-state", "--help"])
-    inspect(python)
-    marker.write_text(json.dumps({"sha": sha, "digest": digest}) + "\n")
-    marker.chmod(0o644)
+    try:
+        expected = dict(manifest["files"])
+        expected["manifest.json"] = sha256_manifest(bundle)
+        extract(bundle, final, files=expected)
+        python = final / ".venv/bin/python"
+        run([sys.executable, "-m", "venv", str(final / ".venv")], timeout=90)
+        run(
+            [
+                str(python),
+                "-m",
+                "pip",
+                "install",
+                "--no-index",
+                "--find-links",
+                str(final / "wheels"),
+                "-r",
+                str(final / "deploy/requirements-py312.lock"),
+                "py-st",
+            ],
+            timeout=180,
+        )
+        run([str(python), "-m", "pip", "check"])
+        run([str(python), "-m", "py_st", "flight", "inspect-state", "--help"])
+        inspect(python)
+        marker.write_text(json.dumps({"sha": sha, "digest": digest}) + "\n")
+        marker.chmod(0o644)
+    except Exception:
+        if current_sha() != sha and not marker.exists():
+            try:
+                shutil.rmtree(final)
+            except OSError as exc:
+                raise ReleaseError(
+                    f"Partial release {final}; inspect/remove it before retry"
+                ) from exc
+        raise
     return final
 
 
@@ -957,9 +1146,10 @@ def checkpoint(previous: str, run_id: str) -> Path:
     parent.mkdir(mode=0o700, exist_ok=True)
     import pwd
 
-    uid = pwd.getpwnam(USER).pw_uid
+    account = pwd.getpwnam(USER)
+    uid = account.pw_uid
     if parent.stat().st_uid == 0:
-        os.chown(parent, uid, uid)
+        os.chown(parent, uid, account.pw_gid)
     require(
         parent.stat().st_uid == uid and parent.stat().st_mode & 0o077 == 0,
         "Checkpoint parent owner/mode differs; inspect manually",
@@ -1097,8 +1287,16 @@ def deploy(bundle: Path, digest: str) -> None:
         ):
             raise ReleaseError(
                 "Prior activation incomplete; run status, "
-                "inspect services/checkpoint, then recover manually"
+                "inspect services/checkpoint, then acknowledge recovered run"
             )
+        require(
+            bundle.is_absolute()
+            and bundle.is_file()
+            and not bundle.is_symlink()
+            and DIGEST.fullmatch(digest) is not None
+            and sha256(bundle) == digest,
+            "Bundle SHA256 mismatch; retransfer pinned artifact",
+        )
         manifest = manifest_from(bundle)
         sha = manifest["sha"]
         require(
@@ -1124,9 +1322,15 @@ def deploy(bundle: Path, digest: str) -> None:
                 all(s == "active" for s in services().values()),
                 "Installed release has inactive service; inspect status",
             )
+            state = state_summary()
             require(
-                state_summary().get("heartbeat") is not None,
-                "Installed release has no heartbeat; inspect status",
+                recent_heartbeat(state),
+                "Installed release heartbeat is stale; inspect worker",
+            )
+            require(
+                not (state.get("stop") or state.get("paused"))
+                or state.get("worker_state") == "paused",
+                "Paused release lacks a paused worker heartbeat",
             )
             print(f"Already deployed {sha}; no service change")
             return
@@ -1200,8 +1404,13 @@ def deploy(bundle: Path, digest: str) -> None:
                 "Log in again; verify Explorer destination → detail → "
                 "preview; resume deliberately when ready."
             )
-        except (ReleaseError, OSError, ValueError, KeyboardInterrupt) as exc:
+        except (Exception, KeyboardInterrupt) as exc:
             receipt["error_category"] = type(exc).__name__
+            receipt["error_reason"] = (
+                str(exc)[:200]
+                if isinstance(exc, ReleaseError)
+                else "Inspect service and application journal"
+            )
             save_receipt(receipt)
             reason = (
                 str(exc)
@@ -1254,6 +1463,8 @@ def main() -> None:
     activation.add_argument("--sha256", required=True)
     status_parser = sub.add_parser("status")
     status_parser.add_argument("--json", action="store_true")
+    acknowledgement = sub.add_parser("acknowledge")
+    acknowledgement.add_argument("--run-id", required=True)
     args = parser.parse_args()
     try:
         prerequisites()
@@ -1273,11 +1484,20 @@ def main() -> None:
             )
         elif args.command == "deploy":
             deploy(args.bundle, args.sha256)
+        elif args.command == "acknowledge":
+            acknowledge(args.run_id)
         else:
             require(os.geteuid() == 0, "Run status with sudo")
             status(args.json)
     except ReleaseError as exc:
         print(f"Release error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
+    except Exception as exc:
+        print(
+            f"Release error: {type(exc).__name__}; inspect the "
+            "receipt and service journal",
+            file=sys.stderr,
+        )
         raise SystemExit(1) from None
 
 

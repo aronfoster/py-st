@@ -79,8 +79,8 @@ def checkpoint_command(destination: Path) -> None:
 def inspect_state_command() -> None:
     """Validate existing hosted state and print a private-data-free summary."""
     root = canonical_root()
-    validate_hosted_state(root)
-    queue = FlightQueue(root)
+    validate_hosted_state(root, read_only=True)
+    queue = FlightQueue(root, read_only=True)
     try:
         settings = queue.settings
         counts = {
