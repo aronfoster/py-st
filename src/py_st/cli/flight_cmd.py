@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+import json
 import os
 import sqlite3
 import time
@@ -28,10 +29,10 @@ from py_st.services.flight_demo import (
 )
 from py_st.services.flight_queue import FlightQueue, canonical_root
 from py_st.services.flight_worker import FlightWorker
-from py_st.services.hosted_config import PublicOrigin
+from py_st.services.hosted_config import PublicOrigin, validate_hosted_state
 from py_st.services.hosted_server import hosted_server
 from py_st.services.intelligence import Intelligence
-from py_st.services.stop_control import request_stop
+from py_st.services.stop_control import request_stop, stop_requested
 
 flight_app = typer.Typer(help="Authenticated local flight operations")
 P = ParamSpec("P")
@@ -71,6 +72,46 @@ def checkpoint_command(destination: Path) -> None:
     """Checkpoint paused, quiesced state to a new private directory."""
     checkpoint(canonical_root(), destination)
     typer.echo("Full-state checkpoint complete; keep it private")
+
+
+@flight_app.command("inspect-state")
+@safe_errors
+def inspect_state_command() -> None:
+    """Validate existing hosted state and print a private-data-free summary."""
+    root = canonical_root()
+    validate_hosted_state(root)
+    queue = FlightQueue(root)
+    try:
+        settings = queue.settings
+        counts = {
+            str(status): int(count)
+            for status, count in queue.db.execute(
+                "SELECT status, COUNT(*) FROM commands GROUP BY status"
+            )
+        }
+        typer.echo(
+            json.dumps(
+                {
+                    "paused": bool(settings["paused"]),
+                    "stop": stop_requested(root),
+                    "heartbeat": settings["heartbeat"],
+                    "worker_state": settings["worker_state"],
+                    "queued": counts.get("queued", 0),
+                    "uncertain": sum(
+                        counts.get(name, 0)
+                        for name in (
+                            "running",
+                            "dispatching",
+                            "in_transit",
+                            "reconciliation_required",
+                        )
+                    ),
+                },
+                sort_keys=True,
+            )
+        )
+    finally:
+        queue.close()
 
 
 @flight_app.command("restore")
