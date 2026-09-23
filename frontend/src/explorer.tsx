@@ -193,6 +193,10 @@ function SystemMap({
     const important = cluster.some((c) =>
       c.members.some((w) => w.symbol === selected || w.symbol === ship),
     );
+    const facility = cluster.some((c) =>
+      c.members.some((w) => priority(w) >= 3),
+    );
+    if (!important && transform.k < 2 && !facility) return null;
     if (
       !important &&
       (x < 10 ||
@@ -280,6 +284,7 @@ function SystemMap({
         </button>
       </div>
       <p className="small">
+        Numbers group nearby destinations; zoom in or use the list to choose.
         Wheel or pinch to zoom; drag to pan. Keyboard: use the waypoint list.
       </p>
       <svg
