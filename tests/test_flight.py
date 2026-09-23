@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -949,6 +949,57 @@ def test_unknown_demo_waypoint_blocks_without_crashing(
     assert finish(runner, submit(runner, TRIP))["status"] == "completed"
 
 
+def test_dense_unplotted_waypoint_has_remote_coordinates(
+    tmp_path: Path,
+) -> None:
+    # Arrange: the local observation is incomplete; the remote world is not.
+    create_demo(tmp_path, layout="dense")
+    store = Intelligence(tmp_path / ".state/intelligence.sqlite3")
+    try:
+        unknown = next(
+            row
+            for row in store.latest(SCOPE, "waypoint")
+            if row["key"] == "X-DEMO-UNKNOWN"
+        )
+        assert "x" not in unknown["data"]
+    finally:
+        store.close()
+
+    # Act: orbit and navigate using the authoritative synthetic remote data.
+    with demo_client(tmp_path) as client:
+        client.request("POST", "/my/ships/SYNTHETIC-1/orbit")
+        nav = client.request(
+            "POST",
+            "/my/ships/SYNTHETIC-1/navigate",
+            body={"waypointSymbol": "X-DEMO-UNKNOWN"},
+        )
+
+    # Assert: the remote route remains executable despite the missing cache.
+    assert isinstance(nav, dict)
+    assert nav["nav"]["route"]["destination"]["x"] == 30
+    assert nav["nav"]["route"]["destination"]["y"] == 25
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["setup", "--demo-layout", "dense"],
+        ["setup", "--demo", "--demo-layout", "unknown"],
+    ],
+)
+def test_demo_layout_requires_known_demo_option(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arguments: list[str]
+) -> None:
+    # Arrange / Act: invalid options are rejected before state is created.
+    monkeypatch.setenv("ST_STATE_ROOT", str(tmp_path))
+    result = CliRunner().invoke(flight_app, arguments)
+
+    # Assert
+    assert result.exit_code != 0
+    assert "--demo-layout requires --demo and basic or dense" in result.output
+    assert not (tmp_path / ".state").exists()
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -1292,6 +1343,16 @@ def test_browser_dense_destination_discovery(
 
     # Arrange: 88 waypoints, shared coordinates and mixed evidence.
     create_demo(tmp_path, layout="dense")
+    store = Intelligence(tmp_path / ".state/intelligence.sqlite3")
+    try:
+        with store.db:
+            store.db.execute(
+                "UPDATE observations SET observed_at=? "
+                "WHERE kind='market' AND key='X-DEMO-A1'",
+                ((datetime.now(UTC) + timedelta(hours=1)).isoformat(),),
+            )
+    finally:
+        store.close()
     save_password(tmp_path, PASSWORD)
     queue = FlightQueue(tmp_path, create=True, scope=SCOPE, mode="demo")
     queue.control(False)
@@ -1311,6 +1372,15 @@ def test_browser_dense_destination_discovery(
             page.get_by_role("button", name="Log in", exact=True).click()
             page.locator("#explorer-ship").select_option("SYNTHETIC-1")
             expect(page.locator("#waypoint-list button")).to_have_count(88)
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "future observation · age unknown"
+            )
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "source synthetic-demo"
+            )
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "volume 100"
+            )
             if width == 390:
                 assert not page.locator(".ui-map-panel").evaluate(
                     "el => el.open"
@@ -1325,6 +1395,9 @@ def test_browser_dense_destination_discovery(
             )
 
             # Discover a facility without knowing its identifier, then preview.
+            page.get_by_role("button", name="Fuel listed/priced").click()
+            expect(page.locator("#waypoint-list button")).to_have_count(3)
+            page.get_by_role("button", name="Fuel listed/priced").click()
             page.get_by_role("button", name="Marketplace", exact=True).click()
             expect(page.locator("#waypoint-list button")).to_have_count(4)
             page.locator("#waypoint-search").fill("A4")
@@ -1371,7 +1444,8 @@ def test_browser_dense_destination_discovery(
                     "!== before",
                     arg=before,
                 )
-                page.locator("#map [data-stack='4'] circle").click()
+                stack = page.locator("#map [data-stack='4'] circle")
+                stack.click()
                 page.locator(".ui-colocated").get_by_role(
                     "button", name="X-DEMO-A2 · MOON"
                 ).click()
@@ -1401,6 +1475,21 @@ def test_browser_dense_destination_discovery(
                     "X-DEMO-A2"
                 )
                 page.get_by_role("button", name="Fit system").click()
+                gate = (
+                    page.locator("#map .ui-map-label")
+                    .filter(has_text="GATE")
+                    .locator("..")
+                    .locator("circle")
+                )
+                gate.scroll_into_view_if_needed()
+                gate.click()
+                expect(page.locator("#flight-selection")).to_contain_text(
+                    "X-DEMO-GATE"
+                )
+                visible_map = map_view.bounding_box()
+                assert visible_map is not None
+                assert visible_map["y"] < 900
+                assert visible_map["y"] + visible_map["height"] > 0
                 page.screenshot(
                     path=str(tmp_path / "dense-zoom-1280.png"), full_page=True
                 )

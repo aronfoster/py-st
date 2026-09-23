@@ -63,9 +63,6 @@ jobs:
           DASHBOARD_BROWSER_TESTS: '1'
         run: |
           mkdir -p .cache/nightly
-          pytest tests/test_flight.py -q --maxfail=1 \
-            -k pending_journal_and_historical_scope \
-            --basetemp=.cache/nightly/ci-browser-focus
           pytest tests/test_flight.py tests/test_dashboard.py -q --maxfail=1 \
             --basetemp=.cache/nightly/ci-browser
 

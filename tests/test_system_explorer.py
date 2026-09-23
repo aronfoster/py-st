@@ -133,7 +133,7 @@ def test_dense_fixture_preserves_all_members_and_market_evidence(
     by_symbol = {w["symbol"]: w for w in points}
 
     # Assert: discoverable members retain their individual evidence.
-    assert len(points) >= 85
+    assert len(points) == 88
     assert {w["symbol"] for w in points if w.get("x") == w.get("y") == 0} >= {
         "X-DEMO-A1",
         "X-DEMO-A2",
@@ -144,4 +144,5 @@ def test_dense_fixture_preserves_all_members_and_market_evidence(
     assert by_symbol["X-DEMO-A4"]["has_market"]
     assert "tradeGoods" not in by_symbol["X-DEMO-A4"]["market"]["data"]
     assert by_symbol["X-DEMO-UNKNOWN"]["x"] is None
+    assert by_symbol["X-DEMO-UNKNOWN"]["y"] is None
     store.close()

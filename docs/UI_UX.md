@@ -6,6 +6,10 @@ The explorer's React surface presents a searchable list before the map. The
 legacy controller still owns ship, system and waypoint selection and flight
 preview/submission. The map groups identical coordinates and screen-space
 neighbors; a selected stack's detail lists each colocated waypoint separately.
+The map uses the legacy screen orientation: larger system y coordinates appear
+lower on the page. Marker colors distinguish gates, shipyards, markets and other
+points; selection and the chosen ship take visual precedence. At fit, facility
+labels are capped while marker counts and list discovery remain available.
 The list remains the keyboard path and the primary selection path at phone
 width. Its facility labels and price text refer only to stored observations;
 an unobserved market quote is unknown, including when a marketplace trait is

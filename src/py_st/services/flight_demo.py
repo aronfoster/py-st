@@ -100,6 +100,8 @@ def create_demo(root: Path, layout: str = "basic") -> None:
                     "symbol": "X-DEMO-UNKNOWN",
                     "systemSymbol": "X-DEMO",
                     "type": "FUEL_STATION",
+                    "x": 30,
+                    "y": 25,
                     "traits": [],
                 },
             ]
@@ -208,7 +210,16 @@ def create_demo(root: Path, layout: str = "basic") -> None:
             ("contract", world["contracts"], "id"),
         ):
             for item in items:
-                store.observe(SCOPE, kind, item[key], item, "synthetic-demo")
+                observed = item
+                if kind == "waypoint" and item[key] == "X-DEMO-UNKNOWN":
+                    observed = {
+                        field: value
+                        for field, value in item.items()
+                        if field not in {"x", "y"}
+                    }
+                store.observe(
+                    SCOPE, kind, item[key], observed, "synthetic-demo"
+                )
     finally:
         store.close()
 

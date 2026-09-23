@@ -2,6 +2,7 @@
 export interface Observation<T> {
   key: string;
   observed_at?: string;
+  source?: string;
   data: T;
 }
 

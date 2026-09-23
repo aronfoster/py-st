@@ -95,6 +95,15 @@
   stroke-width: 2px;
   cursor: pointer;
 }
+.ui-map-gate.ui-map-marker {
+  fill: #75512f;
+}
+.ui-map-shipyard.ui-map-marker {
+  fill: #794d78;
+}
+.ui-map-market.ui-map-marker {
+  fill: #24627a;
+}
 .ui-map-selected {
   fill: #c4582d;
   stroke: #2a211c;
@@ -115,6 +124,35 @@
   stroke-width: 3px;
   paint-order: stroke;
   pointer-events: none;
+}
+.ui-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 15px;
+}
+.ui-map-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #426b58;
+}
+.ui-map-legend .ui-key-gate::before {
+  background: #75512f;
+}
+.ui-map-legend .ui-key-shipyard::before {
+  background: #794d78;
+}
+.ui-map-legend .ui-key-market::before {
+  background: #24627a;
+}
+.ui-map-legend .ui-key-selected::before {
+  background: #c4582d;
+}
+.ui-map-legend .ui-key-ship::before {
+  background: #384e89;
 }
 @media (max-width: 800px) {
   .ui-explorer-layout {

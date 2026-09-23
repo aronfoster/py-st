@@ -20,10 +20,12 @@ const goods = (w: Waypoint) => w.market?.data;
 const quoteAge = (stamp?: string) => {
   const time = stamp ? Date.parse(stamp) : NaN;
   if (!Number.isFinite(time)) return "age unknown";
-  const minutes = Math.max(0, Math.floor((Date.now() - time) / 60000));
+  const elapsed = Date.now() - time;
+  if (elapsed < 0) return "future observation · age unknown";
+  const minutes = Math.floor(elapsed / 60000);
   return `${minutes}m old · ${minutes >= 15 ? "stale" : "recent"}`;
 };
-const fuel = (w: Waypoint) => {
+const fuelEvidence = (w: Waypoint) => {
   const data = goods(w);
   const priced = data?.tradeGoods?.find(
     (g) =>
@@ -31,22 +33,37 @@ const fuel = (w: Waypoint) => {
       Number.isInteger(g.purchasePrice) &&
       g.purchasePrice! > 0,
   );
-  if (priced)
-    return `Fuel ${priced.purchasePrice} cr (${quoteAge(w.market?.observed_at)})`;
+  if (priced) return { kind: "priced" as const, price: priced.purchasePrice };
   if (
     [
+      ...(data?.tradeGoods || []),
       ...(data?.exports || []),
       ...(data?.imports || []),
       ...(data?.exchange || []),
     ].some((g) => g.symbol === "FUEL")
   )
-    return "Fuel listed; price unknown";
+    return { kind: "listed" as const };
   if (data && Array.isArray(data.tradeGoods))
-    return "Fuel not listed in observed goods";
-  return w.has_market
-    ? "Fuel unknown; market goods not observed"
-    : "No market evidence";
+    return { kind: "absent" as const };
+  return { kind: w.has_market ? ("unknown" as const) : ("none" as const) };
 };
+const fuel = (w: Waypoint) => {
+  const found = fuelEvidence(w);
+  switch (found.kind) {
+    case "priced":
+      return `Fuel ${found.price} cr (${quoteAge(w.market?.observed_at)})`;
+    case "listed":
+      return "Fuel listed; price unknown";
+    case "absent":
+      return "Fuel not listed in observed goods";
+    case "unknown":
+      return "Fuel unknown; market goods not observed";
+    case "none":
+      return "No market evidence";
+  }
+};
+const resourceTraits = (w: Waypoint) =>
+  w.traits?.some((t) => /DEPOSITS|POOLS|CRYSTALS|GASES/.test(t)) || false;
 function stacks(points: Waypoint[]): Group[] {
   const byPosition = new Map<string, Group>();
   for (const w of points) {
@@ -102,8 +119,7 @@ const evidence = (w: Waypoint) =>
     w.has_market && "Marketplace",
     w.has_shipyard && "Shipyard",
     w.has_jump_gate && "Jump gate",
-    w.traits?.some((t) => /DEPOSITS|POOLS|CRYSTALS|GASES/.test(t)) &&
-      "Resource traits",
+    resourceTraits(w) && "Resource traits",
   ]
     .filter(Boolean)
     .join(" · ") || "No facility evidence";
@@ -142,7 +158,7 @@ function SystemMap({
   const centerY = (bounds.minY + bounds.maxY) / 2;
   const project = (g: Group): [number, number] => [
     transform.applyX(width / 2 + (g.x - centerX) * base),
-    transform.applyY(height / 2 - (g.y - centerY) * base),
+    transform.applyY(height / 2 + (g.y - centerY) * base),
   ];
   const moves = (next: ZoomTransform) => {
     if (svg.current && behavior.current)
@@ -197,6 +213,8 @@ function SystemMap({
       c.members.some((w) => priority(w) >= 3),
     );
     if (!important && transform.k < 2 && !facility) return null;
+    if (!important && transform.k < 2 && visibleLabels.length >= 8)
+      return null;
     if (
       !important &&
       (x < 10 ||
@@ -287,6 +305,14 @@ function SystemMap({
         Numbers group nearby destinations; zoom in or use the list to choose.
         Wheel or pinch to zoom; drag to pan. Keyboard: use the waypoint list.
       </p>
+      <p className="small ui-map-legend">
+        <span className="ui-key-gate">Gate</span>
+        <span className="ui-key-shipyard">Shipyard</span>
+        <span className="ui-key-market">Market</span>
+        <span className="ui-key-other">Other / mixed</span>
+        <span className="ui-key-selected">Selected</span>
+        <span className="ui-key-ship">Ship</span>
+      </p>
       <svg
         ref={svg}
         id="map"
@@ -301,6 +327,13 @@ function SystemMap({
             members = cluster.flatMap((c) => c.members);
           const chosen = members.some((w) => w.symbol === selected),
             atShip = members.some((w) => w.symbol === ship);
+          const kind = members.some((w) => w.has_jump_gate)
+            ? "gate"
+            : members.some((w) => w.has_shipyard)
+              ? "shipyard"
+              : members.some((w) => w.has_market)
+                ? "market"
+                : "other";
           return (
             <g
               key={`${g.x},${g.y}`}
@@ -328,13 +361,13 @@ function SystemMap({
                 cx={x}
                 cy={y}
                 r={chosen || atShip ? 16 : 13}
-                className={
+                className={`ui-map-${kind} ${
                   chosen
                     ? "ui-map-selected"
                     : atShip
                       ? "ui-map-ship"
                       : "ui-map-marker"
-                }
+                }`}
               />
               <text
                 x={x}
@@ -377,6 +410,11 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
   const [filters, setFilters] = useState<string[]>([]);
   const [sort, setSort] = useState("distance");
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const mapPanel = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (mapPanel.current) mapPanel.current.open = window.innerWidth > 800;
+  }, []);
   const result = useMemo(
     () =>
       points
@@ -395,14 +433,13 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
                 : f === "shipyard"
                   ? w.has_shipyard
                   : f === "fuel"
-                    ? /Fuel (\d+ cr|listed)/.test(fuel(w))
+                    ? ["priced", "listed"].includes(fuelEvidence(w).kind)
                     : f === "gate"
                       ? w.has_jump_gate
                       : f === "resource"
-                        ? w.traits?.some((t) =>
-                            /DEPOSITS|POOLS|CRYSTALS|GASES/.test(t),
-                          )
-                        : snapshot.ledger.contracts?.some(
+                        ? resourceTraits(w)
+                        : f === "contract" &&
+                          !!snapshot.ledger.contracts?.some(
                             (c) =>
                               !c.data.fulfilled &&
                               c.data.terms.deliver.some(
@@ -424,10 +461,17 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
         ),
     [points, search, type, filters, sort, origin, snapshot.ledger.contracts],
   );
+  const activeIndex = result.findIndex((w) => w.symbol === selected?.symbol);
   useEffect(() => {
-    const index = result.findIndex((w) => w.symbol === selected?.symbol);
-    if (index >= 0) refs.current[index]?.scrollIntoView({ block: "nearest" });
-  }, [selected?.symbol]);
+    const list = listRef.current;
+    const item = refs.current[activeIndex];
+    if (!list || !item) return;
+    const bounds = list.getBoundingClientRect();
+    const row = item.getBoundingClientRect();
+    if (row.top < bounds.top) list.scrollTop += row.top - bounds.top;
+    else if (row.bottom > bounds.bottom)
+      list.scrollTop += row.bottom - bounds.bottom;
+  }, [activeIndex, result]);
   const choose = (w: Waypoint) =>
     window.ledgerUI.selectExplorer({
       system: system!.symbol,
@@ -446,7 +490,9 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
         : ship.system !== system?.symbol
           ? "Ship is in another system"
           : shipTarget === selected?.symbol
-            ? "Ship is already here"
+            ? ship.status === "IN_TRANSIT"
+              ? "Ship is already headed here"
+              : "Ship is already here"
             : null;
   return (
     <section className="ui-explorer" aria-labelledby="explorer-title">
@@ -573,6 +619,7 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
           )}
           <div
             id="waypoint-list"
+            ref={listRef}
             className="ui-waypoint-list"
             aria-label="Observed waypoints"
           >
@@ -585,7 +632,7 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
                 type="button"
                 className="ui-waypoint"
                 aria-current={w.symbol === selected?.symbol}
-                tabIndex={i === 0 ? 0 : -1}
+                tabIndex={i === Math.max(0, activeIndex) ? 0 : -1}
                 onKeyDown={(e) => {
                   const next =
                     e.key === "ArrowDown"
@@ -656,7 +703,7 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
                   <h4>Marketplace</h4>
                   <p>
                     {selected.market
-                      ? `Observed ${selected.market.observed_at || "time unknown"}`
+                      ? `Observed ${selected.market.observed_at || "time unknown"} · source ${selected.market.source || "unknown"}`
                       : "Marketplace trait only; goods and prices unknown"}
                     . {fuel(selected)}.
                   </p>
@@ -677,7 +724,7 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
                       {goods(selected)!
                         .tradeGoods!.map(
                           (g) =>
-                            `${g.symbol} buy ${g.purchasePrice ?? "unknown"}, sell ${g.sellPrice ?? "unknown"}`,
+                            `${g.symbol} buy ${g.purchasePrice ?? "unknown"}, sell ${g.sellPrice ?? "unknown"}, volume ${g.tradeVolume ?? "unknown"}`,
                         )
                         .join("; ")}
                       . Prices may be stale; check the observation time.
@@ -692,7 +739,7 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
                 <p>
                   Shipyard:{" "}
                   {selected.shipyard
-                    ? `observed ${selected.shipyard.observed_at || "time unknown"}; ${(selected.shipyard.data.shipTypes || []).map((s) => s.type).join(", ") || "advertised types unknown"}`
+                    ? `observed ${selected.shipyard.observed_at || "time unknown"} · source ${selected.shipyard.source || "unknown"}; ${(selected.shipyard.data.shipTypes || []).map((s) => s.type).join(", ") || "advertised types unknown"}`
                     : "trait only; offerings and prices unknown"}
                   .
                 </p>
@@ -701,7 +748,7 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
                 <p>
                   Jump gate:{" "}
                   {selected.jump_gate
-                    ? `observed ${selected.jump_gate.observed_at || "time unknown"}`
+                    ? `observed ${selected.jump_gate.observed_at || "time unknown"} · source ${selected.jump_gate.source || "unknown"}`
                     : "connections unknown"}
                   .
                 </p>
@@ -764,10 +811,7 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
             <p>Select a waypoint in the list or on the map.</p>
           )}
         </div>
-        <details
-          className="ui-map-panel"
-          open={typeof window !== "undefined" && window.innerWidth > 800}
-        >
+        <details ref={mapPanel} className="ui-map-panel">
           <summary>
             System map · {points.filter(coordinates).length} plotted
           </summary>
