@@ -145,15 +145,13 @@ For build-only rehearsal or a transfer retry, `prepare --prepare-only` keeps
 the completed artifact and prints an exact `transfer` command for that same
 SHA and digest.
 
-## VM SSH terminal: pause and activate
+## Activation details and disconnect behavior
 
-Open the hosted browser's **Operations** page and pause gameplay. Confirm STOP
-and desired pause. In the **VM SSH terminal**, paste the exact activation
-command printed by Cloud Shell. It begins `sudo systemd-run`, runs the pinned
-Python command as a transient root service, and includes absolute paths plus
-`--sha256`. No editing is needed. `--wait --pipe` shows its output while your
-SSH connection is up. If SSH disconnects, the transient service continues;
-the terminal client may exit, so use the independent status command afterward.
+The generated activation command uses `sudo systemd-run` to run the pinned
+Python deployment as a transient root service with absolute paths and the
+bundle digest. `--wait --pipe` shows output while the SSH connection is up. If
+SSH disconnects, the transient service continues; use the independent status
+command afterward to inspect the durable result.
 The unit name starts `py-st-deploy-` followed by the first twelve SHA characters.
 Its journal is available with `sudo journalctl -u UNIT_NAME -n 80 --no-pager`.
 
