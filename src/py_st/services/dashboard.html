@@ -38,7 +38,6 @@ __UI_STYLE__
 <section id="flight-controls" class="desk" hidden aria-labelledby="flight-title"><div class="eyebrow">Durable flight operations</div><h2 id="flight-title">Fly the selected ship.</h2><p>Select a ship in the shared context and a destination in the explorer. Commands persist when this page closes. Arrival requires confirmation from the game; countdowns are estimates. <a href="#/operations">Inspect commands and recovery</a>.</p><p id="flight-selection" class="small"></p><div class="controls"><button id="flight-preview">Preview trip</button><button id="flight-orbit">Orbit</button><button id="flight-dock">Dock</button><button id="flight-refuel">Dock and refuel</button></div><label><input id="trip-dock" type="checkbox" checked>Dock on arrival</label><label><input id="trip-refuel" type="checkbox" checked>Refuel on arrival (paid)</label><button id="flight-trip">Submit trip</button><pre id="flight-estimate"></pre></section>
 <section id="command-panel" class="desk"><h2>Durable commands and recovery</h2><p>Refresh the game snapshot and inspect the journal before recording a reviewed outcome. Review cancels remaining steps, not the already dispatched mutation. While paused, queued observation/review work waits for explicit resume; inspect all queued work before resuming.</p><div id="flight-commands" class="fleet"></div></section>
 <section class="panel"><h2>The credit trail</h2><svg id="chart" class="chart" viewBox="0 0 600 180" role="img" aria-label="Observed credit history"></svg><div class="small">All observations are scoped to the selected reset and agent.</div></section>
-<section class="desk" aria-labelledby="explorer-title"><div class="eyebrow">System explorer / stored observations only</div><h2 id="explorer-title">Explore a recorded system.</h2><div class="controls"><label for="system-select" class="small">SYSTEM</label><select id="system-select"></select></div><div class="explorer-key"><span>● waypoint</span><span>◆ market</span><span>■ shipyard</span><span>⬢ jump gate</span><span>◎ selected ship</span></div><p id="explorer-status" class="small" role="status"></p><div class="explorer-layout"><svg id="map" class="system-map" viewBox="0 0 700 420" role="img" aria-label="Observed system waypoints"></svg><div><div id="waypoint-list" class="explorer-list" aria-label="Observed waypoints"></div></div></div><div id="waypoint-detail" class="explorer-detail"></div></section>
 <div class="grid"><section class="panel"><h2>Fleet readiness</h2><div id="fleet" class="fleet"></div></section><section class="panel"><h2>Contract desk</h2><div id="contracts"></div></section><section class="panel"><h2>Strategy notes</h2><div id="plans"></div></section></div>
 <section class="desk" aria-labelledby="market-title">
 <div class="eyebrow">Market desk / cached evidence only</div><h2 id="market-title">Inspect the recorded market.</h2>
@@ -159,7 +158,7 @@ let explorerSystem='', explorerWaypoint='', explorerShip='';
 let flightManaged=false, flightLoggedIn=false, flightVersion=0, authReady=false;
 let flightReport=null, reportError='', flightError='', flightSubmitting=false;
 window.ledgerUI={snapshot:{}};
-function publishUI(){window.ledgerUI={snapshot:{ledger,flight:flightReport,selectedShip:explorerShip,managed:flightManaged,authenticated:flightLoggedIn,pending:!!localStorage.getItem('flight-pending'),submitting:flightSubmitting,error:[reportError,flightError].filter(Boolean).join('; ')},previewTrade:body=>flightPost('/api/trade-preview',body),previewContract:body=>flightPost('/api/contract-preview',body),submitCommand:payload=>submitFlight(payload,true)};document.dispatchEvent(new Event('ledger-ui'));}
+function publishUI(){window.ledgerUI={snapshot:{ledger,flight:flightReport,selectedShip:explorerShip,selectedSystem:explorerSystem,selectedWaypoint:explorerWaypoint,managed:flightManaged,authenticated:flightLoggedIn,pending:!!localStorage.getItem('flight-pending'),submitting:flightSubmitting,error:[reportError,flightError].filter(Boolean).join('; ')},previewTrade:body=>flightPost('/api/trade-preview',body),previewContract:body=>flightPost('/api/contract-preview',body),submitCommand:payload=>submitFlight(payload,true),selectExplorer,previewTrip};document.dispatchEvent(new Event('ledger-ui'));}
 publishUI();
 function flightSelection(){
  $('flight-selection').textContent=`Ship: ${explorerShip||'select below'} / Destination: ${explorerWaypoint||'select below'} / System: ${explorerSystem||'unknown'}`;
@@ -212,37 +211,19 @@ async function submitFlight(payload,propagate=false){
 function shipCommand(kind){if(!explorerShip){$('flight-message').textContent='Select an owned ship first.';return;}submitFlight({kind,ship:explorerShip});}
 const observation=row=>row?`${row.observed_at||'timestamp missing'} / ${row.source||'source missing'}`:'not observed';
 function systemForWaypoint(symbol){return (ledger.explorer?.systems||[]).find(s=>s.waypoints.some(w=>w.symbol===symbol))?.symbol||''}
-function selectWaypoint(symbol){explorerWaypoint=symbol;$('flight-estimate').textContent='';drawExplorer()}
-function waypointMarker(w,x,y){let marker;if(w.has_jump_gate)marker=svg('polygon',{points:`${x},${y-11} ${x+10},${y-5} ${x+10},${y+5} ${x},${y+11} ${x-10},${y+5} ${x-10},${y-5}`});else if(w.has_shipyard)marker=svg('rect',{x:x-8,y:y-8,width:16,height:16});else if(w.has_market)marker=svg('polygon',{points:`${x},${y-9} ${x+9},${y} ${x},${y+9} ${x-9},${y}`});else marker=svg('circle',{cx:x,cy:y,r:5});marker.setAttribute('class','waypoint'+(w.symbol===explorerWaypoint?' selected':''));return marker}
-function describeExplorer(w){
- const out=$('waypoint-detail');out.replaceChildren();if(!w){out.append(node('p','Select a waypoint on the map or in the list.','empty'));return;}
- out.append(node('h3',w.symbol));const dl=node('dl');
- const add=(term,value)=>{dl.append(node('dt',term),node('dd',value));};
- add('Type',w.type||'unknown');add('Coordinates',Number.isFinite(w.x)&&Number.isFinite(w.y)?`${w.x}, ${w.y}`:'missing');add('Traits',w.traits===null?'not observed':w.traits.length?w.traits.join(', '):'observed empty');add('Waypoint observed',w.observed_at||'timestamp missing');
- if(w.has_market){const goods=w.market?.data?.tradeGoods;add('Market observation',observation(w.market));add('Market prices',!w.market?'missing':!Array.isArray(goods)?'not included in stored result':goods.length?goods.map(g=>`${g.symbol}: buy ${g.purchasePrice??'unknown'} / sell ${g.sellPrice??'unknown'} / volume ${g.tradeVolume??'unknown'}`).join('; '):'observed empty');}
- if(w.has_shipyard){const ships=w.shipyard?.data?.ships;add('Shipyard observation',observation(w.shipyard));add('Shipyard details',!w.shipyard?'missing':!Array.isArray(ships)?'not included in stored result':ships.length?ships.map(s=>s.type||s.name||'unnamed ship').join(', '):'observed empty');}
- if(w.has_jump_gate)add('Jump gate observation',observation(w.jump_gate));
- out.append(dl);
-}
-function drawExplorer(){
-  flightSelection();
-  publishUI();
- const explorer=ledger.explorer||{systems:[],ships:[]},system=explorer.systems.find(s=>s.symbol===explorerSystem),points=system?.waypoints||[],map=$('map'),list=$('waypoint-list');map.replaceChildren();list.replaceChildren();
- if(!system){$('explorer-status').textContent='No observed waypoint systems in this scope.';describeExplorer(null);return;}
- if(!points.some(w=>w.symbol===explorerWaypoint))explorerWaypoint='';
- const plotted=points.filter(w=>Number.isFinite(w.x)&&Number.isFinite(w.y)),xs=plotted.map(w=>w.x),ys=plotted.map(w=>w.y),xmin=plotted.length?Math.min(...xs):0,xmax=plotted.length?Math.max(...xs):0,ymin=plotted.length?Math.min(...ys):0,ymax=plotted.length?Math.max(...ys):0,dx=Math.max(1,xmax-xmin),dy=Math.max(1,ymax-ymin),scale=Math.min(600/dx,330/dy),xoff=350-(xmin+xmax)*scale/2,yoff=210-(ymin+ymax)*scale/2;
- const selectedShip=explorer.ships.find(s=>s.symbol===explorerShip),shipTarget=selectedShip?.status==='IN_TRANSIT'?selectedShip.destination:selectedShip?.waypoint;
- points.forEach(w=>{
-  const icons=[w.has_market?'◆':'',w.has_shipyard?'■':'',w.has_jump_gate?'⬢':''].filter(Boolean).join(' ')||'●',button=node('button',`${icons} ${w.symbol} / ${w.type||'unknown'} / (${Number.isFinite(w.x)&&Number.isFinite(w.y)?w.x+', '+w.y:'coordinates missing'}) / observed ${w.observed_at||'timestamp missing'}`);button.type='button';button.setAttribute('aria-current',String(w.symbol===explorerWaypoint));button.onclick=()=>selectWaypoint(w.symbol);list.append(button);
-  if(!Number.isFinite(w.x)||!Number.isFinite(w.y))return;const x=xoff+w.x*scale,y=yoff+w.y*scale,g=svg('g',{role:'button',tabindex:'0','aria-label':w.symbol});g.append(waypointMarker(w,x,y),svg('text',{x:x+14,y:y+4},w.symbol));g.onclick=()=>selectWaypoint(w.symbol);g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectWaypoint(w.symbol)}};map.append(g);if(shipTarget===w.symbol)map.append(svg('circle',{cx:x,cy:y,r:17,class:'ship-mark'}));
- });
- const missing=points.length-plotted.length,transit=selectedShip?.status==='IN_TRANSIT';$('explorer-status').textContent=`${system.symbol}: ${points.length} observed waypoints; ${plotted.length} plotted${missing?`; ${missing} missing coordinates`:''}. ${selectedShip?transit?`${selectedShip.symbol} recorded in transit ${selectedShip.origin||'unknown origin'} → ${selectedShip.destination||'unknown destination'}; arrival ${selectedShip.arrival||'unknown'}. Destination highlighted; no estimated position shown.`:`${selectedShip.symbol} recorded at ${selectedShip.waypoint||'unknown'}; observed ${selectedShip.observed_at||'timestamp missing'}.`: 'Select a ship to highlight its recorded location or destination.'}`;
- describeExplorer(points.find(w=>w.symbol===explorerWaypoint));
-}
+function selectExplorer({system,waypoint=''}){explorerSystem=system;explorerWaypoint=waypoint;$('flight-estimate').textContent='';flightSelection();publishUI()}
 function syncExplorer(d){
- const systems=d.explorer?.systems||[],systemSelect=$('system-select'),shipSelect=$('explorer-ship');systemSelect.replaceChildren(new Option('No observed systems',''));systems.forEach(s=>systemSelect.append(new Option(s.symbol,s.symbol)));if(!systems.some(s=>s.symbol===explorerSystem))explorerSystem=systems[0]?.symbol||'';systemSelect.value=explorerSystem;systemSelect.disabled=!systems.length;
-  if(!explorerShip&&d.scope)explorerShip=localStorage.getItem('selected-ship:'+d.scope)||'';
-  shipSelect.replaceChildren(new Option('Select a ship',''));(d.explorer?.ships||[]).forEach(s=>shipSelect.append(new Option(`${s.symbol} / ${s.status||'unknown'}`,s.symbol)));if(!(d.explorer?.ships||[]).some(s=>s.symbol===explorerShip)){explorerShip='';if(d.scope)localStorage.removeItem('selected-ship:'+d.scope);}shipSelect.value=explorerShip;drawExplorer();
+ const systems=d.explorer?.systems||[],shipSelect=$('explorer-ship');
+ if(!systems.some(s=>s.symbol===explorerSystem))explorerSystem=systems[0]?.symbol||'';
+ if(!explorerShip&&d.scope)explorerShip=localStorage.getItem('selected-ship:'+d.scope)||'';
+ shipSelect.replaceChildren(new Option('Select a ship',''));
+ (d.explorer?.ships||[]).forEach(s=>shipSelect.append(new Option(`${s.symbol} / ${s.status||'unknown'}`,s.symbol)));
+ if(!(d.explorer?.ships||[]).some(s=>s.symbol===explorerShip)){
+  explorerShip='';if(d.scope)localStorage.removeItem('selected-ship:'+d.scope);
+ }
+ shipSelect.value=explorerShip;
+ if(!systems.find(s=>s.symbol===explorerSystem)?.waypoints.some(w=>w.symbol===explorerWaypoint))explorerWaypoint='';
+ flightSelection();
 }
 function clearDoctor(){doctorVersion++;$('doctor-status').textContent='';$('doctor-findings').replaceChildren();}
 async function checkDoctor(){
@@ -287,7 +268,7 @@ function clearScope(){
  clearDoctor();
  clearDesk('Loading selected scope...');ledger={};
  ['credits','profit','reserve','coverage'].forEach(id=>$(id).textContent='--');
-  ['chart','map','waypoint-list','waypoint-detail','system-select','explorer-ship','fleet','contracts','plans','routes','cash','audit','positions','markets','journal','contract-select','automation-runs'].forEach(id=>$(id).replaceChildren());
+  ['chart','explorer-ship','fleet','contracts','plans','routes','cash','audit','positions','markets','journal','contract-select','automation-runs'].forEach(id=>$(id).replaceChildren());
  $('audit').classList.remove('warn');$('error').textContent='';
  $('observed').textContent='Loading selected scope...';
   $('export').removeAttribute('href');$('export').setAttribute('aria-disabled','true');
@@ -454,7 +435,7 @@ $('contract-select').onchange=loadSources;$('source-reload').onclick=loadSources
 $('builder-form').onsubmit=buildDraft;$('builder-form').oninput=event=>{event.target.removeAttribute('aria-invalid');$('builder-error').textContent='';$('builder-status').textContent='Form changed. Build draft from form to apply; JSON is unchanged.';};
 $('refresh').onclick=refresh;$('scope').onchange=()=>{clearScope();refresh()};$('pause').onclick=()=>control('pause');$('resume').onclick=()=>control('resume');setInterval(refresh,10000);
 $('doctor-check').onclick=checkDoctor;
-$('system-select').onchange=()=>{explorerSystem=$('system-select').value;explorerWaypoint='';$('flight-estimate').textContent='';drawExplorer()};$('explorer-ship').onchange=()=>{explorerShip=$('explorer-ship').value;if(ledger.scope)localStorage.setItem('selected-ship:'+ledger.scope,explorerShip);$('flight-estimate').textContent='';const ship=ledger.explorer?.ships.find(s=>s.symbol===explorerShip),target=ship?.status==='IN_TRANSIT'?ship.destination:ship?.waypoint,system=target?systemForWaypoint(target):'';if(system){explorerSystem=system;$('system-select').value=system;explorerWaypoint=target;}drawExplorer()};
+$('explorer-ship').onchange=()=>{explorerShip=$('explorer-ship').value;if(ledger.scope)localStorage.setItem('selected-ship:'+ledger.scope,explorerShip);$('flight-estimate').textContent='';const ship=ledger.explorer?.ships.find(s=>s.symbol===explorerShip),target=ship?.status==='IN_TRANSIT'?ship.destination:ship?.waypoint,system=target?systemForWaypoint(target):'';if(system){explorerSystem=system;explorerWaypoint=target;}flightSelection();publishUI()};
 $('market-select').onchange=()=>{$('good-select').value='';showMarket();};$('good-select').onchange=loadMarketHistory;
 $('login-form').onsubmit=async e=>{e.preventDefault();try{await flightPost('/api/login',{password:$('owner-password').value});$('owner-password').value='';$('login-error').textContent='';await loadAuth();await refresh();}catch(error){$('owner-password').value='';$('login-error').textContent=error.message;}};
 $('flight-logout').onclick=async()=>{try{await flightPost('/api/logout',{});reportVersion++;flightVersion++;Object.keys(localStorage).filter(key=>key.startsWith('selected-ship:')).forEach(key=>localStorage.removeItem(key));clearScope();await loadAuth();}catch(e){$('flight-message').textContent='Logout failed: '+e.message;}};
@@ -462,7 +443,8 @@ $('flight-refresh').onclick=()=>submitFlight({kind:'refresh',system:explorerSyst
 $('flight-orbit').onclick=()=>shipCommand('orbit');$('flight-dock').onclick=()=>shipCommand('dock');$('flight-refuel').onclick=()=>shipCommand('refuel');
 $('trip-dock').onchange=()=>{if(!$('trip-dock').checked)$('trip-refuel').checked=false;};$('trip-refuel').onchange=()=>{if($('trip-refuel').checked)$('trip-dock').checked=true;};
 $('flight-trip').onclick=()=>{if(!explorerShip||!explorerWaypoint){$('flight-message').textContent='Select a ship and destination first.';return;}submitFlight({kind:'trip',ship:explorerShip,destination:explorerWaypoint,dock:$('trip-dock').checked,refuel:$('trip-refuel').checked});};
-$('flight-preview').onclick=async()=>{const scope=$('scope').value,ship=explorerShip,destination=explorerWaypoint;try{const d=await flightPost('/api/flight-preview',{scope,ship,destination});if(scope===$('scope').value&&ship===explorerShip&&destination===explorerWaypoint)$('flight-estimate').textContent=JSON.stringify(d,null,2);}catch(e){$('flight-message').textContent=e.message;}};
+async function previewTrip(){const scope=$('scope').value,ship=explorerShip,destination=explorerWaypoint;try{const d=await flightPost('/api/flight-preview',{scope,ship,destination});if(scope===$('scope').value&&ship===explorerShip&&destination===explorerWaypoint)$('flight-estimate').textContent=JSON.stringify(d,null,2);}catch(e){$('flight-message').textContent=e.message;}}
+$('flight-preview').onclick=previewTrip;
 $('flight-retry').hidden=!localStorage.getItem('flight-pending');$('flight-retry').onclick=()=>{const pending=localStorage.getItem('flight-pending');if(pending)sendFlight(JSON.parse(pending));};
 loadAuth().then(refresh).catch(e=>{$('login-error').textContent=e.message;});
 </script>

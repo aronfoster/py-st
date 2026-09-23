@@ -17,7 +17,7 @@ from py_st.services.intelligence import Intelligence
 SCOPE = "DEMO-RESET:SYNTHETIC"
 
 
-def create_demo(root: Path) -> None:
+def create_demo(root: Path, layout: str = "basic") -> None:
     state = root / ".state"
     state.mkdir(parents=True, exist_ok=True)
     if (state / "intelligence.sqlite3").exists() or (
@@ -37,6 +37,75 @@ def create_demo(root: Path) -> None:
         }
         for name, x, y in (("A1", 0, 0), ("B2", 12, 0), ("C3", 100, 100))
     ]
+    if layout not in {"basic", "dense"}:
+        raise ValueError("Unknown demo layout")
+    if layout == "dense":
+        points[0]["orbitals"] = [
+            {"symbol": f"X-DEMO-{name}"} for name in ("A2", "A3", "A4")
+        ]
+        points.extend(
+            {
+                "symbol": f"X-DEMO-{name}",
+                "systemSymbol": "X-DEMO",
+                "type": "MOON" if name != "A4" else "ORBITAL_STATION",
+                "x": 0,
+                "y": 0,
+                "orbits": "X-DEMO-A1",
+                "traits": [{"symbol": "MARKETPLACE"}] if name == "A4" else [],
+            }
+            for name in ("A2", "A3", "A4")
+        )
+        for i in range(24):
+            points.append(
+                {
+                    "symbol": f"X-DEMO-CORE{i:02d}",
+                    "systemSymbol": "X-DEMO",
+                    "type": "ASTEROID",
+                    "x": 3 if i == 17 else (i % 7 - 3) * 6,
+                    "y": (i // 7 - 2) * 6,
+                    "traits": [],
+                }
+            )
+        for i in range(56):
+            angle = 2 * math.pi * i / 56
+            points.append(
+                {
+                    "symbol": f"X-DEMO-RING{i:02d}",
+                    "systemSymbol": "X-DEMO",
+                    "type": "ASTEROID",
+                    "x": round(350 * math.cos(angle)),
+                    "y": round(350 * math.sin(angle)),
+                    "traits": (
+                        [{"symbol": "SHIPYARD"}]
+                        if i == 13
+                        else (
+                            [{"symbol": "COMMON_METAL_DEPOSITS"}]
+                            if i % 8 == 0
+                            else []
+                        )
+                    ),
+                }
+            )
+        points.extend(
+            [
+                {
+                    "symbol": "X-DEMO-GATE",
+                    "systemSymbol": "X-DEMO",
+                    "type": "JUMP_GATE",
+                    "x": 700,
+                    "y": 0,
+                    "traits": [],
+                },
+                {
+                    "symbol": "X-DEMO-UNKNOWN",
+                    "systemSymbol": "X-DEMO",
+                    "type": "FUEL_STATION",
+                    "x": 30,
+                    "y": 25,
+                    "traits": [],
+                },
+            ]
+        )
     ship = {
         "symbol": "SYNTHETIC-1",
         "engine": {"speed": 10},
@@ -111,8 +180,15 @@ def create_demo(root: Path) -> None:
                 ],
             }
             for point in points
+            if any(
+                trait.get("symbol") == "MARKETPLACE"
+                for trait in point.get("traits", [])
+            )
         },
     }
+    if layout == "dense":
+        world["markets"]["X-DEMO-A4"].pop("tradeGoods")
+        world["markets"].pop("X-DEMO-C3")
     db = sqlite3.connect(state / "remote.sqlite3")
     try:
         db.execute("PRAGMA journal_mode=WAL")
@@ -134,7 +210,16 @@ def create_demo(root: Path) -> None:
             ("contract", world["contracts"], "id"),
         ):
             for item in items:
-                store.observe(SCOPE, kind, item[key], item, "synthetic-demo")
+                observed = item
+                if kind == "waypoint" and item[key] == "X-DEMO-UNKNOWN":
+                    observed = {
+                        field: value
+                        for field, value in item.items()
+                        if field not in {"x", "y"}
+                    }
+                store.observe(
+                    SCOPE, kind, item[key], observed, "synthetic-demo"
+                )
     finally:
         store.close()
 
@@ -245,7 +330,8 @@ def dispatch(world: dict[str, Any], request: httpx.Request) -> httpx.Response:
         if path == "/systems/X-DEMO/waypoints":
             return ok(world["waypoints"])
         if path.endswith("/market"):
-            return ok(world["markets"][path.split("/")[-2]])
+            market = world["markets"].get(path.split("/")[-2])
+            return ok(market) if market is not None else missing
         if "/waypoints/" in path:
             return ok(
                 next(

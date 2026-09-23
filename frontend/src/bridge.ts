@@ -2,6 +2,7 @@
 export interface Observation<T> {
   key: string;
   observed_at?: string;
+  source?: string;
   data: T;
 }
 
@@ -31,10 +32,55 @@ export interface Command {
   updated_at: string;
   payload: { kind: string; ship?: string };
 }
+export interface Waypoint {
+  symbol: string;
+  type: string | null;
+  x: number | null;
+  y: number | null;
+  traits: string[] | null;
+  observed_at?: string;
+  orbits?: string | null;
+  orbitals?: string[] | null;
+  modifiers?: string[] | null;
+  under_construction?: boolean | null;
+  market: Observation<{
+    exports?: { symbol: string }[];
+    imports?: { symbol: string }[];
+    exchange?: { symbol: string }[];
+    tradeGoods?: {
+      symbol: string;
+      purchasePrice?: number;
+      sellPrice?: number;
+      tradeVolume?: number;
+    }[];
+  }> | null;
+  shipyard: Observation<{
+    shipTypes?: { type: string }[];
+    ships?: { type?: string; name?: string }[];
+  }> | null;
+  jump_gate: Observation<{ connections?: { symbol: string }[] }> | null;
+  has_market: boolean;
+  has_shipyard: boolean;
+  has_jump_gate: boolean;
+}
+export interface Explorer {
+  systems: { symbol: string; waypoints: Waypoint[] }[];
+  ships: {
+    symbol: string;
+    status: string;
+    waypoint: string;
+    system: string;
+    origin?: string;
+    destination?: string;
+    arrival?: string;
+    observed_at?: string;
+  }[];
+}
 
 export interface Snapshot {
   ledger: {
     scope?: string;
+    explorer?: Explorer;
     paused?: boolean;
     credits?: { observed_at: string; credits: number }[];
     ships?: Observation<Ship>[];
@@ -70,6 +116,8 @@ export interface Snapshot {
     commands: Command[];
   } | null;
   selectedShip: string;
+  selectedSystem: string;
+  selectedWaypoint: string;
   managed: boolean;
   authenticated: boolean;
   pending: boolean;
@@ -84,6 +132,11 @@ declare global {
       previewTrade: (body: object) => Promise<TradePreview>;
       previewContract: (body: object) => Promise<ContractPreview>;
       submitCommand: (payload: object) => Promise<Command>;
+      selectExplorer: (selection: {
+        system: string;
+        waypoint?: string;
+      }) => void;
+      previewTrip: () => Promise<void>;
     };
   }
 }
@@ -196,7 +249,7 @@ function legacyElement(id: string): HTMLElement {
 /** Move each whole legacy panel once; React never owns their descendants. */
 export function migratePanels() {
   const destinations: Record<Exclude<Page, "overview">, string[]> = {
-    explorer: ["map", "flight-controls"],
+    explorer: ["flight-controls"],
     fleet: ["fleet"],
     markets: ["market-select", "routes", "markets"],
     contracts: ["contracts", "contract-select"],

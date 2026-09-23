@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -413,6 +413,8 @@ def test_browser_pending_journal_and_historical_scope(
 ) -> None:
     from playwright.sync_api import expect, sync_playwright
 
+    page_errors: list[str] = []
+
     # Arrange: journal uncertainty independent of the current command queue.
     store = Intelligence(flight_root / ".state/intelligence.sqlite3")
     ship = store.latest(SCOPE, "ship")[0]
@@ -423,6 +425,7 @@ def test_browser_pending_journal_and_historical_scope(
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(viewport={"width": width, "height": 900})
+        page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.add_init_script(
             """window.panelFlash = false;
             new MutationObserver(() => {
@@ -440,6 +443,8 @@ def test_browser_pending_journal_and_historical_scope(
         page.locator("#owner-password").fill(PASSWORD)
         page.get_by_role("button", name="Log in", exact=True).click()
         page.locator("#scope").select_option(SCOPE)
+        expect(page.locator("#ui-navigation nav")).to_be_visible()
+        assert not page_errors
         page.get_by_role("navigation").get_by_role(
             "link", name="Explorer", exact=True
         ).click()
@@ -944,6 +949,62 @@ def test_unknown_demo_waypoint_blocks_without_crashing(
     assert finish(runner, submit(runner, TRIP))["status"] == "completed"
 
 
+def test_dense_unplotted_waypoint_has_remote_coordinates(
+    tmp_path: Path,
+) -> None:
+    # Arrange: the local observation is incomplete; the remote world is not.
+    create_demo(tmp_path, layout="dense")
+    store = Intelligence(tmp_path / ".state/intelligence.sqlite3")
+    try:
+        unknown = next(
+            row
+            for row in store.latest(SCOPE, "waypoint")
+            if row["key"] == "X-DEMO-UNKNOWN"
+        )
+        assert "x" not in unknown["data"]
+    finally:
+        store.close()
+
+    # Act: orbit and navigate using the authoritative synthetic remote data.
+    with demo_client(tmp_path) as client:
+        client.request("POST", "/my/ships/SYNTHETIC-1/orbit")
+        nav = client.request(
+            "POST",
+            "/my/ships/SYNTHETIC-1/navigate",
+            body={"waypointSymbol": "X-DEMO-UNKNOWN"},
+        )
+
+    # Assert: the remote route remains executable despite the missing cache.
+    assert isinstance(nav, dict)
+    assert nav["nav"]["route"]["destination"]["x"] == 30
+    assert nav["nav"]["route"]["destination"]["y"] == 25
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["setup", "--demo-layout", "dense"],
+        ["setup", "--demo", "--demo-layout", "unknown"],
+    ],
+)
+def test_demo_layout_requires_known_demo_option(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arguments: list[str]
+) -> None:
+    # Arrange / Act: invalid options are rejected before state is created.
+    monkeypatch.setenv("ST_STATE_ROOT", str(tmp_path))
+    result = CliRunner().invoke(
+        flight_app, arguments, terminal_width=120, color=False
+    )
+
+    # Assert
+    assert result.exit_code != 0
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "--demo-layout requires --demo and basic or dense" in " ".join(
+        plain.split()
+    )
+    assert not (tmp_path / ".state").exists()
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -1273,6 +1334,200 @@ def flight_http(flight_root: Path) -> Iterator[str]:
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+@pytest.mark.skipif(
+    os.environ.get("DASHBOARD_BROWSER_TESTS") != "1",
+    reason="Explicit offline browser suite",
+)
+@pytest.mark.parametrize("width", [1280, 390])
+def test_browser_dense_destination_discovery(
+    tmp_path: Path, width: int
+) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    # Arrange: 88 waypoints, shared coordinates and mixed evidence.
+    create_demo(tmp_path, layout="dense")
+    store = Intelligence(tmp_path / ".state/intelligence.sqlite3")
+    try:
+        with store.db:
+            store.db.execute(
+                "UPDATE observations SET observed_at=? "
+                "WHERE kind='market' AND key='X-DEMO-A1'",
+                ((datetime.now(UTC) + timedelta(hours=1)).isoformat(),),
+            )
+    finally:
+        store.close()
+    save_password(tmp_path, PASSWORD)
+    queue = FlightQueue(tmp_path, create=True, scope=SCOPE, mode="demo")
+    queue.control(False)
+    server = dashboard_server(tmp_path, 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                channel="chrome", headless=True
+            )
+            page = browser.new_page(viewport={"width": width, "height": 900})
+            errors: list[str] = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{server.server_port}/#/explorer")
+            page.locator("#owner-password").fill(PASSWORD)
+            page.get_by_role("button", name="Log in", exact=True).click()
+            page.locator("#explorer-ship").select_option("SYNTHETIC-1")
+            expect(page.locator("#waypoint-list button")).to_have_count(88)
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "future observation · age unknown"
+            )
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "source synthetic-demo"
+            )
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "volume 100"
+            )
+            if width == 390:
+                assert not page.locator(".ui-map-panel").evaluate(
+                    "el => el.open"
+                )
+                assert page.evaluate(
+                    "document.documentElement.scrollWidth <= innerWidth"
+                )
+            else:
+                assert page.locator("#map .ui-map-label").count() <= 5
+            page.screenshot(
+                path=str(tmp_path / f"dense-fit-{width}.png"), full_page=True
+            )
+            if width == 1280:
+                # A ledger refresh must not snap manual list browsing back to
+                # the selected waypoint at the top of the 88-row list.
+                position = page.evaluate(
+                    """async () => {
+                      const list = document.querySelector('#waypoint-list');
+                      list.scrollTop = list.scrollHeight;
+                      const before = list.scrollTop;
+                      const previous = window.ledgerUI.snapshot.ledger;
+                      const refreshed = new Promise(resolve =>
+                        document.addEventListener('ledger-ui', resolve,
+                          {once: true}));
+                      document.querySelector('#refresh').click();
+                      await refreshed;
+                      await new Promise(resolve => requestAnimationFrame(() =>
+                        requestAnimationFrame(resolve)));
+                      return {before, after: list.scrollTop,
+                        changed: window.ledgerUI.snapshot.ledger !== previous};
+                    }"""
+                )
+                assert position["changed"]
+                assert position["before"] > 0
+                assert position["after"] == position["before"]
+
+            # Discover a facility without knowing its identifier, then preview.
+            page.get_by_role("button", name="Fuel listed/priced").click()
+            expect(page.locator("#waypoint-list button")).to_have_count(3)
+            page.get_by_role("button", name="Fuel listed/priced").click()
+            page.get_by_role("button", name="Marketplace", exact=True).click()
+            expect(page.locator("#waypoint-list button")).to_have_count(4)
+            page.locator("#waypoint-search").fill("A4")
+            page.locator("#waypoint-search").press("ArrowDown")
+            page.keyboard.press("Enter")
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "X-DEMO-A4"
+            )
+            expect(page.locator("#waypoint-detail")).to_contain_text(
+                "Detailed prices unknown"
+            )
+            page.get_by_role(
+                "button", name="Preview trip from SYNTHETIC-1"
+            ).click()
+            expect(page.locator("#flight-estimate")).to_contain_text(
+                '"estimated": true'
+            )
+            assert not queue.report()["commands"]
+
+            # Every member of the shared coordinate is explicitly selectable.
+            page.locator("#waypoint-search").fill("")
+            page.get_by_role("button", name="Marketplace", exact=True).click()
+            for member in ("A2", "A3", "A4"):
+                page.locator("#waypoint-list button").filter(
+                    has_text=f"X-DEMO-{member}"
+                ).click()
+                expect(page.locator("#flight-selection")).to_contain_text(
+                    f"X-DEMO-{member}"
+                )
+            page.locator("#waypoint-search").fill("A1")
+            page.locator("#waypoint-search").press("ArrowDown")
+            page.keyboard.press("Enter")
+            page.get_by_role("button", name="X-DEMO-A3 · MOON").click()
+            expect(page.locator("#flight-selection")).to_contain_text(
+                "X-DEMO-A3"
+            )
+            if width == 1280:
+                before = page.locator("#map").get_attribute("data-zoom-k")
+                page.get_by_role("button", name="Focus selection").click()
+                for _ in range(6):
+                    page.get_by_role("button", name="Zoom in").click()
+                page.wait_for_function(
+                    "before => document.querySelector('#map').dataset.zoomK "
+                    "!== before",
+                    arg=before,
+                )
+                stack = page.locator("#map [data-stack='4'] circle")
+                stack.click()
+                page.locator(".ui-colocated").get_by_role(
+                    "button", name="X-DEMO-A2 · MOON"
+                ).click()
+                expect(page.locator("#flight-selection")).to_contain_text(
+                    "X-DEMO-A2"
+                )
+                stack = page.locator("#map [data-stack='4'] circle")
+                center_before_pan = stack.get_attribute("cx")
+                map_view = page.locator("#map")
+                map_view.scroll_into_view_if_needed()
+                bounds = map_view.bounding_box()
+                assert bounds is not None
+                x = bounds["x"] + bounds["width"] * 0.75
+                y = bounds["y"] + bounds["height"] * 0.65
+                assert 0 < y < 900
+                page.mouse.move(x, y)
+                page.mouse.down()
+                page.mouse.move(x + 75, y + 30, steps=5)
+                page.mouse.up()
+                page.wait_for_function(
+                    "before => document.querySelector("
+                    "\"#map [data-stack='4'] circle\""
+                    ")?.getAttribute('cx') !== before",
+                    arg=center_before_pan,
+                )
+                expect(page.locator("#flight-selection")).to_contain_text(
+                    "X-DEMO-A2"
+                )
+                page.get_by_role("button", name="Fit system").click()
+                gate = (
+                    page.locator("#map .ui-map-label")
+                    .filter(has_text="GATE")
+                    .locator("..")
+                    .locator("circle")
+                )
+                gate.scroll_into_view_if_needed()
+                gate.click()
+                expect(page.locator("#flight-selection")).to_contain_text(
+                    "X-DEMO-GATE"
+                )
+                visible_map = map_view.bounding_box()
+                assert visible_map is not None
+                assert visible_map["y"] < 900
+                assert visible_map["y"] + visible_map["height"] > 0
+                page.screenshot(
+                    path=str(tmp_path / "dense-zoom-1280.png"), full_page=True
+                )
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+        queue.close()
 
 
 def login(client: httpx.Client, origin: str) -> str:
@@ -1723,7 +1978,7 @@ def test_ui_shell_ownership_liveness_and_recovery(
 
         # Act / Assert: every previous panel remains reachable in its section.
         inventory = {
-            "Explorer": ["map", "flight-controls"],
+            "Explorer": ["flight-controls"],
             "Fleet": ["fleet"],
             "Markets": ["market-select", "routes", "markets"],
             "Contracts": ["contracts", "contract-select"],
@@ -1734,6 +1989,8 @@ def test_ui_shell_ownership_liveness_and_recovery(
         for name, ids in inventory.items():
             nav.get_by_role("link", name=name, exact=True).click()
             expect(page.locator("#page-title")).to_have_text(name)
+            if name == "Explorer":
+                expect(page.locator("#waypoint-list")).to_be_visible()
             expect(
                 nav.get_by_role("link", name=name, exact=True)
             ).to_have_attribute("aria-current", "page")

@@ -39,6 +39,8 @@ def system_explorer(store: Intelligence, scope: str) -> dict[str, Any]:
         market = markets.get(symbol)
         shipyard = shipyards.get(symbol)
         gate = gates.get(symbol)
+        modifiers = data.get("modifiers")
+        orbitals = data.get("orbitals")
         systems.setdefault(system, []).append(
             {
                 "symbol": symbol,
@@ -46,6 +48,36 @@ def system_explorer(store: Intelligence, scope: str) -> dict[str, Any]:
                 "x": data.get("x"),
                 "y": data.get("y"),
                 "traits": trait_symbols,
+                "orbits": (
+                    data.get("orbits")
+                    if isinstance(data.get("orbits"), str)
+                    else None
+                ),
+                "orbitals": (
+                    [
+                        item["symbol"]
+                        for item in orbitals
+                        if isinstance(item, dict)
+                        and isinstance(item.get("symbol"), str)
+                    ]
+                    if isinstance(orbitals, list)
+                    else None
+                ),
+                "modifiers": (
+                    [
+                        item["symbol"]
+                        for item in modifiers
+                        if isinstance(item, dict)
+                        and isinstance(item.get("symbol"), str)
+                    ]
+                    if isinstance(modifiers, list)
+                    else None
+                ),
+                "under_construction": (
+                    data.get("isUnderConstruction")
+                    if isinstance(data.get("isUnderConstruction"), bool)
+                    else None
+                ),
                 "observed_at": row.get("observed_at"),
                 "market": market,
                 "shipyard": shipyard,

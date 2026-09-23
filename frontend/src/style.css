@@ -1,4 +1,174 @@
 /* Shell primitives. Legacy panel styles remain until each panel is migrated. */
+.ui-explorer {
+  min-width: 0;
+}
+.ui-explorer-layout {
+  display: grid;
+  grid-template-columns: minmax(270px, 1fr) minmax(280px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.ui-discovery,
+.ui-destination-detail,
+.ui-map-panel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  padding: 14px;
+}
+.ui-discovery label,
+.ui-explorer > label {
+  display: inline-grid;
+  gap: 5px;
+}
+.ui-search input {
+  width: 100%;
+  padding: 12px;
+}
+.ui-search label {
+  display: block;
+}
+.ui-filters,
+.ui-sort,
+.ui-map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.ui-filters button[aria-pressed="true"],
+.ui-waypoint[aria-current="true"],
+.ui-colocated button[aria-current="true"] {
+  background: var(--dark);
+  color: var(--paper);
+}
+.ui-waypoint-list {
+  max-height: 460px;
+  overflow: auto;
+}
+.ui-waypoint,
+.ui-colocated button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  min-height: 48px;
+  padding: 10px;
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+.ui-waypoint span {
+  font-size: 12px;
+}
+.ui-destination-detail {
+  overflow-wrap: anywhere;
+}
+.ui-destination-detail > button {
+  min-height: 44px;
+  margin-top: 12px;
+}
+.ui-map-panel {
+  grid-column: 1 / -1;
+}
+.ui-map-panel summary {
+  cursor: pointer;
+  min-height: 44px;
+}
+.ui-map-wrap {
+  min-width: 0;
+}
+.ui-system-map {
+  display: block;
+  width: 100%;
+  height: min(60vh, 560px);
+  background: #f6f4ed;
+  border: 1px solid var(--line);
+  touch-action: none;
+  cursor: grab;
+}
+.ui-system-map:active {
+  cursor: grabbing;
+}
+.ui-map-marker,
+.ui-map-selected,
+.ui-map-ship {
+  fill: #426b58;
+  stroke: #fff;
+  stroke-width: 2px;
+  cursor: pointer;
+}
+.ui-map-gate.ui-map-marker {
+  fill: #75512f;
+}
+.ui-map-shipyard.ui-map-marker {
+  fill: #794d78;
+}
+.ui-map-market.ui-map-marker {
+  fill: #24627a;
+}
+.ui-map-selected {
+  fill: #c4582d;
+  stroke: #2a211c;
+  stroke-width: 3px;
+}
+.ui-map-ship {
+  fill: #384e89;
+}
+.ui-map-count {
+  font: 11px system-ui;
+  fill: white;
+  pointer-events: none;
+}
+.ui-map-label {
+  font: 12px system-ui;
+  fill: #251f1a;
+  stroke: #f6f4ed;
+  stroke-width: 3px;
+  paint-order: stroke;
+  pointer-events: none;
+}
+.ui-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 15px;
+}
+.ui-map-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #426b58;
+}
+.ui-map-legend .ui-key-gate::before {
+  background: #75512f;
+}
+.ui-map-legend .ui-key-shipyard::before {
+  background: #794d78;
+}
+.ui-map-legend .ui-key-market::before {
+  background: #24627a;
+}
+.ui-map-legend .ui-key-selected::before {
+  background: #c4582d;
+}
+.ui-map-legend .ui-key-ship::before {
+  background: #384e89;
+}
+@media (max-width: 800px) {
+  .ui-explorer-layout {
+    display: flex;
+    flex-direction: column;
+  }
+  .ui-discovery,
+  .ui-destination-detail,
+  .ui-map-panel {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .ui-map-panel {
+    order: 3;
+  }
+}
 [hidden] {
   display: none !important;
 }

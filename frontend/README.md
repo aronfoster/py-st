@@ -40,6 +40,9 @@ is not the application/authentication boundary.
   section visibility and presentation-only manual-command availability.
   It is the sole writer of disabled/title state on the four manual buttons;
   legacy submission code publishes `submitting` instead of overriding that guard.
+- `src/explorer.tsx`: destination discovery, evidence detail, exact-coordinate
+  selection and SVG map. It reads the snapshot and sends selection/preview
+  intent through the bridge; flight submission remains legacy-owned.
 - `dashboard.html`: existing controllers and panel descendants. It publishes a
   new snapshot reference on `ledger-ui` events. No game credentials are exposed.
   React must not render into a legacy-owned panel, and legacy code must not

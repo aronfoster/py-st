@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from py_st.services.flight_demo import SCOPE, create_demo
 from py_st.services.intelligence import Intelligence
 from py_st.services.system_explorer import system_explorer
 
@@ -116,4 +117,32 @@ def test_explorer_never_combines_scopes(tmp_path: Path) -> None:
 
     assert [system["symbol"] for system in result["systems"]] == ["X-A"]
     assert [ship["symbol"] for ship in result["ships"]] == ["X-A-1"]
+    store.close()
+
+
+def test_dense_fixture_preserves_all_members_and_market_evidence(
+    tmp_path: Path,
+) -> None:
+    # Arrange: deterministic crowded system with colocated orbitals.
+    create_demo(tmp_path, layout="dense")
+    store = Intelligence(tmp_path / ".state/intelligence.sqlite3")
+
+    # Act
+    result = system_explorer(store, SCOPE)
+    points = result["systems"][0]["waypoints"]
+    by_symbol = {w["symbol"]: w for w in points}
+
+    # Assert: discoverable members retain their individual evidence.
+    assert len(points) == 88
+    assert {w["symbol"] for w in points if w.get("x") == w.get("y") == 0} >= {
+        "X-DEMO-A1",
+        "X-DEMO-A2",
+        "X-DEMO-A3",
+        "X-DEMO-A4",
+    }
+    assert by_symbol["X-DEMO-A4"]["orbits"] == "X-DEMO-A1"
+    assert by_symbol["X-DEMO-A4"]["has_market"]
+    assert "tradeGoods" not in by_symbol["X-DEMO-A4"]["market"]["data"]
+    assert by_symbol["X-DEMO-UNKNOWN"]["x"] is None
+    assert by_symbol["X-DEMO-UNKNOWN"]["y"] is None
     store.close()

@@ -23,6 +23,7 @@ import {
   Status,
 } from "./components";
 import "./style.css";
+import { Explorer } from "./explorer";
 
 function currentPage(): Page {
   const page = location.hash.startsWith("#/") ? location.hash.slice(2) : "";
@@ -699,6 +700,9 @@ function App() {
       </h1>
       <p className="ui-intent">{descriptions[page]}</p>
       {deferred[page] && <p className="ui-deferred">{deferred[page]}</p>}
+      <div hidden={page !== "explorer"}>
+        <Explorer snapshot={snapshot} />
+      </div>
       {page === "markets" && <Trading snapshot={snapshot} now={now} />}
       {page === "contracts" && <Contracts snapshot={snapshot} now={now} />}
       {shipPages.includes(page) &&
