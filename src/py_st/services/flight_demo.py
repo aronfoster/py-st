@@ -61,7 +61,7 @@ def create_demo(root: Path, layout: str = "basic") -> None:
                     "symbol": f"X-DEMO-CORE{i:02d}",
                     "systemSymbol": "X-DEMO",
                     "type": "ASTEROID",
-                    "x": 1 if i == 17 else (i % 7 - 3) * 6,
+                    "x": 3 if i == 17 else (i % 7 - 3) * 6,
                     "y": (i // 7 - 2) * 6,
                     "traits": [],
                 }
