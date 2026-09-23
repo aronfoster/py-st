@@ -358,6 +358,47 @@ def test_recover_acknowledge_preserves_receipt_and_allows_explicit_retry(
     assert history.is_file()
 
 
+def test_acknowledge_uses_running_old_release_after_compatibility_failure(
+    host: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, digest = rehearse(host, monkeypatch)
+    inspected: list[Path] = []
+
+    def inspect_release(python: Path) -> dict[str, bool]:
+        inspected.append(python)
+        if NEW in python.parts and len(inspected) > 1:
+            raise release.ReleaseError("new release rejects persisted state")
+        return {"stop": True, "paused": True}
+
+    monkeypatch.setattr(release, "inspect", inspect_release)
+    with pytest.raises(release.ReleaseError, match="incomplete"):
+        release.deploy(path, digest)
+    failed = release.last_receipt()
+    assert failed is not None and failed["phase"] == "compatibility"
+    assert release.current_sha() == OLD
+    release.acknowledge(failed["run_id"])
+    assert inspected[-1] == host.base / "releases" / OLD / ".venv/bin/python"
+    recovered = release.last_receipt()
+    assert recovered is not None and recovered["result"] == "recovered"
+
+
+def test_lost_output_after_success_keeps_success_receipt(
+    host: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, digest = rehearse(host, monkeypatch)
+
+    def broken_output(_json: bool) -> None:
+        raise BrokenPipeError("SSH terminal disconnected")
+
+    monkeypatch.setattr(release, "status", broken_output)
+    release.deploy(path, digest)
+    receipt = release.last_receipt()
+    assert receipt is not None and receipt["result"] == "success"
+    assert receipt["error_category"] is None
+
+
 def test_bad_bundle_digest_exits_before_manifest_parse(
     host: SimpleNamespace,
     monkeypatch: pytest.MonkeyPatch,
@@ -376,11 +417,20 @@ def test_bad_bundle_digest_exits_before_manifest_parse(
 
 def test_corrupt_receipt_fails_with_manual_guidance(
     host: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     for record in ("{incomplete", '{"run_id":"bad","result":"unknown"}'):
         (host.ops / "receipt.json").write_text(record)
         with pytest.raises(release.ReleaseError, match="inspect it manually"):
             release.status(False)
+        output = capsys.readouterr().out
+        assert f"Current: {OLD}" in output
+        assert "Last receipt: unreadable" in output
+        with pytest.raises(release.ReleaseError, match="inspect it manually"):
+            release.status(True)
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["observed"]["current_sha"] == OLD
+        assert "inspect it manually" in parsed["receipt_error"]
 
 
 def test_stage_failure_removes_new_partial_release(

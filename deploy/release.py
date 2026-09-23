@@ -39,6 +39,17 @@ ADMIN_UID = 0
 SERVICES = ("py-st-dashboard.service", "py-st-worker.service")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+ACTIVATION_PHASES = frozenset(
+    {
+        "stop",
+        "checkpoint",
+        "compatibility",
+        "switch",
+        "start",
+        "heartbeat",
+        "http",
+    }
+)
 
 
 class ReleaseError(Exception):
@@ -738,23 +749,15 @@ def acknowledge(run_id: str) -> None:
             receipt is not None
             and receipt.get("run_id") == run_id
             and receipt.get("result") == "incomplete"
-            and receipt.get("phase")
-            in {
-                "stop",
-                "checkpoint",
-                "compatibility",
-                "switch",
-                "start",
-                "heartbeat",
-                "http",
-            },
+            and receipt.get("phase") in ACTIVATION_PHASES,
             "No matching incomplete activation to acknowledge",
         )
         assert receipt is not None
         actual = observation()
         state = actual["state"]
         require(
-            actual["current_sha"]
+            isinstance(actual["current_sha"], str)
+            and actual["current_sha"]
             in {receipt.get("previous_sha"), receipt.get("source_sha")}
             and all(s == "active" for s in actual["services"].values())
             and len(actual["services"]) == len(SERVICES)
@@ -766,8 +769,9 @@ def acknowledge(run_id: str) -> None:
             "Recovery not verified: require known current SHA, both "
             "active services, fresh paused heartbeat, STOP and worker gate",
         )
-        source = str(receipt["source_sha"])
-        inspect(BASE / "releases" / source / ".venv/bin/python")
+        # Validate the release that the operator actually recovered. The
+        # staged code may be precisely what rejected this persisted state.
+        inspect(BASE / "releases" / actual["current_sha"] / ".venv/bin/python")
         receipt["failure_observed"] = receipt.get("observed")
         receipt["result"] = "recovered"
         receipt["recovered_at"] = datetime.now(UTC).isoformat()
@@ -779,13 +783,21 @@ def acknowledge(run_id: str) -> None:
 
 
 def status(json_output: bool) -> None:
-    last = last_receipt()
+    receipt_error: ReleaseError | None = None
+    try:
+        last = last_receipt()
+    except ReleaseError as exc:
+        last = None
+        receipt_error = exc
     observed = observation()
     if json_output:
         print(
             json.dumps(
                 {
                     "receipt": last,
+                    "receipt_error": (
+                        str(receipt_error) if receipt_error else None
+                    ),
                     "observed": observed,
                     "receipt_path": str(OPS / "receipt.json"),
                 },
@@ -794,28 +806,23 @@ def status(json_output: bool) -> None:
             )
         )
     else:
+        receipt_state = (
+            "unreadable"
+            if receipt_error
+            else last.get("result") if last else "none"
+        )
         print(
             f"Current: {observed['current_sha']}; "
             f"services: {observed['services']}; "
             f"state: {observed['state']}"
         )
-        print(
-            f"Last receipt: {last.get('result') if last else 'none'} "
-            f"({OPS / 'receipt.json'})"
-        )
+        print(f"Last receipt: {receipt_state} " f"({OPS / 'receipt.json'})")
+        if receipt_error:
+            print(str(receipt_error))
         if (
             last
             and last.get("result") == "incomplete"
-            and last.get("phase")
-            in {
-                "stop",
-                "checkpoint",
-                "compatibility",
-                "switch",
-                "start",
-                "heartbeat",
-                "http",
-            }
+            and last.get("phase") in ACTIVATION_PHASES
         ):
             print(
                 "After manual paused recovery, acknowledge with: "
@@ -830,6 +837,8 @@ def status(json_output: bool) -> None:
                     ]
                 )
             )
+    if receipt_error:
+        raise receipt_error
 
 
 def unit_checks() -> None:
@@ -1272,18 +1281,7 @@ def deploy(bundle: Path, digest: str) -> None:
         if (
             prior_receipt
             and prior_receipt.get("result") == "incomplete"
-            and (
-                prior_receipt.get("phase")
-                in {
-                    "stop",
-                    "checkpoint",
-                    "compatibility",
-                    "switch",
-                    "start",
-                    "heartbeat",
-                    "http",
-                }
-            )
+            and prior_receipt.get("phase") in ACTIVATION_PHASES
         ):
             raise ReleaseError(
                 "Prior activation incomplete; run status, "
@@ -1396,14 +1394,6 @@ def deploy(bundle: Path, digest: str) -> None:
             receipt["phase"] = "complete"
             receipt["result"] = "success"
             save_receipt(receipt)
-            print(
-                f"Deployed {sha} from {previous}; checkpoint {checkpoint_path}"
-            )
-            status(False)
-            print(
-                "Log in again; verify Explorer destination → detail → "
-                "preview; resume deliberately when ready."
-            )
         except (Exception, KeyboardInterrupt) as exc:
             receipt["error_category"] = type(exc).__name__
             receipt["error_reason"] = (
@@ -1443,6 +1433,20 @@ def deploy(bundle: Path, digest: str) -> None:
         finally:
             signal.signal(signal.SIGTERM, previous_handler)
             signal.signal(signal.SIGINT, previous_interrupt)
+        # The SSH terminal can disappear while the detached service finishes.
+        # A broken output pipe must never turn a successful receipt into a
+        # misleading incomplete activation.
+        try:
+            print(
+                f"Deployed {sha} from {previous}; checkpoint {checkpoint_path}"
+            )
+            status(False)
+            print(
+                "Log in again; verify Explorer destination → detail → "
+                "preview; resume deliberately when ready."
+            )
+        except OSError:
+            pass
 
 
 def main() -> None:

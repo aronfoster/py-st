@@ -130,11 +130,15 @@ After an **activation** failure, first recover manually and verify both units
 are active, STOP and desired pause remain, the worker has a fresh paused
 heartbeat, and `current` points to the known old or new release. Then run the
 exact `acknowledge --run-id` command printed by status. Acknowledgement checks
-those conditions again, validates the state with the staged code, and records
-the failure and recovery in `/var/lib/py-st-deploy/runs/<run-id>.json`. It does
-not restart, switch, restore or resume anything. A subsequent deployment is
-explicit and creates a new run receipt. If status says `receipt.json` is
-unreadable, inspect it and the per-run receipts manually; do not delete them.
+those conditions again, validates state with the release currently running,
+and records the failure and recovery in
+`/var/lib/py-st-deploy/runs/<run-id>.json`. It does not restart, switch,
+restore or resume anything. Resolve the cause of a failed new-code
+compatibility check before attempting that release again. A subsequent
+deployment is explicit and creates a new run receipt, even if `current` already
+points at the target SHA; it repeats the checks and checkpoint. If status says
+`receipt.json` is unreadable, it still prints the service/state observation.
+Inspect it and the per-run receipts manually; do not delete them.
 
 Code-only switch-back requires an explicit compatibility check against the
 current state. State restoration is a separate owner decision: preserve the
