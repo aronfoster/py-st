@@ -1380,10 +1380,13 @@ def test_browser_dense_destination_discovery(
                 )
                 stack = page.locator("#map [data-stack='4'] circle")
                 center_before_pan = stack.get_attribute("cx")
-                bounds = page.locator("#map").bounding_box()
+                map_view = page.locator("#map")
+                map_view.scroll_into_view_if_needed()
+                bounds = map_view.bounding_box()
                 assert bounds is not None
                 x = bounds["x"] + bounds["width"] * 0.75
                 y = bounds["y"] + bounds["height"] * 0.65
+                assert 0 < y < 900
                 page.mouse.move(x, y)
                 page.mouse.down()
                 page.mouse.move(x + 75, y + 30, steps=5)
