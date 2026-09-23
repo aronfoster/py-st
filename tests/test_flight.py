@@ -992,11 +992,16 @@ def test_demo_layout_requires_known_demo_option(
 ) -> None:
     # Arrange / Act: invalid options are rejected before state is created.
     monkeypatch.setenv("ST_STATE_ROOT", str(tmp_path))
-    result = CliRunner().invoke(flight_app, arguments)
+    result = CliRunner().invoke(
+        flight_app, arguments, terminal_width=120, color=False
+    )
 
     # Assert
     assert result.exit_code != 0
-    assert "--demo-layout requires --demo and basic or dense" in result.output
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "--demo-layout requires --demo and basic or dense" in " ".join(
+        plain.split()
+    )
     assert not (tmp_path / ".state").exists()
 
 
