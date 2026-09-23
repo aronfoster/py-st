@@ -4,6 +4,26 @@ Explore your SpaceTraders fleet and fly ships from the local Flight Ledger
 browser application. Authenticated flight commands run through a durable worker;
 the same dashboard shows fleet state, economics, contract models and history.
 
+## Hosted deployment
+
+Production updates use the checked-in
+[operator release runbook](docs/OPERATOR_RELEASE.md). The routine path is
+intentionally short:
+
+1. In GCP Cloud Shell, refresh the dedicated `$HOME/py-st-build` checkout and
+   run `python3.12 deploy/release.py prepare --project py-st-508516 --zone us-central1-a --instance py-st-1`.
+2. In the hosted **Operations** page, pause gameplay.
+3. In the `py-st-1` VM SSH terminal, paste the exact activation command printed
+   by the prepare step.
+4. After the deployment reports success, log in again, verify the browser
+   workflow, then resume gameplay deliberately.
+
+The prepare step pins the remote default-branch SHA, builds and verifies the
+release, transfers it through IAP, and prints both activation and status
+commands. Do not manually substitute SHAs, checksums or staging paths. First-use
+Cloud Shell bootstrap, failure handling and recovery are documented in the
+runbook.
+
 ## Play the Offline Flight Demo
 
 See [Browser Flight Operations](docs/FLIGHT_OPERATIONS.md) for setup and a
