@@ -700,7 +700,7 @@ function App() {
       </h1>
       <p className="ui-intent">{descriptions[page]}</p>
       {deferred[page] && <p className="ui-deferred">{deferred[page]}</p>}
-      <div data-page="explorer" hidden={page !== "explorer"}>
+      <div hidden={page !== "explorer"}>
         <Explorer snapshot={snapshot} />
       </div>
       {page === "markets" && <Trading snapshot={snapshot} now={now} />}

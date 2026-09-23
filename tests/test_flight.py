@@ -1837,7 +1837,7 @@ def test_ui_shell_ownership_liveness_and_recovery(
 
         # Act / Assert: every previous panel remains reachable in its section.
         inventory = {
-            "Explorer": ["map", "flight-controls"],
+            "Explorer": ["flight-controls"],
             "Fleet": ["fleet"],
             "Markets": ["market-select", "routes", "markets"],
             "Contracts": ["contracts", "contract-select"],
@@ -1848,6 +1848,8 @@ def test_ui_shell_ownership_liveness_and_recovery(
         for name, ids in inventory.items():
             nav.get_by_role("link", name=name, exact=True).click()
             expect(page.locator("#page-title")).to_have_text(name)
+            if name == "Explorer":
+                expect(page.locator("#waypoint-list")).to_be_visible()
             expect(
                 nav.get_by_role("link", name=name, exact=True)
             ).to_have_attribute("aria-current", "page")
