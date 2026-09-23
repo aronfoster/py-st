@@ -35,6 +35,7 @@ OPS = Path("/var/lib/py-st-deploy")
 HOSTED_ENV = Path("/etc/py-st/hosted.env")
 WORKER_GATE = Path("/etc/py-st/worker-armed")
 USER = "py-st"
+ADMIN_UID = 0
 SERVICES = ("py-st-dashboard.service", "py-st-worker.service")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -795,7 +796,7 @@ def preflight(bundle: Path, digest: str) -> tuple[dict[str, Any], str]:
     require(
         all(
             directory.is_dir()
-            and directory.stat().st_uid == 0
+            and directory.stat().st_uid == ADMIN_UID
             and not directory.stat().st_mode & 0o022
             for directory in (BASE, BASE / "releases")
         ),
@@ -1067,7 +1068,7 @@ def deploy(bundle: Path, digest: str) -> None:
     os.umask(0o022)
     OPS.mkdir(mode=0o700, parents=True, exist_ok=True)
     require(
-        OPS.stat().st_uid == 0 and OPS.stat().st_mode & 0o077 == 0,
+        OPS.stat().st_uid == ADMIN_UID and OPS.stat().st_mode & 0o077 == 0,
         "Operations directory ownership/mode differs; inspect manually",
     )
     with (OPS / "deploy.lock").open("a+") as lock:

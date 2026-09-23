@@ -142,6 +142,9 @@ def host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(release, "DATA", data)
     monkeypatch.setattr(release, "ROOT", root)
     monkeypatch.setattr(release, "OPS", ops)
+    # Synthetic directories belong to the runner, whereas production requires
+    # uid 0. Preserve the real mode/owner checks against this test owner.
+    monkeypatch.setattr(release, "ADMIN_UID", os.getuid())
     monkeypatch.setattr(os, "geteuid", lambda: 0)
     active = {name: "active" for name in release.SERVICES}
     monkeypatch.setattr(release, "services", lambda: active.copy())
@@ -333,6 +336,10 @@ def test_preflight_rejects_mount_pause_and_authority_before_downtime(
         lambda _u: SimpleNamespace(pw_uid=host.root.stat().st_uid),
     )
     assert release.preflight(path, digest)[1] == OLD
+    monkeypatch.setattr(release, "ADMIN_UID", os.getuid() + 1)
+    with pytest.raises(release.ReleaseError, match="administrator-owned"):
+        release.preflight(path, digest)
+    monkeypatch.setattr(release, "ADMIN_UID", os.getuid())
     with pytest.raises(release.ReleaseError, match="SHA256"):
         release.preflight(path, "0" * 64)
     monkeypatch.setattr(os.path, "ismount", lambda _p: False)
@@ -349,6 +356,19 @@ def test_preflight_rejects_mount_pause_and_authority_before_downtime(
     with pytest.raises(release.ReleaseError, match="Pause in Operations"):
         release.preflight(path, digest)
     assert release.current_sha() == OLD
+
+
+def test_receipt_directory_requires_admin_owner(
+    host: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, digest = bundle(
+        host.ops / "owner.tar.gz",
+        content=Path(release.__file__).read_bytes(),
+    )
+    monkeypatch.setattr(release, "ADMIN_UID", os.getuid() + 1)
+    with pytest.raises(release.ReleaseError, match="Operations directory"):
+        release.deploy(path, digest)
+    assert release.last_receipt() is None
 
 
 def test_transfer_uses_pinned_private_directory_and_quoted_command(
