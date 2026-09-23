@@ -309,7 +309,7 @@ function SystemMap({
         <span className="ui-key-gate">Gate</span>
         <span className="ui-key-shipyard">Shipyard</span>
         <span className="ui-key-market">Market</span>
-        <span className="ui-key-other">Other / mixed</span>
+        <span className="ui-key-other">Other</span>
         <span className="ui-key-selected">Selected</span>
         <span className="ui-key-ship">Ship</span>
       </p>
@@ -471,7 +471,7 @@ export function Explorer({ snapshot }: { snapshot: Snapshot }) {
     if (row.top < bounds.top) list.scrollTop += row.top - bounds.top;
     else if (row.bottom > bounds.bottom)
       list.scrollTop += row.bottom - bounds.bottom;
-  }, [activeIndex, result]);
+  }, [selected?.symbol, system?.symbol, search, type, filters, sort]);
   const choose = (w: Waypoint) =>
     window.ledgerUI.selectExplorer({
       system: system!.symbol,

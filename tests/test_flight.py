@@ -1398,6 +1398,29 @@ def test_browser_dense_destination_discovery(
             page.screenshot(
                 path=str(tmp_path / f"dense-fit-{width}.png"), full_page=True
             )
+            if width == 1280:
+                # A ledger refresh must not snap manual list browsing back to
+                # the selected waypoint at the top of the 88-row list.
+                position = page.evaluate(
+                    """async () => {
+                      const list = document.querySelector('#waypoint-list');
+                      list.scrollTop = list.scrollHeight;
+                      const before = list.scrollTop;
+                      const previous = window.ledgerUI.snapshot.ledger;
+                      const refreshed = new Promise(resolve =>
+                        document.addEventListener('ledger-ui', resolve,
+                          {once: true}));
+                      document.querySelector('#refresh').click();
+                      await refreshed;
+                      await new Promise(resolve => requestAnimationFrame(() =>
+                        requestAnimationFrame(resolve)));
+                      return {before, after: list.scrollTop,
+                        changed: window.ledgerUI.snapshot.ledger !== previous};
+                    }"""
+                )
+                assert position["changed"]
+                assert position["before"] > 0
+                assert position["after"] == position["before"]
 
             # Discover a facility without knowing its identifier, then preview.
             page.get_by_role("button", name="Fuel listed/priced").click()
