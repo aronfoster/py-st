@@ -769,9 +769,16 @@ def acknowledge(run_id: str) -> None:
             "Recovery not verified: require known current SHA, both "
             "active services, fresh paused heartbeat, STOP and worker gate",
         )
-        # Validate the release that the operator actually recovered. The
-        # staged code may be precisely what rejected this persisted state.
-        inspect(BASE / "releases" / actual["current_sha"] / ".venv/bin/python")
+        running = (
+            BASE / "releases" / actual["current_sha"] / ".venv/bin/python"
+        )
+        require(running.is_file(), "Recovered release interpreter missing")
+        if actual["current_sha"] == receipt["source_sha"]:
+            inspect(running)
+        # The previous release may predate inspect-state, and the staged
+        # inspector may be the command that failed compatibility. For an old
+        # release, active units plus a fresh paused heartbeat and the authority
+        # gates above are the recovery proof.
         receipt["failure_observed"] = receipt.get("observed")
         receipt["result"] = "recovered"
         receipt["recovered_at"] = datetime.now(UTC).isoformat()

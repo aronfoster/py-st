@@ -130,8 +130,11 @@ After an **activation** failure, first recover manually and verify both units
 are active, STOP and desired pause remain, the worker has a fresh paused
 heartbeat, and `current` points to the known old or new release. Then run the
 exact `acknowledge --run-id` command printed by status. Acknowledgement checks
-those conditions again, validates state with the release currently running,
-and records the failure and recovery in
+those conditions again and inspects state with the new release when it is
+current. When the old release is current, its active units and fresh paused
+heartbeat are the recovery proof: the old code may lack `inspect-state`, and
+the staged code may be what rejected this state. It records the failure and
+recovery in
 `/var/lib/py-st-deploy/runs/<run-id>.json`. It does not restart, switch,
 restore or resume anything. Resolve the cause of a failed new-code
 compatibility check before attempting that release again. A subsequent

@@ -173,6 +173,9 @@ def host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     ops = tmp_path / "ops"
     for directory in (base / "releases" / OLD, root, ops):
         directory.mkdir(parents=True)
+    old_python = base / "releases" / OLD / ".venv/bin/python"
+    old_python.parent.mkdir(parents=True)
+    old_python.touch()
     ops.chmod(0o700)
     (base / "current").symlink_to(base / "releases" / OLD)
     (root / ".env").write_text("ST_TOKEN=" + SECRET)
@@ -218,6 +221,9 @@ def rehearse(
     )
     target = host.base / "releases" / NEW
     target.mkdir()
+    new_python = target / ".venv/bin/python"
+    new_python.parent.mkdir(parents=True)
+    new_python.touch()
     (target / ".release.json").write_text(
         json.dumps({"sha": NEW, "digest": digest})
     )
@@ -358,7 +364,7 @@ def test_recover_acknowledge_preserves_receipt_and_allows_explicit_retry(
     assert history.is_file()
 
 
-def test_acknowledge_uses_running_old_release_after_compatibility_failure(
+def test_acknowledge_old_release_without_inspector_after_compatibility_failure(
     host: SimpleNamespace,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -377,8 +383,9 @@ def test_acknowledge_uses_running_old_release_after_compatibility_failure(
     failed = release.last_receipt()
     assert failed is not None and failed["phase"] == "compatibility"
     assert release.current_sha() == OLD
+    before_ack = inspected.copy()
     release.acknowledge(failed["run_id"])
-    assert inspected[-1] == host.base / "releases" / OLD / ".venv/bin/python"
+    assert inspected == before_ack
     recovered = release.last_receipt()
     assert recovered is not None and recovered["result"] == "recovered"
 
@@ -397,6 +404,26 @@ def test_lost_output_after_success_keeps_success_receipt(
     receipt = release.last_receipt()
     assert receipt is not None and receipt["result"] == "success"
     assert receipt["error_category"] is None
+
+
+def test_acknowledge_current_new_release_still_inspects_it(
+    host: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, digest = rehearse(host, monkeypatch, "http")
+    with pytest.raises(release.ReleaseError, match="incomplete"):
+        release.deploy(path, digest)
+    failed = release.last_receipt()
+    assert failed is not None and release.current_sha() == NEW
+    inspected: list[Path] = []
+
+    def inspected_release(python: Path) -> dict[str, bool]:
+        inspected.append(python)
+        return {"stop": True, "paused": True}
+
+    monkeypatch.setattr(release, "inspect", inspected_release)
+    release.acknowledge(failed["run_id"])
+    assert inspected == [host.base / "releases" / NEW / ".venv/bin/python"]
 
 
 def test_bad_bundle_digest_exits_before_manifest_parse(
@@ -511,9 +538,6 @@ def test_preflight_rejects_mount_pause_and_authority_before_downtime(
         host.ops / "preflight.tar.gz",
         content=Path(release.__file__).read_bytes(),
     )
-    old_python = host.base / "releases" / OLD / ".venv/bin/python"
-    old_python.parent.mkdir(parents=True)
-    old_python.touch()
     hosted = host.ops / "hosted.env"
     hosted.write_text(
         "ST_PUBLIC_ORIGIN=https://example.com\n" "PY_ST_BACKEND_PORT=8765\n"
