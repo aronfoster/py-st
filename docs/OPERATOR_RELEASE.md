@@ -1,79 +1,157 @@
-# Operator-run GCP release (FOS-101)
+# Operator-run GCP release
 
-This procedure builds a pinned release in Cloud Shell and activates it from
-the VM SSH terminal. The first live rollout is supervised under FOS-74.
-Neither command resumes gameplay. Preserve the old release, checkpoint and
-STOP after any error. The bundle checksum detects damage, not a signature.
+Use this runbook to update the hosted py-st application on the existing GCP VM.
+The normal release path is deliberately short: prepare and transfer from Cloud
+Shell, pause gameplay in the browser, paste the generated activation command
+into the VM terminal, verify, then resume deliberately.
 
-## Cloud Shell: first use and subsequent releases
+The deployment tooling never resumes gameplay for you. Preserve the old
+release, checkpoint and STOP after any error. The bundle checksum detects
+transfer damage; it is not a signature.
 
-Cloud Shell must have Linux x86_64, `git`, `gcloud`, and Python 3.12 with
-`pip` and `venv`. Run `python3.12 --version`. If the command is absent and
-Cloud Shell has a working stock `python3 -m venv`, this user-local setup can
-install Python 3.12 without system changes:
+## Routine release
+
+### 1. Cloud Shell: refresh, build, verify and transfer
+
+In **GCP Cloud Shell**:
+
+```sh
+cd "$HOME/py-st-build"
+git pull --ff-only
+python3.12 deploy/release.py prepare \
+  --project py-st-508516 \
+  --zone us-central1-a \
+  --instance py-st-1
+```
+
+The prepare command independently resolves the repository's remote default
+branch and pins its full SHA. It builds from a clean archive of that commit,
+verifies a fresh offline install including packaged UI assets, creates the
+release bundle, transfers the bundle and deployment entrypoint through IAP, and
+verifies their remote digests.
+
+A successful prepare prints:
+
+- the pinned branch, full SHA and bundle SHA256;
+- one **VM activation command** with absolute paths and digest; and
+- one independent **VM status command**.
+
+Do not manually edit the generated SHA, checksum or staging paths.
+
+If `git pull --ff-only` refuses because the dedicated checkout has local
+changes, do not reset an unrelated work tree. Inspect the checkout or replace
+it with a fresh dedicated clone.
+
+### 2. Browser: pause gameplay
+
+Before VM activation, open the hosted application's **Operations** page and
+pause gameplay. Leave STOP and desired pause in place.
+
+Do not pause before the Cloud Shell prepare/transfer phase; the running release
+can stay online while the next release is built and transferred.
+
+### 3. VM SSH terminal: activate
+
+Open an SSH terminal to `py-st-1` and paste the **exact VM activation command**
+printed by the prepare step. It begins with `sudo systemd-run`.
+
+Do not reconstruct the command by hand. The generated command points at the
+transferred entrypoint and bundle for the pinned SHA and includes the expected
+digest.
+
+The activation command performs preflight checks, stages the new release,
+stops both application services, captures a checkpoint with the old release's
+code, runs new-code compatibility checks, atomically switches `current`,
+starts both services, waits for a fresh paused worker heartbeat, probes local
+and public HTTP readiness, and writes the deployment receipt.
+
+Success should end with all of these true:
+
+- `Current` is the intended new full SHA;
+- `py-st-dashboard.service` is active;
+- `py-st-worker.service` is active;
+- STOP is true;
+- desired pause is true and worker state is `paused`;
+- a fresh heartbeat is reported;
+- queued and uncertain command counts are understood; and
+- `Last receipt: success` is reported.
+
+### 4. Browser: accept and resume
+
+After a successful activation:
+
+1. Log in again if the restarted application expired the prior session.
+2. Verify the expected browser workflow, including Explorer destination →
+   detail → preview for map/UI releases.
+3. Return to **Operations** and resume gameplay deliberately.
+
+An HTTP 200 only proves transport readiness. Browser acceptance verifies the
+actual hosted application behavior.
+
+## First-time Cloud Shell bootstrap
+
+Cloud Shell needs Linux x86_64, `git`, `gcloud`, and Python 3.12 with
+`pip` and `venv`. Verify:
+
+```sh
+python3.12 --version
+uname -m
+git --version
+gcloud --version
+```
+
+If `python3.12` is absent but the stock Python can create a venv, install a
+user-local Python 3.12 without changing the system Python:
 
 ```sh
 python3 -m venv "$HOME/.local/share/py-st-bootstrap"
 "$HOME/.local/share/py-st-bootstrap/bin/python" -m pip install uv
 "$HOME/.local/share/py-st-bootstrap/bin/uv" python install 3.12
 mkdir -p "$HOME/.local/bin"
-ln -s "$("$HOME/.local/share/py-st-bootstrap/bin/uv" python find 3.12)" "$HOME/.local/bin/python3.12"
+ln -s "$("$HOME/.local/share/py-st-bootstrap/bin/uv" python find 3.12)" \
+  "$HOME/.local/bin/python3.12"
 export PATH="$HOME/.local/bin:$PATH"
 python3.12 -m venv "$HOME/.local/share/py-st-python-check"
 ```
 
-If stock `venv` or downloads fail, repair the Cloud Shell prerequisite before
-building. The development environment verified Python 3.12 and venv; Cloud
-Shell itself is not available for this offline implementation.
-
-On first use, **in Cloud Shell**, run this interactive SSH check once. It lets
-`gcloud` show any key creation/passphrase prompt before the release script uses
-`--quiet` with captured output:
+Run this interactive IAP SSH check once so `gcloud` can create keys or show any
+passphrase prompt before the deployment script later uses non-interactive
+captured output:
 
 ```sh
-gcloud compute ssh py-st-1 --project py-st-508516 --zone us-central1-a --tunnel-through-iap --command true
+gcloud compute ssh py-st-1 \
+  --project py-st-508516 \
+  --zone us-central1-a \
+  --tunnel-through-iap \
+  --command true
 ```
 
-In **Cloud Shell**, first clone the public repository into a dedicated build
-checkout (no GitHub token or private state):
+Then create the dedicated build checkout:
 
 ```sh
 git clone https://github.com/aronfoster/py-st.git "$HOME/py-st-build"
 cd "$HOME/py-st-build"
-python3.12 deploy/release.py prepare --project py-st-508516 --zone us-central1-a --instance py-st-1
+python3.12 deploy/release.py prepare \
+  --project py-st-508516 \
+  --zone us-central1-a \
+  --instance py-st-1
 ```
 
-For a later release, refresh that checkout without resetting an arbitrary work
-tree. The prepare command independently fetches and pins the remote default
-HEAD, even if the branch changes from `master` to another name:
+This checkout exists only to obtain and run the checked-in release tooling. The
+build itself uses a clean archive of the pinned remote commit rather than dirty
+working-tree contents.
 
-```sh
-cd "$HOME/py-st-build"
-git status --short
-git pull --ff-only
-python3.12 deploy/release.py prepare --project py-st-508516 --zone us-central1-a --instance py-st-1
-```
+For build-only rehearsal or a transfer retry, `prepare --prepare-only` keeps
+the completed artifact and prints an exact `transfer` command for that same
+SHA and digest.
 
-Keep the dedicated checkout clean; if `git pull` refuses local changes, use a
-fresh dedicated clone. The script rejects a locally stale entrypoint. It uses a
-clean archive of the pinned commit, never working-tree edits. It prints branch,
-full SHA, SHA256 and **one ready-to-copy VM activation command** with absolute
-paths. Run that command only after pausing in the browser. A failed transfer
-prints an exact `transfer` retry command for the same completed bundle.
-`prepare --prepare-only` builds and checks locally without GCP access and
-prints the same retry command for later transfer. Generated frontend resources
-are checked in and validated in the wheel; their freshness remains a CI gate.
-Transfer verifies the SHA256 of both files on the VM before printing activation.
+## Activation details and disconnect behavior
 
-## VM SSH terminal: pause and activate
-
-Open the hosted browser's **Operations** page and pause gameplay. Confirm STOP
-and desired pause. In the **VM SSH terminal**, paste the exact activation
-command printed by Cloud Shell. It begins `sudo systemd-run`, runs the pinned
-Python command as a transient root service, and includes absolute paths plus
-`--sha256`. No editing is needed. `--wait --pipe` shows its output while your
-SSH connection is up. If SSH disconnects, the transient service continues;
-the terminal client may exit, so use the independent status command afterward.
+The generated activation command uses `sudo systemd-run` to run the pinned
+Python deployment as a transient root service with absolute paths and the
+bundle digest. `--wait --pipe` shows output while the SSH connection is up. If
+SSH disconnects, the transient service continues; use the independent status
+command afterward to inspect the durable result.
 The unit name starts `py-st-deploy-` followed by the first twelve SHA characters.
 Its journal is available with `sudo journalctl -u UNIT_NAME -n 80 --no-pager`.
 
