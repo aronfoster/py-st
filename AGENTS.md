@@ -1,7 +1,9 @@
 # Agent Instructions
 
-The primary goal is the best application for a human or automated process to
-play SpaceTraders. Current assignment: FOS-71 Task 05A, offline hosted package.
+> **Project archived 2026-09-24. There is no active assignment.** Do not resume old FOS/Linear work, deploy infrastructure, or incur cloud cost unless the owner explicitly reactivates the project. Read `PROJECT_ARCHIVE.md` and `docs/ARCHIVED_LINEAR_STATE.md` before treating any older handoff or roadmap text as current.
+
+The historical primary goal was the best application for a human or automated process to
+play SpaceTraders. The old "current assignment" language below is retained only as implementation history.
 Use docs/UI_UX.md for the design checkpoint, surface inventory and downstream
 UI contract. Flight operations and FOS-73 capability snapshots are merged.
 FOS-63 owns the wider product roadmap. Live verification is separate.
