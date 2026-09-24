@@ -21,9 +21,7 @@ At archive time the repository contains, among other things:
 - GCP-oriented hosted-operation and operator-release/deployment documentation;
 - extensive design, safety, architecture, handoff, and historical run notes under `docs/`.
 
-See `README.md`, `docs/ARCHITECTURE.md`, `docs/CAPABILITY_SNAPSHOT.md`,
-`docs/HOSTED_OPERATIONS.md`, `docs/OPERATOR_RELEASE.md`, and
-`docs/HANDOFF.md` for the detailed state at the time work stopped.
+See `docs/ARCHIVED_LINEAR_STATE.md` for the distilled product decisions, GCP rollout history, unfinished work, and issue-state context that had not yet been transferred from Linear. Also see `README.md`, `docs/ARCHITECTURE.md`, `docs/CAPABILITY_SNAPSHOT.md`, `docs/HOSTED_OPERATIONS.md`, `docs/OPERATOR_RELEASE.md`, and `docs/HANDOFF.md` for implementation detail.
 
 ## Hosted deployment
 
