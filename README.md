@@ -1,5 +1,7 @@
 # py-st
 
+> **Archived / paused indefinitely (2026-09-24).** Active development and the hosted GCP deployment are being wound down because the owner is not currently interested enough in SpaceTraders to justify continued work or cloud cost. See [PROJECT_ARCHIVE.md](PROJECT_ARCHIVE.md) for the stopping point and restart notes.
+
 Explore your SpaceTraders fleet and fly ships from the local Flight Ledger
 browser application. Authenticated flight commands run through a durable worker;
 the same dashboard shows fleet state, economics, contract models and history.

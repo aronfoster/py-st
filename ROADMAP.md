@@ -1,5 +1,7 @@
 # Roadmap
 
+> **Archived 2026-09-24.** This roadmap is retained as historical planning, not an active backlog. Later Linear decisions and final hosted state are distilled in [docs/ARCHIVED_LINEAR_STATE.md](docs/ARCHIVED_LINEAR_STATE.md); where this file conflicts with that archive note, the archive note reflects the later project state.
+
 The goal is a browser-playable SpaceTraders application with persistent
 automation (FOS-63). FOS-71 tracks bounded end-to-end implementation tasks.
 
@@ -38,11 +40,17 @@ below retain earlier backlog and dated evidence.
 
 ## Owner-Managed Authentication Recovery
 
-The older automatic-registration proposal is superseded by FOS-63 safety rules.
-On HTTP 401 or reset mismatch 4113, stop live automation and report the recovery
-step. The owner verifies the reset and updates ignored token configuration;
-registration, if required, is an explicit owner action. Never put tokens in
-command arguments, silently register, or replay a mutation after re-registration.
+The implemented baseline is conservative: on HTTP 401 or reset mismatch 4113,
+stop live automation and report the recovery step. The owner verifies the reset
+and updates ignored token configuration; registration, if required, is an
+explicit owner action. Never put tokens in command arguments or blindly replay a
+mutation after re-registration.
+
+Later planning in FOS-78 intentionally proposed a separately enabled automatic
+reset-transition controller after a *confirmed* rollover, with durable
+reconciliation, bounded collision handling, new-scope initialization and owner
+STOP precedence. That design was never implemented. See
+[the archived Linear state](docs/ARCHIVED_LINEAR_STATE.md#opt-in-automatic-reset-rollover-was-desired-but-never-implemented).
 
 ---
 
